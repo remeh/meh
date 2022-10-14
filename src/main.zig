@@ -85,6 +85,8 @@ pub fn main() !void {
 
     // clean resources
 
+    buffer.deinit();
+
     c.ImGui_ImplOpenGL3_Shutdown();
     c.ImGui_ImplSDL2_Shutdown();
     c.igDestroyContext(context);

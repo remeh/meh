@@ -50,8 +50,8 @@ pub fn build(b: *std.build.Builder) void {
     run_step.dependOn(&run_cmd.step);
 
     const meh_tests = b.addTest("src/main.zig");
-    meh_tests.addTest("src/string.zig");
-    meh_tests.addTest("src/buffer.zig");
+    // meh_tests.addTest("src/string.zig");
+    // meh_tests.addTest("src/buffer.zig");
     meh_tests.setTarget(target);
     meh_tests.setBuildMode(mode);
 
