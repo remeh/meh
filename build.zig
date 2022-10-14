@@ -34,6 +34,9 @@ pub fn build(b: *std.build.Builder) void {
     // linked libraries
     meh.linkSystemLibrary("SDL2");
     meh.linkSystemLibrary("cimgui");
+    if (builtin.os.tag == .linux) {
+        meh.linkLibC();
+    }
 
     meh.install();
 

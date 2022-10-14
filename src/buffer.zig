@@ -40,6 +40,8 @@ pub const Buffer = struct {
         var buf_reader = std.io.bufferedReader(file.reader());
         try buf_reader.reader().readAllArrayList(&rv.data, 10E9);
 
+        std.log.debug("Buffer.initFromFile: read file {s}, size: {d}", .{ filepath, rv.data.items.len });
+
         return rv;
     }
 

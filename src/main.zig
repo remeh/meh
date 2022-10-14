@@ -50,8 +50,8 @@ pub fn main() !void {
     var event: c.SDL_Event = undefined;
     var run: bool = true;
 
-    // var buf: Buffer = try Buffer.initFromFile(std.heap.page_allocator, "src/main.zig");
-    var buffer = try Buffer.initFromFile(std.heap.page_allocator, "/tmp/long_file");
+    var buffer = try Buffer.initFromFile(std.heap.page_allocator, "src/main.zig");
+    std.log.debug("{s}", .{buffer.data.items});
 
     while (run) {
         while (c.SDL_PollEvent(&event) > 0) {
