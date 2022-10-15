@@ -51,7 +51,6 @@ pub fn main() !void {
     var run: bool = true;
 
     var buffer = try Buffer.initFromFile(std.heap.page_allocator, "src/main.zig");
-    std.log.debug("{s}", .{buffer.data.items});
 
     while (run) {
         while (c.SDL_PollEvent(&event) > 0) {
