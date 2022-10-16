@@ -2,6 +2,7 @@ const std = @import("std");
 const expect = std.testing.expect;
 
 const U8Slice = @import("u8slice.zig").U8Slice;
+const Vec2i = @import("vec.zig").Vec2i;
 
 // XXX(remy): A Buffer could track every \n it contains and would know where
 // it has lines. Doing so, we would instantly know how many lines there is, we
@@ -87,19 +88,25 @@ pub const Buffer = struct {
 
     // TODO(remy): comment me
     // TODO(remy): unit test me
-    pub fn getLinePos(self: Buffer, line_number: u64) void {
+    // TODO(remy): should return an error "OutOfBuffer"
+    pub fn getLinePos(self: Buffer, line_number: u64) Vec2i {
         if (self.lineReturns.items.len < line_number - 1) {
             std.log.err("getLinePos: line_number overflow", .{}); // TODO(remy): return an error
         }
 
         if (line_number == 1) {
-            std.log.debug("[{d};{d}]", .{ 0, self.lineReturns.items[0] });
-            return;
+            return Vec2i{
+                .a = 0,
+                .b = @intCast(i32, self.lineReturns.items[0]),
+            };
         }
 
         var start_line = self.lineReturns.items[line_number - 2] + 1;
         var end_line = self.lineReturns.items[line_number - 1];
-        std.log.debug("[{d};{d}]", .{ start_line, end_line });
+        return Vec2i{
+            .a = @intCast(i32, start_line),
+            .b = @intCast(i32, end_line),
+        };
     }
 };
 

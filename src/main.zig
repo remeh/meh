@@ -51,6 +51,7 @@ pub fn main() !void {
     var run: bool = true;
 
     var buffer = try Buffer.initFromFile(std.heap.page_allocator, "src/main.zig");
+    std.log.debug("{any}", .{buffer.getLinePos(1)});
 
     while (run) {
         while (c.SDL_PollEvent(&event) > 0) {
@@ -74,6 +75,8 @@ pub fn main() !void {
             _ = c.igInputTextMultiline("##", @ptrCast([*:0]u8, buffer.data.items), buffer.data.items.len, imvec2(600, 600), 0, null, null);
             _ = c.igButton("Click Me!", imvec2(250, 50));
             c.igEnd();
+
+            c.igShowDemoWindow(1);
 
             c.igRender();
             c.ImGui_ImplOpenGL3_RenderDrawData(c.igGetDrawData());
