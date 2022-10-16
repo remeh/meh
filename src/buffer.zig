@@ -4,6 +4,10 @@ const expect = std.testing.expect;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2i = @import("vec.zig").Vec2i;
 
+pub const BufferError = error{
+    OutOfBuffer,
+};
+
 // XXX(remy): A Buffer could track every \n it contains and would know where
 // it has lines. Doing so, we would instantly know how many lines there is, we
 // would be able to jump directly in the data because we have the position in bytes
@@ -88,21 +92,21 @@ pub const Buffer = struct {
 
     // TODO(remy): comment me
     // TODO(remy): unit test me
-    // TODO(remy): should return an error "OutOfBuffer"
-    pub fn getLinePos(self: Buffer, line_number: u64) Vec2i {
-        if (self.lineReturns.items.len < line_number - 1) {
-            std.log.err("getLinePos: line_number overflow", .{}); // TODO(remy): return an error
+    pub fn getLinePos(self: Buffer, line_number: u64) !Vec2i {
+        if (line_number + 1 > self.lineReturns.items.len) {
+            std.log.err("getLinePos: line_number overflow: line_number: {d}, self.lineReturns.items.len: {d}", .{ line_number, self.lineReturns.items.len });
+            return BufferError.OutOfBuffer;
         }
 
-        if (line_number == 1) {
+        if (line_number == 0) {
             return Vec2i{
                 .a = 0,
                 .b = @intCast(i32, self.lineReturns.items[0]),
             };
         }
 
-        var start_line = self.lineReturns.items[line_number - 2] + 1;
-        var end_line = self.lineReturns.items[line_number - 1];
+        var start_line = self.lineReturns.items[line_number - 1] + 1;
+        var end_line = self.lineReturns.items[line_number];
         return Vec2i{
             .a = @intCast(i32, start_line),
             .b = @intCast(i32, end_line),
