@@ -1,18 +1,13 @@
 const std = @import("std");
-
-const Buffer = @import("../buffer.zig").Buffer;
 const c = @import("../clib.zig").c;
-const Vec2i = @import("../vec.zig").Vec2i;
-const ImVec2 = @import("../vec.zig").ImVec2;
+
+const Buffer = @import("meh").Buffer;
+const ImVec2 = @import("meh").ImVec2;
+const Vec2i = @import("meh").Vec2i;
 
 // TODO(remy): comment me
-pub const Line = struct {};
-
-// TODO(remy): comment me
-// TODO(remy): font size
 pub const Editor = struct {
     allocator: std.mem.Allocator,
-    lines: std.ArrayList(Line),
     buffer: Buffer,
     visible_lines: Vec2i,
     cursor_pos: Vec2i, // TODO(remy): replace me with a custom (containing cursor mode)
@@ -24,7 +19,6 @@ pub const Editor = struct {
     pub fn initEmpty(allocator: std.mem.Allocator) Editor {
         return Editor{
             .allocator = allocator,
-            .lines = std.ArrayList(Line).init(allocator),
             .buffer = Buffer.initEmpty(allocator),
             .visible_lines = undefined,
             .cursor_pos = Vec2i{ .a = 1, .b = 5 },
@@ -35,7 +29,6 @@ pub const Editor = struct {
     pub fn initWithBuffer(allocator: std.mem.Allocator, buffer: Buffer) Editor {
         return Editor{
             .allocator = allocator,
-            .lines = std.ArrayList(Line).init(allocator),
             .buffer = buffer,
             .visible_lines = Vec2i{ .a = 0, .b = 50 },
             .cursor_pos = Vec2i{ .a = 1, .b = 5 },
@@ -43,7 +36,6 @@ pub const Editor = struct {
     }
 
     pub fn deinit(self: *Editor) void {
-        self.lines.deinit();
         self.buffer.deinit();
     }
 
@@ -62,8 +54,8 @@ pub const Editor = struct {
     }
 
     // fn renderCursor(_: Editor, draw_list: *c.ImDrawList) void {
-    // CIMGUI_API void ImDrawList_AddRectFilled(ImDrawList* self,const ImVec2 p_min,const ImVec2 p_max,ImU32 col,float rounding,ImDrawFlags flags);
-    // c.ImDrawList_AddCircleFilled(draw_list, ImVec2(0.1, 0.1), 1.0, 0xFFFFFFFF, 50);
+    //     // pub extern fn ImDrawList_AddRectFilled(self: [*c]ImDrawList, p_min: ImVec2, p_max: ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags) void;
+    //     c.ImDrawList_AddRectFilled(draw_list, ImVec2(20.0, 20.0), ImVec2(50.0, 50.0), 0xFFFFFFFF, 1.0, 0);
     // }
 
     fn renderLines(self: Editor, draw_list: *c.ImDrawList) void {
@@ -93,3 +85,9 @@ pub const Editor = struct {
 };
 
 // TODO(remy): unit test me
+test "editor_init_deinit" {
+    const allocator = std.testing.allocator;
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
+    var editor = Editor.initWithBuffer(allocator, buffer);
+    editor.deinit();
+}

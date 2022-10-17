@@ -1,10 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
-
-const Editor = @import("widgets/editor.zig").Editor;
-const Buffer = @import("buffer.zig").Buffer;
-const ImVec2 = @import("vec.zig").ImVec2;
 const c = @import("clib.zig").c;
+
+const Buffer = @import("meh").Buffer;
+const ImVec2 = @import("meh").ImVec2;
+const Editor = @import("widgets").Editor;
 
 pub fn main() !void {
     std.log.debug("here", .{});
@@ -52,28 +52,30 @@ pub fn main() !void {
             _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == c.SDL_QUIT) {
                 run = false;
+                break;
             }
-
-            // prepare a new frame for rendering
-            _ = c.ImGui_ImplOpenGL3_NewFrame();
-            c.ImGui_ImplSDL2_NewFrame();
-            _ = c.igNewFrame();
-
-            var w: c_int = 0;
-            var h: c_int = 0;
-            c.SDL_GetWindowSize(window, &w, &h);
-
-            // render list
-            _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
-            _ = c.igBegin("MainWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize);
-            editor.render();
-            c.igEnd();
-
-            // rendering
-            c.igRender();
-            c.ImGui_ImplOpenGL3_RenderDrawData(c.igGetDrawData());
-            c.SDL_GL_SwapWindow(window);
         }
+
+        // prepare a new frame for rendering
+        _ = c.ImGui_ImplOpenGL3_NewFrame();
+        c.ImGui_ImplSDL2_NewFrame();
+        _ = c.igNewFrame();
+
+        var w: c_int = 0;
+        var h: c_int = 0;
+        c.SDL_GetWindowSize(window, &w, &h);
+
+        // render list
+        _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
+        _ = c.igBegin("MainWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
+        editor.render();
+        c.igEnd();
+
+        // rendering
+        c.igRender();
+        c.ImGui_ImplOpenGL3_RenderDrawData(c.igGetDrawData());
+        c.SDL_GL_SwapWindow(window);
+
         c.SDL_Delay(16);
     }
 

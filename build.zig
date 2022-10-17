@@ -17,6 +17,8 @@ pub fn build(b: *std.build.Builder) void {
     // imgui_sdl.install();
 
     const meh = b.addExecutable("meh", "src/main.zig");
+    meh.addPackagePath("widgets", "src/widgets/widgets.zig");
+    meh.addPackagePath("meh", "src/meh.zig");
     meh.setTarget(target);
     meh.setBuildMode(mode);
     meh.use_stage1 = true;
