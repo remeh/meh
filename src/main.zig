@@ -3,17 +3,17 @@ const builtin = @import("builtin");
 
 const Editor = @import("widgets/editor.zig").Editor;
 const Buffer = @import("buffer.zig").Buffer;
-
+const ImVec2 = @import("vec.zig").ImVec2;
 const c = @import("clib.zig").c;
 
 pub fn main() !void {
     std.log.debug("here", .{});
 
-    if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_WINDOW_RESIZABLE) < 0) {
+    if (c.SDL_Init(c.SDL_INIT_VIDEO) < 0) {
         std.log.err("sdl: can't c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_WINDOW_RESIZABLE)", .{});
     }
 
-    var window = c.SDL_CreateWindow("meh", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_OPENGL);
+    var window = c.SDL_CreateWindow("meh", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE);
 
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE);
@@ -43,7 +43,6 @@ pub fn main() !void {
     var run: bool = true;
 
     var buffer = try Buffer.initFromFile(std.heap.page_allocator, "src/main.zig");
-    std.log.debug("{any}", .{buffer.getLinePos(1)});
     var editor = Editor.initWithBuffer(std.heap.page_allocator, buffer);
     // editor.visible_lines.b = 5;
     errdefer editor.deinit();
@@ -55,23 +54,22 @@ pub fn main() !void {
                 run = false;
             }
 
+            // prepare a new frame for rendering
             _ = c.ImGui_ImplOpenGL3_NewFrame();
             c.ImGui_ImplSDL2_NewFrame();
             _ = c.igNewFrame();
 
-            // start drawing (test comment 😊)
+            var w: c_int = 0;
+            var h: c_int = 0;
+            c.SDL_GetWindowSize(window, &w, &h);
 
-            // var viewport = c.igGetMainViewport();
-            // c.igSetNextWindowPos(viewport.*.WorkPos);
-
-            _ = c.igSetNextWindowSize(imvec2(600, 600), 0);
-            _ = c.igBegin("Window", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize);
-            // c.igText("Hello using SDL2+OpenGL3+DearImGui from Zig \\o/");
-            // _ = c.igInputTextMultiline("##", @ptrCast([*:0]u8, buffer.data.items), buffer.data.items.len, imvec2(600, 600), 0, null, null);
-            // _ = c.igButton("Click Me!", imvec2(250, 50));
-            editor.Render();
+            // render list
+            _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
+            _ = c.igBegin("MainWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize);
+            editor.render();
             c.igEnd();
 
+            // rendering
             c.igRender();
             c.ImGui_ImplOpenGL3_RenderDrawData(c.igGetDrawData());
             c.SDL_GL_SwapWindow(window);
@@ -92,8 +90,4 @@ pub fn main() !void {
     window = null;
 
     c.SDL_Quit();
-}
-
-pub fn imvec2(x: f32, y: f32) c.ImVec2 {
-    return c.ImVec2_ImVec2_Float(x, y).*;
 }
