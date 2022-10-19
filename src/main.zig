@@ -5,6 +5,7 @@ const c = @import("clib.zig").c;
 const Buffer = @import("buffer.zig").Buffer;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Editor = @import("widget_editor.zig").Editor;
+const Vec2i = @import("vec.zig").Vec2i;
 
 pub fn main() !void {
     std.log.debug("here", .{});
@@ -49,6 +50,7 @@ pub fn main() !void {
     var editor = Editor.initWithBuffer(std.heap.page_allocator, buffer);
     errdefer editor.deinit();
 
+    c.SDL_StartTextInput();
     while (run) {
         while (c.SDL_PollEvent(&event) > 0) {
             _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
@@ -59,14 +61,28 @@ pub fn main() !void {
             // XXX(remy): delegate this to the editor?
             // XXX(remy): has to be removed from here anyway
             // XXX(remy): will we have to get a "currently focused" widget?
-            if (event.type == c.SDL_MOUSEWHEEL) {
-                if (event.wheel.y < 0) {
-                    editor.visible_lines.a += 3;
-                    editor.visible_lines.b += 3;
-                } else if (event.wheel.y > 0) {
-                    editor.visible_lines.a -= 3;
-                    editor.visible_lines.b -= 3;
-                }
+            switch (event.type) {
+                c.SDL_TEXTINPUT => {
+                    switch (event.text.text[0]) {
+                        'h' => editor.moveCursor(Vec2i{ .a = -1, .b = 0 }),
+                        'j' => editor.moveCursor(Vec2i{ .a = 0, .b = 1 }),
+                        'k' => editor.moveCursor(Vec2i{ .a = 0, .b = -1 }),
+                        'l' => editor.moveCursor(Vec2i{ .a = 1, .b = 0 }),
+                        'i' => editor.input_mode = .Insert, // TODO(remy): remove
+                        'r' => editor.input_mode = .Replace, // TODO(remy): remove
+                        else => {},
+                    }
+                },
+                c.SDL_MOUSEWHEEL => {
+                    if (event.wheel.y < 0) {
+                        editor.visible_lines.a += 3;
+                        editor.visible_lines.b += 3;
+                    } else if (event.wheel.y > 0) {
+                        editor.visible_lines.a -= 3;
+                        editor.visible_lines.b -= 3;
+                    }
+                },
+                else => {},
             }
         }
 
