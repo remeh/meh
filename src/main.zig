@@ -2,21 +2,24 @@ const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("clib.zig").c;
 
-const Buffer = @import("meh").Buffer;
-const ImVec2 = @import("meh").ImVec2;
-const Editor = @import("widgets").Editor;
+const Buffer = @import("buffer.zig").Buffer;
+const ImVec2 = @import("vec.zig").ImVec2;
+const Editor = @import("widget_editor.zig").Editor;
 
 pub fn main() !void {
     std.log.debug("here", .{});
 
     if (c.SDL_Init(c.SDL_INIT_VIDEO) < 0) {
-        std.log.err("sdl: can't c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_WINDOW_RESIZABLE)", .{});
+        std.log.err("sdl: can't c.SDL_Init(c.SDL_INIT_VIDEO)", .{});
     }
 
     var window = c.SDL_CreateWindow("meh", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE);
 
-    _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE);
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_DOUBLEBUFFER, 1);
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_DEPTH_SIZE, 24);
+    _ = c.SDL_GL_SetAttribute(c.SDL_GL_STENCIL_SIZE, 8);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 2);
 
@@ -44,7 +47,6 @@ pub fn main() !void {
 
     var buffer = try Buffer.initFromFile(std.heap.page_allocator, "src/main.zig");
     var editor = Editor.initWithBuffer(std.heap.page_allocator, buffer);
-    // editor.visible_lines.b = 5;
     errdefer editor.deinit();
 
     while (run) {
@@ -53,6 +55,18 @@ pub fn main() !void {
             if (event.type == c.SDL_QUIT) {
                 run = false;
                 break;
+            }
+            // XXX(remy): delegate this to the editor?
+            // XXX(remy): has to be removed from here anyway
+            // XXX(remy): will we have to get a "currently focused" widget?
+            if (event.type == c.SDL_MOUSEWHEEL) {
+                if (event.wheel.y < 0) {
+                    editor.visible_lines.a += 3;
+                    editor.visible_lines.b += 3;
+                } else if (event.wheel.y > 0) {
+                    editor.visible_lines.a -= 3;
+                    editor.visible_lines.b -= 3;
+                }
             }
         }
 

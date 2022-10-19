@@ -1,9 +1,9 @@
 const std = @import("std");
-const c = @import("../clib.zig").c;
+const c = @import("clib.zig").c;
 
-const Buffer = @import("meh").Buffer;
-const ImVec2 = @import("meh").ImVec2;
-const Vec2i = @import("meh").Vec2i;
+const Buffer = @import("buffer.zig").Buffer;
+const ImVec2 = @import("vec.zig").ImVec2;
+const Vec2i = @import("vec.zig").Vec2i;
 
 // TODO(remy): comment me
 pub const Editor = struct {
@@ -49,14 +49,14 @@ pub const Editor = struct {
     pub fn render(self: Editor) void {
         var draw_list = c.igGetWindowDrawList();
 
-        // self.renderCursor(draw_list);
+        self.renderCursor(draw_list);
         self.renderLines(draw_list);
     }
 
-    // fn renderCursor(_: Editor, draw_list: *c.ImDrawList) void {
-    //     // pub extern fn ImDrawList_AddRectFilled(self: [*c]ImDrawList, p_min: ImVec2, p_max: ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags) void;
-    //     c.ImDrawList_AddRectFilled(draw_list, ImVec2(20.0, 20.0), ImVec2(50.0, 50.0), 0xFFFFFFFF, 1.0, 0);
-    // }
+    fn renderCursor(_: Editor, draw_list: *c.ImDrawList) void {
+        // pub extern fn ImDrawList_AddRectFilled(self: [*c]ImDrawList, p_min: ImVec2, p_max: ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags) void;
+        c.ImDrawList_AddRectFilled(draw_list, ImVec2(20.0, 20.0), ImVec2(50.0, 50.0), 0xFFFFFFFF, 1.0, 0);
+    }
 
     fn renderLines(self: Editor, draw_list: *c.ImDrawList) void {
         var i: usize = @intCast(usize, self.visible_lines.a);
