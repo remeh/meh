@@ -19,7 +19,7 @@ pub fn build(b: *std.build.Builder) void {
     const meh = b.addExecutable("meh", "src/main.zig");
     meh.setTarget(target);
     meh.setBuildMode(mode);
-    meh.use_stage1 = true;
+    // meh.use_stage1 = true;
 
     // find "cimgui.h"
     meh.addIncludePath("include/");
@@ -33,9 +33,15 @@ pub fn build(b: *std.build.Builder) void {
     meh.addLibraryPath("lib/");
     // linked libraries
     meh.linkSystemLibrary("SDL2");
+    // meh.linkSystemLibrary("GL");
     meh.linkSystemLibrary("cimgui");
-    if (builtin.os.tag == .linux) {
-        meh.linkLibC();
+    switch (builtin.os.tag) {
+        .linux => meh.linkLibC(),
+        .macos => {
+            meh.linkFramework("OpenGl");
+            meh.linkFramework("CoreFoundation");
+        },
+        else => {},
     }
 
     meh.install();

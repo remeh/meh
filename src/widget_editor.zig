@@ -45,7 +45,7 @@ pub const Cursor = struct {
                     ImVec2(border_offset + x1, border_offset + y1),
                     ImVec2(border_offset + x2, border_offset + y2),
                     0xFFFFFFFF,
-                    1.0,
+                    0.4,
                     0,
                 );
             },
@@ -59,7 +59,7 @@ pub const Cursor = struct {
                     ImVec2(border_offset + x1, border_offset + y1),
                     ImVec2(border_offset + x2, border_offset + y2),
                     0xFFFFFFFF,
-                    1.0,
+                    0.4,
                     0,
                 );
             },
@@ -114,8 +114,8 @@ pub const Editor = struct {
     pub fn render(self: Editor) void {
         var draw_list = c.igGetWindowDrawList();
 
-        self.renderCursor(draw_list);
         self.renderLines(draw_list);
+        self.renderCursor(draw_list);
     }
 
     // TODO(remy): comment

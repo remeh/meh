@@ -14,8 +14,6 @@ pub fn main() !void {
         std.log.err("sdl: can't c.SDL_Init(c.SDL_INIT_VIDEO)", .{});
     }
 
-    var window = c.SDL_CreateWindow("meh", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE);
-
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_DOUBLEBUFFER, 1);
@@ -24,21 +22,15 @@ pub fn main() !void {
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 2);
 
+    var window = c.SDL_CreateWindow("meh", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_ALLOW_HIGHDPI);
     var gl_context = c.SDL_GL_CreateContext(window);
     _ = c.SDL_GL_MakeCurrent(window, gl_context);
     _ = c.SDL_GL_SetSwapInterval(1);
 
     var context = c.igCreateContext(null);
-    c.igSetCurrentContext(context);
 
     _ = c.ImGui_ImplSDL2_InitForOpenGL(window, context);
-
-    if (builtin.os.tag == .macos) {
-        _ = c.ImGui_ImplOpenGL3_Init("#version 150");
-    } else {
-        // TODO(remy): what about selecting this on Linux?
-        _ = c.ImGui_ImplOpenGL3_Init("#version 130");
-    }
+    _ = c.ImGui_ImplOpenGL3_Init(null);
 
     c.SDL_ShowWindow(window);
     c.SDL_RaiseWindow(window);
@@ -64,6 +56,7 @@ pub fn main() !void {
             switch (event.type) {
                 c.SDL_TEXTINPUT => {
                     switch (event.text.text[0]) {
+                        'q' => run = false,
                         'h' => editor.moveCursor(Vec2i{ .a = -1, .b = 0 }),
                         'j' => editor.moveCursor(Vec2i{ .a = 0, .b = 1 }),
                         'k' => editor.moveCursor(Vec2i{ .a = 0, .b = -1 }),
