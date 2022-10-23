@@ -8,11 +8,6 @@ pub const BufferError = error{
     OutOfBuffer,
 };
 
-// XXX(remy): A Buffer could track every \n it contains and would know where
-// it has lines. Doing so, we would instantly know how many lines there is, we
-// would be able to jump directly in the data because we have the position in bytes
-// where lines start (i.e. position of a \n + 1), and probably much more.
-
 // TODO(remy): comment me
 pub const Buffer = struct {
     /// allocator used for all things allocated by this buffer instance.
@@ -21,10 +16,8 @@ pub const Buffer = struct {
     in_ram_only: bool,
     /// filepath is the filepath to the file backing this buffer storage.
     filepath: U8Slice,
-    /// data is the content if this Buffer.
-    data: std.ArrayList(u8),
-    // TODO(remy): comment me
-    lineReturns: std.ArrayList(u64),
+    /// lines is the content if this Buffer.
+    lines: std.ArrayList(U8Slice),
 
     // Constructors
     // ------------
@@ -36,8 +29,7 @@ pub const Buffer = struct {
             .allocator = allocator,
             .in_ram_only = true,
             .filepath = U8Slice.initEmpty(allocator),
-            .data = std.ArrayList(u8).init(allocator),
-            .lineReturns = std.ArrayList(u64).init(allocator),
+            .lines = std.ArrayList(U8Slice).init(allocator),
         };
     }
 
@@ -49,8 +41,7 @@ pub const Buffer = struct {
             .allocator = allocator,
             .in_ram_only = false,
             .filepath = try U8Slice.initFromSlice(allocator, filepath),
-            .data = std.ArrayList(u8).init(allocator),
-            .lineReturns = std.ArrayList(u64).init(allocator),
+            .lines = std.ArrayList(U8Slice).init(allocator),
         };
 
         rv.in_ram_only = false;
@@ -58,66 +49,92 @@ pub const Buffer = struct {
         var file = try std.fs.cwd().openFile(filepath, .{});
         defer file.close();
 
+        // TODO(remy): move this file reading into a method.
         // NOTE(remy): should we consider using an ArenaAllocator to read the file?
         // (using stats first to know its size)
 
-        var buf_reader = std.io.bufferedReader(file.reader());
-        try buf_reader.reader().readAllArrayList(&rv.data, 10E10);
-        try rv.trackLineReturnPositions();
+        // read the file
 
-        std.log.debug("Buffer.initFromFile: read file {s}, size: {d}", .{ filepath, rv.data.items.len });
-        std.log.debug("Buffer.initFromFile: counted {d} line returns.", .{rv.lineReturns.items.len});
+        const block_size = 4096;
+        var slice: [4096]u8 = undefined;
+        var buff = &slice;
+        var read: usize = block_size;
+
+        var buf_reader = std.io.bufferedReader(file.reader());
+        var u8slice = U8Slice.initEmpty(allocator);
+        var i: usize = 0;
+        var last_append: usize = 0;
+
+        // TODO(remy): refactor me
+        // TODO(remy): what about performances? test with different block_size on large files
+        while (read == block_size) {
+            i = 0;
+            last_append = 0;
+
+            read = try buf_reader.reader().read(buff);
+
+            while (i < read) : (i += 1) {
+                if (buff[i] == '\n') {
+                    // append the data left until the \n with the \n included
+                    try u8slice.appendSlice(buff[last_append .. i + 1]); // allocate the data in an u8slice
+                    // append the line in the lines list of the buffer
+                    try rv.lines.append(u8slice);
+                    // move the cursor in this buffer
+                    last_append = i + 1;
+                    // recreate a new line to work with
+                    u8slice = U8Slice.initEmpty(allocator);
+                }
+            }
+            // append the rest of th read buffer
+            try u8slice.appendSlice(buff[last_append..read]);
+        }
+
+        // we completely read the file, if the buffer isn't empty, it means we have
+        // dangling data, append it to the buffer.
+        if (!u8slice.isEmpty()) {
+            try rv.lines.append(u8slice);
+        }
+
+        std.log.debug("Buffer.initFromFile: read file {s}, lines count: {d}", .{ filepath, rv.lines.items.len });
 
         return rv;
     }
 
+    fn dump(self: Buffer) void {
+        var i: usize = 0;
+        for (self.lines.items) |str| {
+            std.log.debug("line {d}: {s}", .{ i, str.data.items });
+            i += 1;
+        }
+    }
+
     pub fn deinit(self: *Buffer) void {
-        self.data.deinit();
+        for (self.lines.items) |line| {
+            line.deinit();
+        }
+        self.lines.deinit();
         self.filepath.deinit();
-        self.lineReturns.deinit();
     }
 
     // Methods
     // -------
 
-    // TODO(remy): comment me
-    fn trackLineReturnPositions(self: *Buffer) !void {
-        var i: u64 = 0;
-        while (i < self.data.items.len) : (i += 1) {
-            if (self.data.items[i] == '\n') {
-                try self.lineReturns.append(@intCast(u64, i));
-            }
-        }
-    }
-
-    // TODO(remy): comment me
-    // TODO(remy): unit test me
-    pub fn getLinePos(self: Buffer, line_number: u64) !Vec2i {
-        if (line_number + 1 > self.lineReturns.items.len) {
-            std.log.err("getLinePos: line_number overflow: line_number: {d}, self.lineReturns.items.len: {d}", .{ line_number, self.lineReturns.items.len });
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn getLine(self: Buffer, line_number: u64) !U8Slice {
+        if (line_number + 1 > self.lines.items.len) {
+            std.log.err("getLinePos: line_number overflow: line_number: {d}, self.lines.items.len: {d}", .{ line_number, self.lines.items.len });
             return BufferError.OutOfBuffer;
         }
 
-        if (line_number == 0) {
-            return Vec2i{
-                .a = 0,
-                .b = @intCast(i32, self.lineReturns.items[0]),
-            };
-        }
-
-        var start_line = self.lineReturns.items[line_number - 1] + 1;
-        var end_line = self.lineReturns.items[line_number];
-        return Vec2i{
-            .a = @intCast(i32, start_line),
-            .b = @intCast(i32, end_line),
-        };
+        return self.lines.items[line_number];
     }
 };
 
 test "init_empty" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initEmpty(allocator);
-    try expect(buffer.data.items.len == 0);
+    try expect(buffer.lines.items.len == 0);
     try expect(buffer.filepath.isEmpty() == true);
     try expect(buffer.in_ram_only == true);
     buffer.deinit();
@@ -127,20 +144,8 @@ test "init_from_file" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
     try expect(buffer.in_ram_only == false);
-    try expect(buffer.data.items.len == 12);
+    try expect(buffer.lines.items.len == 1);
     try expect(std.mem.eql(u8, buffer.filepath.bytes(), "tests/sample_1"));
-    try expect(std.mem.eql(u8, buffer.data.items, "hello world\n"));
-    buffer.deinit();
-}
-
-test "track_line_return_positions" {
-    const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
-    try expect(buffer.lineReturns.items.len == 1);
-    buffer.deinit();
-    buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    try expect(buffer.lineReturns.items.len == 2);
-    try expect(buffer.lineReturns.items[0] == 11);
-    try expect(buffer.lineReturns.items[1] == 29);
+    try expect(std.mem.eql(u8, buffer.lines.items[0].bytes(), "hello world\n"));
     buffer.deinit();
 }

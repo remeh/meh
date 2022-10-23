@@ -2,14 +2,14 @@ const std = @import("std");
 const c = @import("clib.zig").c;
 
 const Buffer = @import("buffer.zig").Buffer;
-const Editor = @import("widget_editor.zig").Editor;
+const WidgetEditor = @import("widget_editor.zig").WidgetEditor;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Vec2i = @import("vec.zig").Vec2i;
 
 // TODO(comment):
 pub const App = struct {
     allocator: std.mem.Allocator,
-    editors: std.ArrayList(Editor),
+    editors: std.ArrayList(WidgetEditor),
 
     gl_context: c.SDL_GLContext,
     imgui_context: *c.ImGuiContext,
@@ -51,7 +51,7 @@ pub const App = struct {
 
         return App{
             .allocator = allocator,
-            .editors = std.ArrayList(Editor).init(allocator),
+            .editors = std.ArrayList(WidgetEditor).init(allocator),
             .gl_context = gl_context,
             .imgui_context = imgui_context,
             .sdl_window = sdl_window.?,
@@ -83,13 +83,13 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         var buffer = try Buffer.initFromFile(self.allocator, filepath);
-        var editor = Editor.initWithBuffer(self.allocator, buffer);
+        var editor = WidgetEditor.initWithBuffer(self.allocator, buffer);
         try self.editors.append(editor);
     }
 
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
-    pub fn currentEditor(self: App) *Editor {
+    pub fn currentWidgetEditor(self: App) *WidgetEditor {
         return &self.editors.items[0];
     }
 
@@ -112,22 +112,24 @@ pub const App = struct {
                     c.SDL_TEXTINPUT => {
                         switch (event.text.text[0]) {
                             'q' => run = false,
-                            'h' => self.currentEditor().moveCursor(Vec2i{ .a = -1, .b = 0 }),
-                            'j' => self.currentEditor().moveCursor(Vec2i{ .a = 0, .b = 1 }),
-                            'k' => self.currentEditor().moveCursor(Vec2i{ .a = 0, .b = -1 }),
-                            'l' => self.currentEditor().moveCursor(Vec2i{ .a = 1, .b = 0 }),
-                            'i' => self.currentEditor().input_mode = .Insert, // TODO(remy): remove
-                            'r' => self.currentEditor().input_mode = .Replace, // TODO(remy): remove
+                            'h' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = -1, .b = 0 }),
+                            'j' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 0, .b = 1 }),
+                            'k' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 0, .b = -1 }),
+                            'l' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 1, .b = 0 }),
+                            'd' => self.currentWidgetEditor().deleteCurrentLine(),
+                            'u' => self.currentWidgetEditor().undo(),
+                            'i' => self.currentWidgetEditor().input_mode = .Insert, // TODO(remy): remove
+                            'r' => self.currentWidgetEditor().input_mode = .Replace, // TODO(remy): remove
                             else => {},
                         }
                     },
                     c.SDL_MOUSEWHEEL => {
                         if (event.wheel.y < 0) {
-                            self.currentEditor().visible_lines.a += 3;
-                            self.currentEditor().visible_lines.b += 3;
+                            self.currentWidgetEditor().visible_lines.a += 3;
+                            self.currentWidgetEditor().visible_lines.b += 3;
                         } else if (event.wheel.y > 0) {
-                            self.currentEditor().visible_lines.a -= 3;
-                            self.currentEditor().visible_lines.b -= 3;
+                            self.currentWidgetEditor().visible_lines.a -= 3;
+                            self.currentWidgetEditor().visible_lines.b -= 3;
                         }
                     },
                     else => {},
@@ -145,8 +147,8 @@ pub const App = struct {
 
             // render list
             _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
-            _ = c.igBegin("MainWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
-            self.currentEditor().render();
+            _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
+            self.currentWidgetEditor().render();
             c.igEnd();
 
             // rendering

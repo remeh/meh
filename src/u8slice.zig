@@ -33,7 +33,13 @@ pub const U8Slice = struct {
         return self.data.items.len == 0;
     }
 
-    // TODO(remy): comment me
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn appendSlice(self: *U8Slice, str: []u8) !void {
+        try self.data.appendSlice(str);
+    }
+
+    // TODO(remy): comment
     // TODO(remy): add in unit tests
     pub fn bytes(self: U8Slice) []const u8 {
         return self.data.items;
