@@ -15,6 +15,12 @@ pub const App = struct {
     imgui_context: *c.ImGuiContext,
     sdl_window: *c.SDL_Window,
 
+    // TODO(remy): comment
+    // TODO(remy): tests
+    font_lowdpi: *c.ImFont,
+    font_hidpi: *c.ImFont,
+    hidpi: bool,
+
     // Constructors
     // ------------
 
@@ -49,12 +55,18 @@ pub const App = struct {
         c.SDL_ShowWindow(sdl_window);
         c.SDL_RaiseWindow(sdl_window);
 
+        var font_lowdpi = c.ImFontAtlas_AddFontFromFileTTF(c.igGetIO().*.Fonts, "res/UbuntuMono-Regular.ttf", 16, 0, 0);
+        var font_hidpi = c.ImFontAtlas_AddFontFromFileTTF(c.igGetIO().*.Fonts, "res/UbuntuMono-Regular.ttf", 32, 0, 0);
+
         return App{
             .allocator = allocator,
             .editors = std.ArrayList(WidgetEditor).init(allocator),
             .gl_context = gl_context,
             .imgui_context = imgui_context,
             .sdl_window = sdl_window.?,
+            .font_lowdpi = font_lowdpi,
+            .font_hidpi = font_hidpi,
+            .hidpi = false,
         };
     }
 
@@ -93,7 +105,7 @@ pub const App = struct {
         return &self.editors.items[0];
     }
 
-    pub fn mainloop(self: App) !void {
+    pub fn mainloop(self: *App) !void {
         c.SDL_StartTextInput();
         var event: c.SDL_Event = undefined;
         var run: bool = true;
@@ -105,19 +117,29 @@ pub const App = struct {
                     run = false;
                     break;
                 }
-                // XXX(remy): delegate this to the editor?
-                // XXX(remy): has to be removed from here anyway
+                // TODO(remy): delegate this to the WidgetEditor, too much duplicate code being here
                 // XXX(remy): will we have to get a "currently focused" widget?
                 switch (event.type) {
                     c.SDL_TEXTINPUT => {
                         switch (event.text.text[0]) {
                             'q' => run = false,
+                            'n' => self.currentWidgetEditor().newLine(),
                             'h' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = -1, .b = 0 }),
                             'j' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 0, .b = 1 }),
                             'k' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 0, .b = -1 }),
                             'l' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 1, .b = 0 }),
                             'd' => self.currentWidgetEditor().deleteCurrentLine(),
                             'u' => self.currentWidgetEditor().undo(),
+                            's' => {
+                                self.hidpi = true;
+                                c.igGetIO().*.FontDefault = self.font_hidpi;
+                                c.igGetIO().*.FontGlobalScale = 0.5;
+                            },
+                            'S' => {
+                                self.hidpi = false;
+                                c.igGetIO().*.FontDefault = self.font_lowdpi;
+                                c.igGetIO().*.FontGlobalScale = 1.0;
+                            },
                             'i' => self.currentWidgetEditor().input_mode = .Insert, // TODO(remy): remove
                             'r' => self.currentWidgetEditor().input_mode = .Replace, // TODO(remy): remove
                             else => {},
@@ -149,6 +171,9 @@ pub const App = struct {
             _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
             _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
             self.currentWidgetEditor().render();
+
+            c.igShowDemoWindow(1);
+
             c.igEnd();
 
             // rendering

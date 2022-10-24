@@ -33,9 +33,9 @@ pub const U8Slice = struct {
         return self.data.items.len == 0;
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
-    pub fn appendSlice(self: *U8Slice, str: []u8) !void {
+    /// appendConst appends the given string to the u8slice.
+    /// This method allocates memory to store the data.
+    pub fn appendConst(self: *U8Slice, str: []const u8) !void {
         try self.data.appendSlice(str);
     }
 
@@ -71,6 +71,17 @@ test "init_from_slice_and_size_with_utf8" {
     const allocator = std.testing.allocator;
     var str = try U8Slice.initFromSlice(allocator, "hello world 😃");
     try expect(str.size() == 16);
+    try expect(str.isEmpty() == false);
+    str.deinit();
+}
+
+test "init_from_slice_and_append_data" {
+    const allocator = std.testing.allocator;
+    var str = try U8Slice.initFromSlice(allocator, "hello world");
+    try expect(str.size() == 11);
+    try expect(str.isEmpty() == false);
+    try str.appendConst("addition");
+    try expect(str.size() == 19);
     try expect(str.isEmpty() == false);
     str.deinit();
 }

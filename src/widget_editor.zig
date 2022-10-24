@@ -9,6 +9,7 @@ const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 
 // TODO(remy): where should we define this?
+// TODO(remy): comment
 pub const border_offset = 5;
 
 pub const InputMode = enum {
@@ -42,13 +43,13 @@ pub const Cursor = struct {
                 var x1 = @intToFloat(f32, self.pos.a) * font_size.a;
                 var x2 = x1 + 2;
                 var y1 = @intToFloat(f32, self.pos.b - line_offset) * font_size.b;
-                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset) * (font_size.b) - 2;
+                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
                     ImVec2(border_offset + x1, border_offset + y1),
                     ImVec2(border_offset + x2, border_offset + y2),
                     0xFFFFFFFF,
-                    0.4,
+                    1.0,
                     0,
                 );
             },
@@ -56,13 +57,13 @@ pub const Cursor = struct {
                 var x1 = @intToFloat(f32, self.pos.a) * font_size.a;
                 var x2 = @intToFloat(f32, self.pos.a + 1) * font_size.a;
                 var y1 = @intToFloat(f32, self.pos.b - line_offset) * font_size.b;
-                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset) * (font_size.b) - 2;
+                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
                     ImVec2(border_offset + x1, border_offset + y1),
                     ImVec2(border_offset + x2, border_offset + y2),
                     0xFFFFFFFF,
-                    0.4,
+                    1.0,
                     0,
                 );
             },
@@ -86,7 +87,7 @@ pub const WidgetEditor = struct {
         var buffer = Buffer.initEmpty(allocator);
         return WidgetEditor{
             .allocator = allocator,
-            .editor = Editor{ .buffer = buffer },
+            .editor = Editor.init(allocator, buffer),
             .visible_lines = undefined,
             .cursor = Cursor.init(),
             .input_mode = InputMode.Insert,
@@ -118,39 +119,43 @@ pub const WidgetEditor = struct {
     pub fn render(self: WidgetEditor) void {
         var draw_list = c.igGetWindowDrawList();
 
-        self.renderLines(draw_list);
-        self.renderCursor(draw_list);
+        var one_char_size = ImVec2(0, 0);
+        c.igCalcTextSize(&one_char_size, "0", null, false, 0.0);
+
+        self.renderLines(draw_list, one_char_size);
+        self.renderCursor(draw_list, one_char_size);
     }
 
     // TODO(remy): comment
     // TODO(remy): unit test
     pub fn moveCursor(self: *WidgetEditor, move: Vec2i) void {
-        // TODO(remy): test for position,
+        // TODO(remy): test for position in the buffer content
         self.cursor.pos.a += move.a;
         self.cursor.pos.b += move.b;
     }
 
-    fn renderCursor(self: WidgetEditor, draw_list: *c.ImDrawList) void {
-        self.cursor.render(draw_list, self.input_mode, self.visible_lines.a, Vec2f{ .a = 7, .b = 17 });
+    fn renderCursor(self: WidgetEditor, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {
+        self.cursor.render(draw_list, self.input_mode, self.visible_lines.a, Vec2f{ .a = one_char_size.x, .b = one_char_size.y });
     }
 
-    fn renderLines(self: WidgetEditor, draw_list: *c.ImDrawList) void {
+    fn renderLines(self: WidgetEditor, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {
         var i: usize = @intCast(usize, self.visible_lines.a);
         var y_offset: f32 = 0.0;
+
         while (i < self.visible_lines.b) : (i += 1) {
             if (self.editor.buffer.getLine(i)) |line| {
                 var buff: []u8 = line.data.items;
 
                 // empty line
                 if (buff.len == 0 or (buff.len == 1 and buff[0] == '\n')) {
-                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(5, 5 + y_offset), 0xFFFFFFFF, "", 0);
-                    y_offset += 17.0;
+                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(border_offset, border_offset + y_offset), 0xFFFFFFFF, "", 0);
+                    y_offset += one_char_size.y;
                     continue;
                 }
 
                 buff[buff.len - 1] = 0; // finish the buffer with a 0 for the C-land
-                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(5, 5 + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, buff), 0);
-                y_offset += 17.0;
+                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(border_offset, border_offset + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, buff), 0);
+                y_offset += one_char_size.y;
 
                 // std.log.debug("self.buffer.data.items[{d}..{d}] (len: {d}) data: {s}", .{ @intCast(usize, pos.a), @intCast(usize, pos.b), self.buffer.data.items.len, @ptrCast([*:0]const u8, buff) });
             } else |_| {
@@ -163,8 +168,15 @@ pub const WidgetEditor = struct {
     // -------------------
 
     // TODO(remy): comment
+    // TODO(remy): delete when the keypress is handled here
     pub fn deleteCurrentLine(self: *WidgetEditor) void {
         self.editor.deleteLine(@intCast(usize, self.cursor.pos.b));
+    }
+
+    pub fn newLine(self: *WidgetEditor) void {
+        self.editor.newLine(self.cursor.pos, true);
+        self.cursor.pos.a = 0;
+        self.cursor.pos.b += 1;
     }
 
     // TODO(remy): comment

@@ -8,7 +8,7 @@ pub const BufferError = error{
     OutOfBuffer,
 };
 
-// TODO(remy): comment me
+// TODO(remy): comment
 pub const Buffer = struct {
     /// allocator used for all things allocated by this buffer instance.
     allocator: std.mem.Allocator,
@@ -23,7 +23,7 @@ pub const Buffer = struct {
     // ------------
 
     /// init_empty initializes an empty buffer.
-    // TODO(remy): better comment me
+    // TODO(remy): better comment
     pub fn initEmpty(allocator: std.mem.Allocator) !Buffer {
         return Buffer{
             .allocator = allocator,
@@ -49,9 +49,9 @@ pub const Buffer = struct {
         var file = try std.fs.cwd().openFile(filepath, .{});
         defer file.close();
 
-        // TODO(remy): move this file reading into a method.
+        // TODO(remy): move this file reading into a separate method.
         // NOTE(remy): should we consider using an ArenaAllocator to read the file?
-        // (using stats first to know its size)
+        // (using stats first to know file size)
 
         // read the file
 
@@ -76,7 +76,7 @@ pub const Buffer = struct {
             while (i < read) : (i += 1) {
                 if (buff[i] == '\n') {
                     // append the data left until the \n with the \n included
-                    try u8slice.appendSlice(buff[last_append .. i + 1]); // allocate the data in an u8slice
+                    try u8slice.appendConst(buff[last_append .. i + 1]); // allocate the data in an u8slice
                     // append the line in the lines list of the buffer
                     try rv.lines.append(u8slice);
                     // move the cursor in this buffer
@@ -86,7 +86,7 @@ pub const Buffer = struct {
                 }
             }
             // append the rest of th read buffer
-            try u8slice.appendSlice(buff[last_append..read]);
+            try u8slice.appendConst(buff[last_append..read]);
         }
 
         // we completely read the file, if the buffer isn't empty, it means we have
@@ -121,13 +121,14 @@ pub const Buffer = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    pub fn getLine(self: Buffer, line_number: u64) !U8Slice {
+    /// Returns a pointer for the caller to be able to modify the line, however, the
+    /// pointer should never be null.
+    pub fn getLine(self: Buffer, line_number: u64) !*U8Slice {
         if (line_number + 1 > self.lines.items.len) {
-            std.log.err("getLinePos: line_number overflow: line_number: {d}, self.lines.items.len: {d}", .{ line_number, self.lines.items.len });
+            std.log.err("getLinePos: line_number out of bounds: line_number: {d}, self.lines.items.len: {d}", .{ line_number, self.lines.items.len });
             return BufferError.OutOfBuffer;
         }
-
-        return self.lines.items[line_number];
+        return &self.lines.items[line_number];
     }
 };
 

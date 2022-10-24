@@ -13,11 +13,13 @@ const ChangeType = enum {
     AddBlock,
     DeleteBlock,
     /// `DeleteLine`  is the action of a completely deleted line.
-    /// It's vector `pos` contains the line at which it was before deletion.
+    /// The vector `pos` contains the line at which it was before deletion.
     DeleteLine,
 };
 
-// TODO(remy): comment
+/// Change represents a modification of a buffer.
+/// The Change owns the `data` and has to release it.
+/// The `pos` vector can have different meanings depending on the `type` of the Change.
 const Change = struct {
     type: ChangeType,
     data: U8Slice,
@@ -28,6 +30,7 @@ const Change = struct {
 
 // TODO(remy): comment
 pub const Editor = struct {
+    allocator: std.mem.Allocator,
     buffer: Buffer,
     history: std.ArrayList(Change),
 
@@ -36,6 +39,7 @@ pub const Editor = struct {
 
     pub fn init(allocator: std.mem.Allocator, buffer: Buffer) Editor {
         return Editor{
+            .allocator = allocator,
             .buffer = buffer,
             .history = std.ArrayList(Change).init(allocator),
         };
@@ -52,7 +56,7 @@ pub const Editor = struct {
     // History
     // -------
 
-    /// historyAppend has to be used to append a new entry in the history.
+    /// historyAppend appends a new entry in the history.
     /// If the append fails, the memory is deleted to avoid any leak.
     fn historyAppend(self: *Editor, change_type: ChangeType, data: U8Slice, pos: Vec2i) void {
         self.history.append(Change{
@@ -92,9 +96,35 @@ pub const Editor = struct {
         var deleted_line = self.buffer.lines.orderedRemove(line_pos);
         self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2i{ .a = @intCast(i64, line_pos), .b = -1 });
     }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    // TODO(remy): what happens on the very last line of the buffer/editor?
+    pub fn newLine(self: *Editor, pos: Vec2i, after: bool) void {
+        if (after) {
+            var line = self.buffer.getLine(@intCast(u64, pos.b)) catch |err| {
+                std.log.err("Editor.newLine: {}", .{err});
+                return;
+            };
+            var rest = line.data.items[@intCast(usize, pos.a)..line.size()];
+            line.data.shrinkAndFree(@intCast(usize, pos.a + 1)); // TODO(remy): this should be a different method (which should contain the change stuff)
+            var new_line = U8Slice.initFromSlice(self.allocator, rest) catch |err| {
+                std.log.err("Editor.newLine: can't create a new U8Slice: {}", .{err});
+                return;
+            };
+            self.buffer.lines.insert(@intCast(usize, pos.b) + 1, new_line) catch |err| {
+                std.log.err("Editor.newLine: can't insert a new line: {}", .{err});
+            };
+        } else {
+            var new_line = U8Slice.initEmpty(self.allocator);
+            self.buffer.lines.insert(@intCast(usize, pos.b), new_line) catch |err| {
+                std.log.err("can't insert a new line: {}", .{err});
+            };
+        }
+    }
 };
 
-test "editor_delete_line" {
+test "editor_delete_line_and_undo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
@@ -102,7 +132,10 @@ test "editor_delete_line" {
     try expect(editor.buffer.lines.items.len == 2);
     editor.deleteLine(0);
     try expect(editor.buffer.lines.items.len == 1);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "and a third"));
     try editor.undo();
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "and a second line\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and a third"));
     try expect(editor.buffer.lines.items.len == 2);
     editor.deinit();
 }
