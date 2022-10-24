@@ -25,9 +25,13 @@ pub const App = struct {
     // ------------
 
     pub fn init(allocator: std.mem.Allocator) !App {
+        // SDL init
+
         if (c.SDL_Init(c.SDL_INIT_VIDEO) < 0) {
             std.log.err("sdl: can't c.SDL_Init(c.SDL_INIT_VIDEO)", .{});
         }
+
+        // OpenGL init
 
         _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
         _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE);
@@ -37,26 +41,38 @@ pub const App = struct {
         _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 2);
 
+        // create the SDL Window
+
         var sdl_window = c.SDL_CreateWindow("meh", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_ALLOW_HIGHDPI);
 
         if (sdl_window == null) {
             // TODO(remy): return an error
         }
 
+        // create the OpenGL context
+
         var gl_context = c.SDL_GL_CreateContext(sdl_window);
         _ = c.SDL_GL_MakeCurrent(sdl_window, gl_context);
         _ = c.SDL_GL_SetSwapInterval(1);
+
+        // init imgui and its OpenGL/SDL2 backend
 
         var imgui_context = c.igCreateContext(null);
 
         _ = c.ImGui_ImplSDL2_InitForOpenGL(sdl_window, imgui_context);
         _ = c.ImGui_ImplOpenGL3_Init(null);
 
+        // show and raise the window
+
         c.SDL_ShowWindow(sdl_window);
         c.SDL_RaiseWindow(sdl_window);
 
+        // load the fonts
+
         var font_lowdpi = c.ImFontAtlas_AddFontFromFileTTF(c.igGetIO().*.Fonts, "res/UbuntuMono-Regular.ttf", 16, 0, 0);
         var font_hidpi = c.ImFontAtlas_AddFontFromFileTTF(c.igGetIO().*.Fonts, "res/UbuntuMono-Regular.ttf", 32, 0, 0);
+
+        // return the created app
 
         return App{
             .allocator = allocator,
@@ -71,21 +87,24 @@ pub const App = struct {
     }
 
     pub fn deinit(self: *App) void {
-        c.ImGui_ImplOpenGL3_Shutdown();
-        c.ImGui_ImplSDL2_Shutdown();
-        c.igDestroyContext(self.imgui_context);
-        self.imgui_context = null;
-        c.SDL_GL_DeleteContext(self.gl_context);
-        self.gl_context = null;
-        c.SDL_DestroyWindow(self.sdl_window);
-        self.sdl_window = null;
-
-        c.SDL_Quit();
-
         for (self.editors.item) |editor| {
             editor.deinit();
         }
         self.editors.deinit();
+
+        c.ImGui_ImplOpenGL3_Shutdown();
+        c.ImGui_ImplSDL2_Shutdown();
+
+        c.igDestroyContext(self.imgui_context);
+        self.imgui_context = null;
+
+        c.SDL_GL_DeleteContext(self.gl_context);
+        self.gl_context = null;
+
+        c.SDL_DestroyWindow(self.sdl_window);
+        self.sdl_window = null;
+
+        c.SDL_Quit();
     }
 
     // Methods
@@ -113,6 +132,7 @@ pub const App = struct {
         while (run) {
             while (c.SDL_PollEvent(&event) > 0) {
                 _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
+
                 if (event.type == c.SDL_QUIT) {
                     run = false;
                     break;
@@ -159,22 +179,26 @@ pub const App = struct {
             }
 
             // prepare a new frame for rendering
+            // -------
+
             _ = c.ImGui_ImplOpenGL3_NewFrame();
             c.ImGui_ImplSDL2_NewFrame();
             _ = c.igNewFrame();
 
+            // render list
+            // -----------
+
+            // editor window
             var w: c_int = 0;
             var h: c_int = 0;
             c.SDL_GetWindowSize(self.sdl_window, &w, &h);
-
-            // render list
             _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
             _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
             self.currentWidgetEditor().render();
-
-            c.igShowDemoWindow(1);
-
             c.igEnd();
+
+            // demo window
+            c.igShowDemoWindow(1);
 
             // rendering
             c.igRender();

@@ -130,8 +130,20 @@ pub const WidgetEditor = struct {
     // TODO(remy): unit test
     pub fn moveCursor(self: *WidgetEditor, move: Vec2i) void {
         // TODO(remy): test for position in the buffer content
-        self.cursor.pos.a += move.a;
-        self.cursor.pos.b += move.b;
+        if (self.cursor.pos.b + move.b <= 0) {
+            self.cursor.pos.b = 0;
+        } else if (self.cursor.pos.b + move.b >= @intCast(usize, self.editor.buffer.lines.items.len) - 1) {
+            self.cursor.pos.b = @intCast(i64, self.editor.buffer.lines.items.len) - 1;
+        } else {
+            self.cursor.pos.b += move.b;
+        }
+        if (self.cursor.pos.a + move.a <= 0) {
+            self.cursor.pos.a = 0;
+        } else if (self.cursor.pos.a + move.a >= self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) {
+            self.cursor.pos.a = @intCast(i64, self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) - 1;
+        } else {
+            self.cursor.pos.a += move.a;
+        }
     }
 
     fn renderCursor(self: WidgetEditor, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {

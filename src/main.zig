@@ -6,7 +6,13 @@ const App = @import("app.zig").App;
 
 pub fn main() !void {
     var app = try App.init(std.heap.page_allocator);
-    try app.openFile("src/app.zig");
+    if (std.mem.len(std.os.argv) <= 1) {
+        try app.openFile("src/app.zig");
+    } else {
+        var arg = std.os.argv[1];
+        var len = std.mem.len(arg);
+        try app.openFile(arg[0..len]);
+    }
     errdefer app.deinit();
     try app.mainloop();
 }

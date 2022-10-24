@@ -107,7 +107,8 @@ pub const Editor = struct {
                 return;
             };
             var rest = line.data.items[@intCast(usize, pos.a)..line.size()];
-            line.data.shrinkAndFree(@intCast(usize, pos.a + 1)); // TODO(remy): this should be a different method (which should contain the change stuff)
+            // TODO(remy): this should be a different method (which should contain the change stuff)
+            line.data.shrinkAndFree(@intCast(usize, pos.a + 1));
             var new_line = U8Slice.initFromSlice(self.allocator, rest) catch |err| {
                 std.log.err("Editor.newLine: can't create a new U8Slice: {}", .{err});
                 return;
