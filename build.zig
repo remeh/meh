@@ -19,7 +19,7 @@ pub fn build(b: *std.build.Builder) void {
     const meh = b.addExecutable("meh", "src/main.zig");
     meh.setTarget(target);
     meh.setBuildMode(mode);
-    meh.use_stage1 = true;
+    // meh.use_stage1 = true;
 
     // find "cimgui.h"
     meh.addIncludePath("include/");

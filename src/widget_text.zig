@@ -2,6 +2,7 @@ const std = @import("std");
 const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
+const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
 const Editor = @import("editor.zig").Editor;
 const ImVec2 = @import("vec.zig").ImVec2;
@@ -72,8 +73,9 @@ pub const Cursor = struct {
 };
 
 // TODO(remy): comment
-pub const WidgetEditor = struct {
+pub const WidgetText = struct {
     allocator: std.mem.Allocator,
+    app: *App,
     cursor: Cursor, // TODO(remy): replace me with a custom (containing cursor mode)
     editor: Editor,
     input_mode: InputMode,
@@ -83,10 +85,11 @@ pub const WidgetEditor = struct {
     // ------------
 
     // TODO(remy): comment
-    pub fn initEmpty(allocator: std.mem.Allocator) WidgetEditor {
+    pub fn initEmpty(app: *App, allocator: std.mem.Allocator) WidgetText {
         var buffer = Buffer.initEmpty(allocator);
-        return WidgetEditor{
+        return WidgetText{
             .allocator = allocator,
+            .app = app,
             .editor = Editor.init(allocator, buffer),
             .visible_lines = undefined,
             .cursor = Cursor.init(),
@@ -95,9 +98,10 @@ pub const WidgetEditor = struct {
     }
 
     // TODO(remy): comment
-    pub fn initWithBuffer(allocator: std.mem.Allocator, buffer: Buffer) WidgetEditor {
-        return WidgetEditor{
+    pub fn initWithBuffer(app: *App, allocator: std.mem.Allocator, buffer: Buffer) WidgetText {
+        return WidgetText{
             .allocator = allocator,
+            .app = app,
             .editor = Editor.init(allocator, buffer),
             .visible_lines = Vec2i{ .a = 0, .b = 50 },
             .cursor = Cursor.init(),
@@ -105,18 +109,18 @@ pub const WidgetEditor = struct {
         };
     }
 
-    pub fn deinit(self: *WidgetEditor) void {
+    pub fn deinit(self: *WidgetText) void {
         self.editor.deinit();
     }
 
-    // Methods
-    // -------
+    // Rendering methods
+    // -----------------
 
     // pub fn set_window_size() // TODO(remy): implement me and unit test
 
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
-    pub fn render(self: WidgetEditor) void {
+    pub fn render(self: WidgetText) void {
         var draw_list = c.igGetWindowDrawList();
 
         var one_char_size = ImVec2(0, 0);
@@ -126,31 +130,11 @@ pub const WidgetEditor = struct {
         self.renderCursor(draw_list, one_char_size);
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
-    pub fn moveCursor(self: *WidgetEditor, move: Vec2i) void {
-        // TODO(remy): test for position in the buffer content
-        if (self.cursor.pos.b + move.b <= 0) {
-            self.cursor.pos.b = 0;
-        } else if (self.cursor.pos.b + move.b >= @intCast(usize, self.editor.buffer.lines.items.len) - 1) {
-            self.cursor.pos.b = @intCast(i64, self.editor.buffer.lines.items.len) - 1;
-        } else {
-            self.cursor.pos.b += move.b;
-        }
-        if (self.cursor.pos.a + move.a <= 0) {
-            self.cursor.pos.a = 0;
-        } else if (self.cursor.pos.a + move.a >= self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) {
-            self.cursor.pos.a = @intCast(i64, self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) - 1;
-        } else {
-            self.cursor.pos.a += move.a;
-        }
-    }
-
-    fn renderCursor(self: WidgetEditor, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {
+    fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {
         self.cursor.render(draw_list, self.input_mode, self.visible_lines.a, Vec2f{ .a = one_char_size.x, .b = one_char_size.y });
     }
 
-    fn renderLines(self: WidgetEditor, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {
+    fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {
         var i: usize = @intCast(usize, self.visible_lines.a);
         var y_offset: f32 = 0.0;
 
@@ -176,25 +160,64 @@ pub const WidgetEditor = struct {
         }
     }
 
+    // Events methods
+    // --------------
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn onTextInput(self: *WidgetText, ch: u8) bool {
+        switch (ch) {
+            'q' => self.app.is_running = false,
+            'n' => self.newLine(),
+            'h' => self.moveCursor(Vec2i{ .a = -1, .b = 0 }),
+            'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }),
+            'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }),
+            'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }),
+            'd' => self.editor.deleteLine(@intCast(usize, self.cursor.pos.b)),
+            'x' => self.editor.deleteChar(self.cursor.pos, false) catch {},
+            'u' => self.undo(),
+            'i' => self.input_mode = .Insert, // TODO(remy): finish
+            'r' => self.input_mode = .Replace, // TODO(remy): finish
+            else => return false,
+        }
+        return true;
+    }
+
     // Text edition methods
     // -------------------
 
     // TODO(remy): comment
-    // TODO(remy): delete when the keypress is handled here
-    pub fn deleteCurrentLine(self: *WidgetEditor) void {
-        self.editor.deleteLine(@intCast(usize, self.cursor.pos.b));
+    // TODO(remy): unit test
+    pub fn moveCursor(self: *WidgetText, move: Vec2i) void {
+        // TODO(remy): test for position in the buffer content
+        if (self.cursor.pos.b + move.b <= 0) {
+            self.cursor.pos.b = 0;
+        } else if (self.cursor.pos.b + move.b >= @intCast(usize, self.editor.buffer.lines.items.len) - 1) {
+            self.cursor.pos.b = @intCast(i64, self.editor.buffer.lines.items.len) - 1;
+        } else {
+            self.cursor.pos.b += move.b;
+        }
+        if (self.cursor.pos.a + move.a <= 0) {
+            self.cursor.pos.a = 0;
+        } else if (self.cursor.pos.a + move.a >= self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) {
+            self.cursor.pos.a = @intCast(i64, self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) - 1;
+        } else {
+            self.cursor.pos.a += move.a;
+        }
     }
 
-    pub fn newLine(self: *WidgetEditor) void {
+    // TODO(remy): comment
+    // TODO(remy): unit tes
+    pub fn newLine(self: *WidgetText) void {
         self.editor.newLine(self.cursor.pos, true);
         self.cursor.pos.a = 0;
         self.cursor.pos.b += 1;
     }
 
     // TODO(remy): comment
-    pub fn undo(self: *WidgetEditor) void {
+    pub fn undo(self: *WidgetText) void {
         self.editor.undo() catch |err| {
-            std.log.err("WidgetEditor.undo: can't undo: {}", .{err});
+            std.log.err("WidgetText.undo: can't undo: {}", .{err});
         };
     }
 };
@@ -203,6 +226,6 @@ pub const WidgetEditor = struct {
 test "editor_init_deinit" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
-    var editor = WidgetEditor.initWithBuffer(allocator, buffer);
+    var editor = WidgetText.initWithBuffer(allocator, buffer);
     editor.deinit();
 }

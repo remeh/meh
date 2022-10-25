@@ -123,6 +123,13 @@ pub const Editor = struct {
             };
         }
     }
+
+    pub fn deleteChar(self: *Editor, pos: Vec2i, go_left: bool) !void {
+        if (go_left) {} else {
+            var line = try self.buffer.getLine(@intCast(u64, pos.b));
+            _ = line.data.orderedRemove(@intCast(usize, pos.a));
+        }
+    }
 };
 
 test "editor_delete_line_and_undo" {

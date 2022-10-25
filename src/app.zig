@@ -2,14 +2,14 @@ const std = @import("std");
 const c = @import("clib.zig").c;
 
 const Buffer = @import("buffer.zig").Buffer;
-const WidgetEditor = @import("widget_editor.zig").WidgetEditor;
+const WidgetText = @import("widget_text.zig").WidgetText;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Vec2i = @import("vec.zig").Vec2i;
 
 // TODO(comment):
 pub const App = struct {
     allocator: std.mem.Allocator,
-    editors: std.ArrayList(WidgetEditor),
+    editors: std.ArrayList(WidgetText),
 
     gl_context: c.SDL_GLContext,
     imgui_context: *c.ImGuiContext,
@@ -20,6 +20,9 @@ pub const App = struct {
     font_lowdpi: *c.ImFont,
     font_hidpi: *c.ImFont,
     hidpi: bool,
+
+    // TODO(remy): comment
+    is_running: bool,
 
     // Constructors
     // ------------
@@ -76,9 +79,10 @@ pub const App = struct {
 
         return App{
             .allocator = allocator,
-            .editors = std.ArrayList(WidgetEditor).init(allocator),
+            .editors = std.ArrayList(WidgetText).init(allocator),
             .gl_context = gl_context,
             .imgui_context = imgui_context,
+            .is_running = true,
             .sdl_window = sdl_window.?,
             .font_lowdpi = font_lowdpi,
             .font_hidpi = font_hidpi,
@@ -114,98 +118,107 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         var buffer = try Buffer.initFromFile(self.allocator, filepath);
-        var editor = WidgetEditor.initWithBuffer(self.allocator, buffer);
+        var editor = WidgetText.initWithBuffer(self, self.allocator, buffer);
         try self.editors.append(editor);
     }
 
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
-    pub fn currentWidgetEditor(self: App) *WidgetEditor {
+    pub fn currentWidgetText(self: App) *WidgetText {
         return &self.editors.items[0];
+    }
+
+    fn render(self: *App) void {
+        // prepare a new frame for rendering
+        // -------
+
+        _ = c.ImGui_ImplOpenGL3_NewFrame();
+        c.ImGui_ImplSDL2_NewFrame();
+        _ = c.igNewFrame();
+
+        var w: c_int = 0;
+        var h: c_int = 0;
+        c.SDL_GetWindowSize(self.sdl_window, &w, &h);
+
+        // detect if we've changed the monitor the window is on
+        var gl_w: c_int = 0;
+        var gl_h: c_int = 0;
+        c.SDL_GL_GetDrawableSize(self.sdl_window, &gl_w, &gl_h);
+        if (gl_w > w and gl_h > h and !self.hidpi) {
+            self.setHdpi(true);
+        } else if (gl_w == w and gl_h == h and self.hidpi) {
+            self.setHdpi(false);
+        }
+
+        // render list
+        // -----------
+
+        // editor window
+        _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
+        _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
+
+        self.currentWidgetText().render();
+        c.igEnd();
+
+        // demo window
+        // c.igShowDemoWindow(1);
+
+        // rendering
+        c.igRender();
+        c.ImGui_ImplOpenGL3_RenderDrawData(c.igGetDrawData());
+        c.SDL_GL_SwapWindow(self.sdl_window);
+
+        c.SDL_Delay(16);
+    }
+
+    fn setHdpi(self: *App, enabled: bool) void {
+        if (enabled) {
+            std.log.debug("set to hidpi", .{});
+            self.hidpi = true;
+            c.igGetIO().*.FontDefault = self.font_hidpi;
+            c.igGetIO().*.FontGlobalScale = 0.5;
+        } else {
+            std.log.debug("set to low dpi", .{});
+            self.hidpi = false;
+            c.igGetIO().*.FontDefault = self.font_lowdpi;
+            c.igGetIO().*.FontGlobalScale = 1.0;
+        }
     }
 
     pub fn mainloop(self: *App) !void {
         c.SDL_StartTextInput();
         var event: c.SDL_Event = undefined;
-        var run: bool = true;
+        self.is_running = true;
 
-        while (run) {
+        while (self.is_running) {
             while (c.SDL_PollEvent(&event) > 0) {
                 _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
 
                 if (event.type == c.SDL_QUIT) {
-                    run = false;
+                    self.is_running = false;
                     break;
                 }
-                // TODO(remy): delegate this to the WidgetEditor, too much duplicate code being here
+
+                // TODO(remy): we should be able too close the app from someone handling the events
                 // XXX(remy): will we have to get a "currently focused" widget?
                 switch (event.type) {
                     c.SDL_TEXTINPUT => {
-                        switch (event.text.text[0]) {
-                            'q' => run = false,
-                            'n' => self.currentWidgetEditor().newLine(),
-                            'h' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = -1, .b = 0 }),
-                            'j' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 0, .b = 1 }),
-                            'k' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 0, .b = -1 }),
-                            'l' => self.currentWidgetEditor().moveCursor(Vec2i{ .a = 1, .b = 0 }),
-                            'd' => self.currentWidgetEditor().deleteCurrentLine(),
-                            'u' => self.currentWidgetEditor().undo(),
-                            's' => {
-                                self.hidpi = true;
-                                c.igGetIO().*.FontDefault = self.font_hidpi;
-                                c.igGetIO().*.FontGlobalScale = 0.5;
-                            },
-                            'S' => {
-                                self.hidpi = false;
-                                c.igGetIO().*.FontDefault = self.font_lowdpi;
-                                c.igGetIO().*.FontGlobalScale = 1.0;
-                            },
-                            'i' => self.currentWidgetEditor().input_mode = .Insert, // TODO(remy): remove
-                            'r' => self.currentWidgetEditor().input_mode = .Replace, // TODO(remy): remove
-                            else => {},
-                        }
+                        _ = self.currentWidgetText().onTextInput(event.text.text[0]);
                     },
                     c.SDL_MOUSEWHEEL => {
                         if (event.wheel.y < 0) {
-                            self.currentWidgetEditor().visible_lines.a += 3;
-                            self.currentWidgetEditor().visible_lines.b += 3;
+                            self.currentWidgetText().visible_lines.a += 3;
+                            self.currentWidgetText().visible_lines.b += 3;
                         } else if (event.wheel.y > 0) {
-                            self.currentWidgetEditor().visible_lines.a -= 3;
-                            self.currentWidgetEditor().visible_lines.b -= 3;
+                            self.currentWidgetText().visible_lines.a -= 3;
+                            self.currentWidgetText().visible_lines.b -= 3;
                         }
                     },
                     else => {},
                 }
             }
 
-            // prepare a new frame for rendering
-            // -------
-
-            _ = c.ImGui_ImplOpenGL3_NewFrame();
-            c.ImGui_ImplSDL2_NewFrame();
-            _ = c.igNewFrame();
-
-            // render list
-            // -----------
-
-            // editor window
-            var w: c_int = 0;
-            var h: c_int = 0;
-            c.SDL_GetWindowSize(self.sdl_window, &w, &h);
-            _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
-            _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
-            self.currentWidgetEditor().render();
-            c.igEnd();
-
-            // demo window
-            c.igShowDemoWindow(1);
-
-            // rendering
-            c.igRender();
-            c.ImGui_ImplOpenGL3_RenderDrawData(c.igGetDrawData());
-            c.SDL_GL_SwapWindow(self.sdl_window);
-
-            c.SDL_Delay(16);
+            self.render();
         }
     }
 };
