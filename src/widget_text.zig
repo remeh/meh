@@ -189,14 +189,7 @@ pub const WidgetText = struct {
     // TODO(remy): comment
     // TODO(remy): unit test
     pub fn moveCursor(self: *WidgetText, move: Vec2i) void {
-        // TODO(remy): test for position in the buffer content
-        if (self.cursor.pos.b + move.b <= 0) {
-            self.cursor.pos.b = 0;
-        } else if (self.cursor.pos.b + move.b >= @intCast(usize, self.editor.buffer.lines.items.len) - 1) {
-            self.cursor.pos.b = @intCast(i64, self.editor.buffer.lines.items.len) - 1;
-        } else {
-            self.cursor.pos.b += move.b;
-        }
+        // x movement
         if (self.cursor.pos.a + move.a <= 0) {
             self.cursor.pos.a = 0;
         } else if (self.cursor.pos.a + move.a >= self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) {
@@ -204,12 +197,21 @@ pub const WidgetText = struct {
         } else {
             self.cursor.pos.a += move.a;
         }
+        // y movement
+        if (self.cursor.pos.b + move.b <= 0) {
+            self.cursor.pos.b = 0;
+        } else if (self.cursor.pos.b + move.b >= @intCast(usize, self.editor.buffer.lines.items.len) - 1) {
+            self.cursor.pos.b = @intCast(i64, self.editor.buffer.lines.items.len) - 1;
+        } else {
+            self.cursor.pos.b += move.b;
+        }
     }
 
     // TODO(remy): comment
     // TODO(remy): unit tes
     pub fn newLine(self: *WidgetText) void {
         self.editor.newLine(self.cursor.pos, true);
+        // TODO(remy): smarter positioning of the cursor
         self.cursor.pos.a = 0;
         self.cursor.pos.b += 1;
     }
@@ -221,6 +223,53 @@ pub const WidgetText = struct {
         };
     }
 };
+
+test "editor moveCursor" {
+    const allocator = std.testing.allocator;
+    var app: *App = undefined;
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    var editor = WidgetText.initWithBuffer(allocator, app, buffer);
+    editor.cursor.pos = Vec2i{ .a = 0, .b = 0 };
+
+    // top of the file, moving up shouldn't do anything
+    editor.moveCursor(Vec2i{ .a = 0, .b = -1 });
+    try expect(editor.cursor.pos.a == 0);
+    try expect(editor.cursor.pos.b == 0);
+    // move down
+    editor.moveCursor(Vec2i{ .a = 0, .b = 1 });
+    try expect(editor.cursor.pos.a == 0);
+    try expect(editor.cursor.pos.b == 1);
+    // big move down, should reach the last line of the file
+    editor.moveCursor(Vec2i{ .a = 0, .b = 15 });
+    try expect(editor.cursor.pos.a == 0);
+    try expect(editor.cursor.pos.b == buffer.lines.items.len - 1);
+    // big move up, should reach the top line
+    editor.moveCursor(Vec2i{ .a = 0, .b = -15 });
+    try expect(editor.cursor.pos.a == 0);
+    try expect(editor.cursor.pos.b == 0);
+    // move right
+    editor.moveCursor(Vec2i{ .a = 1, .b = 0 });
+    try expect(editor.cursor.pos.a == 1);
+    try expect(editor.cursor.pos.b == 0);
+    // big move right, should reach the end of the line
+    editor.moveCursor(Vec2i{ .a = 100, .b = 0 });
+    try expect(editor.cursor.pos.a == buffer.lines.items[0].size() - 1);
+    try expect(editor.cursor.pos.b == 0);
+    // move left
+    editor.moveCursor(Vec2i{ .a = -1, .b = 0 });
+    try expect(editor.cursor.pos.a == buffer.lines.items[0].size() - 2);
+    try expect(editor.cursor.pos.b == 0);
+    // big move left, should reach the start of the line
+    editor.moveCursor(Vec2i{ .a = -100, .b = 0 });
+    try expect(editor.cursor.pos.a == 0);
+    try expect(editor.cursor.pos.b == 0);
+    // big move right and up, should reach the last line and its end
+    editor.moveCursor(Vec2i{ .a = 100, .b = 100 });
+    try expect(editor.cursor.pos.a == buffer.lines.items[0].size() - 1);
+    try expect(editor.cursor.pos.b == buffer.lines.items.len - 1);
+
+    editor.deinit();
+}
 
 // TODO(remy): unit test
 test "editor_init_deinit" {
