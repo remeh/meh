@@ -85,7 +85,7 @@ pub const WidgetText = struct {
     // ------------
 
     // TODO(remy): comment
-    pub fn initEmpty(app: *App, allocator: std.mem.Allocator) WidgetText {
+    pub fn initEmpty(allocator: std.mem.Allocator, app: *App) WidgetText {
         var buffer = Buffer.initEmpty(allocator);
         return WidgetText{
             .allocator = allocator,
@@ -98,7 +98,7 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): comment
-    pub fn initWithBuffer(app: *App, allocator: std.mem.Allocator, buffer: Buffer) WidgetText {
+    pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer) WidgetText {
         return WidgetText{
             .allocator = allocator,
             .app = app,
@@ -225,7 +225,8 @@ pub const WidgetText = struct {
 // TODO(remy): unit test
 test "editor_init_deinit" {
     const allocator = std.testing.allocator;
+    var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
-    var editor = WidgetText.initWithBuffer(allocator, buffer);
+    var editor = WidgetText.initWithBuffer(allocator, app, buffer);
     editor.deinit();
 }

@@ -17,33 +17,7 @@ pub fn build(b: *std.build.Builder) void {
     // imgui_sdl.install();
 
     const meh = b.addExecutable("meh", "src/main.zig");
-    meh.setTarget(target);
-    meh.setBuildMode(mode);
-    // meh.use_stage1 = true;
-
-    // find "cimgui.h"
-    meh.addIncludePath("include/");
-    if (builtin.os.tag == .macos) {
-        // find "SDL2/SDL2.h"
-        meh.addIncludePath("/opt/homebrew/include");
-        // find libSDL2.dylib
-        meh.addLibraryPath("/opt/homebrew/lib");
-    }
-    // find local libcimgui.dylib
-    meh.addLibraryPath("lib/");
-    // linked libraries
-    meh.linkSystemLibrary("SDL2");
-    // meh.linkSystemLibrary("GL");
-    meh.linkSystemLibrary("cimgui");
-    switch (builtin.os.tag) {
-        .linux => meh.linkLibC(),
-        .macos => {
-            meh.linkFramework("OpenGl");
-            meh.linkFramework("CoreFoundation");
-        },
-        else => {},
-    }
-
+    prepare(meh, target, mode);
     meh.install();
 
     const run_cmd = meh.run();
@@ -55,12 +29,37 @@ pub fn build(b: *std.build.Builder) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const meh_tests = b.addTest("src/main.zig");
-    // meh_tests.addTest("src/string.zig");
-    // meh_tests.addTest("src/buffer.zig");
-    meh_tests.setTarget(target);
-    meh_tests.setBuildMode(mode);
-
+    const meh_tests = b.addTest("src/tests.zig");
+    prepare(meh_tests, target, mode);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&meh_tests.step);
+}
+
+fn prepare(step: *std.build.LibExeObjStep, target: std.zig.CrossTarget, mode: std.builtin.Mode) void {
+    step.setTarget(target);
+    step.setBuildMode(mode);
+    // meh.use_stage1 = true;
+
+    // find "cimgui.h"
+    step.addIncludePath("include/");
+    if (builtin.os.tag == .macos) {
+        // find "SDL2/SDL2.h"
+        step.addIncludePath("/opt/homebrew/include");
+        // find libSDL2.dylib
+        step.addLibraryPath("/opt/homebrew/lib");
+    }
+    // find local libcimgui.dylib
+    step.addLibraryPath("lib/");
+    // linked libraries
+    step.linkSystemLibrary("SDL2");
+    // step.linkSystemLibrary("GL");
+    step.linkSystemLibrary("cimgui");
+    switch (builtin.os.tag) {
+        .linux => step.linkLibC(),
+        .macos => {
+            step.linkFramework("OpenGl");
+            step.linkFramework("CoreFoundation");
+        },
+        else => {},
+    }
 }

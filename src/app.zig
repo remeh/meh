@@ -2,15 +2,16 @@ const std = @import("std");
 const c = @import("clib.zig").c;
 
 const Buffer = @import("buffer.zig").Buffer;
-const WidgetText = @import("widget_text.zig").WidgetText;
 const ImVec2 = @import("vec.zig").ImVec2;
+const WidgetCommand = @import("widget_command.zig").WidgetCommand;
+const WidgetText = @import("widget_text.zig").WidgetText;
 const Vec2i = @import("vec.zig").Vec2i;
 
 // TODO(comment):
 pub const App = struct {
     allocator: std.mem.Allocator,
     editors: std.ArrayList(WidgetText),
-
+    command: WidgetCommand,
     gl_context: c.SDL_GLContext,
     imgui_context: *c.ImGuiContext,
     sdl_window: *c.SDL_Window,
@@ -80,6 +81,7 @@ pub const App = struct {
         return App{
             .allocator = allocator,
             .editors = std.ArrayList(WidgetText).init(allocator),
+            .command = WidgetCommand.init(),
             .gl_context = gl_context,
             .imgui_context = imgui_context,
             .is_running = true,
@@ -118,7 +120,7 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         var buffer = try Buffer.initFromFile(self.allocator, filepath);
-        var editor = WidgetText.initWithBuffer(self, self.allocator, buffer);
+        var editor = WidgetText.initWithBuffer(self.allocator, self, buffer);
         try self.editors.append(editor);
     }
 
@@ -156,9 +158,14 @@ pub const App = struct {
         // editor window
         _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
         _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
-
-        self.currentWidgetText().render();
+        self.currentWidgetText().render(); // FIXME(remy): currentWidgetText should not be used or be better implemented
         c.igEnd();
+
+        // // command input
+        // _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w) / 2, @intToFloat(f32, 38)), 0);
+        // _ = c.igBegin("CommandWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
+        // _ = c.igInputText("##command", &self.command.buff, @sizeOf(@TypeOf(self.command.buff)), 0, null, null);
+        // c.igEnd();
 
         // demo window
         // c.igShowDemoWindow(1);
@@ -172,13 +179,12 @@ pub const App = struct {
     }
 
     fn setHdpi(self: *App, enabled: bool) void {
+        std.log.debug("App.setHdpi: {}", .{enabled});
         if (enabled) {
-            std.log.debug("set to hidpi", .{});
             self.hidpi = true;
             c.igGetIO().*.FontDefault = self.font_hidpi;
             c.igGetIO().*.FontGlobalScale = 0.5;
         } else {
-            std.log.debug("set to low dpi", .{});
             self.hidpi = false;
             c.igGetIO().*.FontDefault = self.font_lowdpi;
             c.igGetIO().*.FontGlobalScale = 1.0;
