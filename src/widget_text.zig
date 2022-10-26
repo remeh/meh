@@ -167,7 +167,6 @@ pub const WidgetText = struct {
     // TODO(remy): unit test
     pub fn onTextInput(self: *WidgetText, ch: u8) bool {
         switch (ch) {
-            'q' => self.app.is_running = false,
             'n' => self.newLine(),
             'h' => self.moveCursor(Vec2i{ .a = -1, .b = 0 }),
             'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }),

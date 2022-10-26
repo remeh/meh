@@ -77,7 +77,6 @@ pub const App = struct {
         var font_hidpi = c.ImFontAtlas_AddFontFromFileTTF(c.igGetIO().*.Fonts, "res/UbuntuMono-Regular.ttf", 32, 0, 0);
 
         // return the created app
-
         return App{
             .allocator = allocator,
             .editors = std.ArrayList(WidgetText).init(allocator),
@@ -114,6 +113,7 @@ pub const App = struct {
     }
 
     // Methods
+    // TODO(remy): re-order the methods
     // -------
 
     // TODO(remy): comment
@@ -161,11 +161,13 @@ pub const App = struct {
         self.currentWidgetText().render(); // FIXME(remy): currentWidgetText should not be used or be better implemented
         c.igEnd();
 
-        // // command input
-        // _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w) / 2, @intToFloat(f32, 38)), 0);
-        // _ = c.igBegin("CommandWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
-        // _ = c.igInputText("##command", &self.command.buff, @sizeOf(@TypeOf(self.command.buff)), 0, null, null);
-        // c.igEnd();
+        // command input
+        _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w) / 2, @intToFloat(f32, 38)), 0);
+        _ = c.igBegin("CommandWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
+        if (c.igInputText("##command", &self.command.buff, @sizeOf(@TypeOf(self.command.buff)), c.ImGuiInputTextFlags_EnterReturnsTrue | c.ImGuiInputTextFlags_CallbackAlways, WidgetCommand.callback, null)) {
+            self.command.interpret(self);
+        }
+        c.igEnd();
 
         // demo window
         // c.igShowDemoWindow(1);
@@ -191,6 +193,13 @@ pub const App = struct {
         }
     }
 
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn quit(self: *App) void {
+        // TODO(remy): messagebox to save
+        self.is_running = false;
+    }
+
     pub fn mainloop(self: *App) !void {
         c.SDL_StartTextInput();
         var event: c.SDL_Event = undefined;
@@ -201,7 +210,7 @@ pub const App = struct {
                 _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
 
                 if (event.type == c.SDL_QUIT) {
-                    self.is_running = false;
+                    self.quit();
                     break;
                 }
 
