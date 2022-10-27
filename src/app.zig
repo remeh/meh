@@ -7,6 +7,11 @@ const WidgetCommand = @import("widget_command.zig").WidgetCommand;
 const WidgetText = @import("widget_text.zig").WidgetText;
 const Vec2i = @import("vec.zig").Vec2i;
 
+pub const FocusedWidget = enum {
+    Editor,
+    Command,
+};
+
 // TODO(comment):
 pub const App = struct {
     allocator: std.mem.Allocator,
@@ -24,6 +29,9 @@ pub const App = struct {
 
     // TODO(remy): comment
     is_running: bool,
+
+    // TODO(remy): comment
+    focused_widget: FocusedWidget,
 
     // Constructors
     // ------------
@@ -87,6 +95,7 @@ pub const App = struct {
             .sdl_window = sdl_window.?,
             .font_lowdpi = font_lowdpi,
             .font_hidpi = font_hidpi,
+            .focused_widget = FocusedWidget.Editor,
             .hidpi = false,
         };
     }
@@ -158,16 +167,21 @@ pub const App = struct {
         // editor window
         _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
         _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
+
         self.currentWidgetText().render(); // FIXME(remy): currentWidgetText should not be used or be better implemented
         c.igEnd();
 
         // command input
-        _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w) / 2, @intToFloat(f32, 38)), 0);
-        _ = c.igBegin("CommandWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
-        if (c.igInputText("##command", &self.command.buff, @sizeOf(@TypeOf(self.command.buff)), c.ImGuiInputTextFlags_EnterReturnsTrue | c.ImGuiInputTextFlags_CallbackAlways, WidgetCommand.callback, null)) {
-            self.command.interpret(self);
+        if (self.focused_widget == FocusedWidget.Command) {
+            _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w) / 2, @intToFloat(f32, 38)), 0);
+            _ = c.igSetNextWindowFocus();
+            _ = c.igBegin("CommandWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
+            c.igSetKeyboardFocusHere(1);
+            if (c.igInputText("##command", &self.command.buff, @sizeOf(@TypeOf(self.command.buff)), c.ImGuiInputTextFlags_EnterReturnsTrue | c.ImGuiInputTextFlags_CallbackAlways, WidgetCommand.callback, null)) {
+                self.command.interpret(self);
+            }
+            c.igEnd();
         }
-        c.igEnd();
 
         // demo window
         // c.igShowDemoWindow(1);
@@ -201,10 +215,9 @@ pub const App = struct {
     }
 
     pub fn mainloop(self: *App) !void {
-        c.SDL_StartTextInput();
+        c.SDL_StartTextInput(); // TODO(remy): do this only if current focus is the widget_text
         var event: c.SDL_Event = undefined;
         self.is_running = true;
-
         while (self.is_running) {
             while (c.SDL_PollEvent(&event) > 0) {
                 _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
@@ -214,9 +227,16 @@ pub const App = struct {
                     break;
                 }
 
-                // TODO(remy): we should be able too close the app from someone handling the events
                 // XXX(remy): will we have to get a "currently focused" widget?
                 switch (event.type) {
+                    c.SDL_KEYDOWN => {
+                        switch (event.key.keysym.sym) {
+                            c.SDLK_ESCAPE => {
+                                self.focused_widget = FocusedWidget.Command;
+                            },
+                            else => {},
+                        }
+                    },
                     c.SDL_TEXTINPUT => {
                         _ = self.currentWidgetText().onTextInput(event.text.text[0]);
                     },

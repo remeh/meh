@@ -5,6 +5,7 @@ const c = @import("clib.zig").c;
 const App = @import("app.zig").App;
 
 pub fn main() !void {
+    // TODO(remy): should we use a different allocator?
     var app = try App.init(std.heap.page_allocator);
     if (std.mem.len(std.os.argv) <= 1) {
         try app.openFile("src/app.zig");

@@ -21,12 +21,10 @@ pub const WidgetCommand = struct {
     // -------
     pub fn interpret(self: *WidgetCommand, app: *App) void {
         std.log.debug("WidgetCommand.interpret. buff: {s}", .{self.buff});
-
         // quit
         if (std.mem.eql(u8, self.buff[0..3], ":q!")) {
             app.quit();
         }
-
         self.buff = std.mem.zeroes([8192]u8);
     }
 
