@@ -12,7 +12,18 @@ pub const FocusedWidget = enum {
     Command,
 };
 
+pub const FontMode = enum {
+    LowDPI,
+    LowDPIBigFont,
+    HiDPI,
+};
+
 // TODO(comment):
+// The app has three fonts mode:
+//   * hidpi: using a bigger font but scaled by 0.5, providing the hidpi rendering quality
+//   * lowdpi: using a normal font with no scale
+//   * lowdpibigfont: using a normal font with no scale, but slightly bigger font than lowdpi
+//                    for high resolutions (for the text to not look small).
 pub const App = struct {
     allocator: std.mem.Allocator,
     editors: std.ArrayList(WidgetText),
@@ -24,8 +35,9 @@ pub const App = struct {
     // TODO(remy): comment
     // TODO(remy): tests
     font_lowdpi: *c.ImFont,
+    font_lowdpibigfont: *c.ImFont,
     font_hidpi: *c.ImFont,
-    hidpi: bool,
+    font_mode: FontMode,
 
     // TODO(remy): comment
     is_running: bool,
@@ -82,6 +94,7 @@ pub const App = struct {
         // load the fonts
 
         var font_lowdpi = c.ImFontAtlas_AddFontFromFileTTF(c.igGetIO().*.Fonts, "res/UbuntuMono-Regular.ttf", 16, 0, 0);
+        var font_lowdpibigfont = c.ImFontAtlas_AddFontFromFileTTF(c.igGetIO().*.Fonts, "res/UbuntuMono-Regular.ttf", 20, 0, 0);
         var font_hidpi = c.ImFontAtlas_AddFontFromFileTTF(c.igGetIO().*.Fonts, "res/UbuntuMono-Regular.ttf", 32, 0, 0);
 
         // return the created app
@@ -94,9 +107,10 @@ pub const App = struct {
             .is_running = true,
             .sdl_window = sdl_window.?,
             .font_lowdpi = font_lowdpi,
+            .font_lowdpibigfont = font_lowdpibigfont,
             .font_hidpi = font_hidpi,
             .focused_widget = FocusedWidget.Editor,
-            .hidpi = false,
+            .font_mode = FontMode.LowDPI,
         };
     }
 
@@ -151,14 +165,20 @@ pub const App = struct {
         var h: c_int = 0;
         c.SDL_GetWindowSize(self.sdl_window, &w, &h);
 
+        var display_index: c_int = c.SDL_GetWindowDisplayIndex(self.sdl_window);
+        var desktop_resolution: c.SDL_DisplayMode = undefined;
+        _ = c.SDL_GetDesktopDisplayMode(display_index, &desktop_resolution); // get the resolution
+
         // detect if we've changed the monitor the window is on
         var gl_w: c_int = 0;
         var gl_h: c_int = 0;
         c.SDL_GL_GetDrawableSize(self.sdl_window, &gl_w, &gl_h);
-        if (gl_w > w and gl_h > h and !self.hidpi) {
-            self.setHdpi(true);
-        } else if (gl_w == w and gl_h == h and self.hidpi) {
-            self.setHdpi(false);
+        if ((gl_w > w and gl_h > h and self.font_mode != FontMode.HiDPI)) {
+            self.setFontMode(FontMode.HiDPI);
+        } else if (gl_w == w and gl_h == h and desktop_resolution.h < 2000 and self.font_mode != FontMode.LowDPI) {
+            self.setFontMode(FontMode.LowDPI);
+        } else if (desktop_resolution.h > 2000 and self.font_mode != FontMode.LowDPIBigFont) {
+            self.setFontMode(FontMode.LowDPIBigFont);
         }
 
         // render list
@@ -194,17 +214,23 @@ pub const App = struct {
         c.SDL_Delay(16);
     }
 
-    fn setHdpi(self: *App, enabled: bool) void {
-        std.log.debug("App.setHdpi: {}", .{enabled});
-        if (enabled) {
-            self.hidpi = true;
-            c.igGetIO().*.FontDefault = self.font_hidpi;
-            c.igGetIO().*.FontGlobalScale = 0.5;
-        } else {
-            self.hidpi = false;
-            c.igGetIO().*.FontDefault = self.font_lowdpi;
-            c.igGetIO().*.FontGlobalScale = 1.0;
+    fn setFontMode(self: *App, font_mode: FontMode) void {
+        std.log.debug("App.setHdpi: {}", .{font_mode});
+        switch (font_mode) {
+            .LowDPI => {
+                c.igGetIO().*.FontDefault = self.font_lowdpi;
+                c.igGetIO().*.FontGlobalScale = 1.0;
+            },
+            .LowDPIBigFont => {
+                c.igGetIO().*.FontDefault = self.font_lowdpibigfont;
+                c.igGetIO().*.FontGlobalScale = 1.0;
+            },
+            .HiDPI => {
+                c.igGetIO().*.FontDefault = self.font_hidpi;
+                c.igGetIO().*.FontGlobalScale = 0.5;
+            },
         }
+        self.font_mode = font_mode;
     }
 
     // TODO(remy): comment
