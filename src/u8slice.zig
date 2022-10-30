@@ -2,6 +2,10 @@ const std = @import("std");
 const assert = std.debug.assert;
 const expect = std.testing.expect;
 
+pub const U8SliceError = error{
+    OutOfLine,
+};
+
 /// U8Slice is a type helper to move []const u8 around in
 /// an `std.ArrayList(u8)` instance.
 pub const U8Slice = struct {
@@ -14,6 +18,13 @@ pub const U8Slice = struct {
             .allocator = allocator,
             .data = std.ArrayList(u8).init(allocator),
         };
+    }
+
+    // initFromChar creates an U8Slice with only the given cahr as content.
+    pub fn initFromChar(allocator: std.mem.Allocator, ch: u8) !U8Slice {
+        var rv = initEmpty(allocator);
+        try rv.data.append(ch);
+        return rv;
     }
 
     /// initFromSlice creates an U8Slice with the given bytes in a slice of const u8.
@@ -33,10 +44,25 @@ pub const U8Slice = struct {
         return self.data.items.len == 0;
     }
 
+    // insertChar inserts the given u8 into the given position at index.
+    // OutOfLine error is sent if idx is out of the u8slice.
+    pub fn insertChar(self: *U8Slice, idx: u64, ch: u8) !void {
+        if (idx > self.size()) {
+            return U8SliceError.OutOfLine;
+        }
+        try self.data.insert(@intCast(usize, idx), ch);
+    }
+
     /// appendConst appends the given string to the u8slice.
     /// This method allocates memory to store the data.
     pub fn appendConst(self: *U8Slice, str: []const u8) !void {
         try self.data.appendSlice(str);
+    }
+
+    /// appendSlice appends the given slice to the current u8slice.
+    /// This method allocates memory to store the data.
+    pub fn appendSlice(self: *U8Slice, slice: U8Slice) !void {
+        try self.data.appendSlice(slice.bytes());
     }
 
     // TODO(remy): comment

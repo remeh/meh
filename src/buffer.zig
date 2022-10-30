@@ -16,7 +16,7 @@ pub const Buffer = struct {
     in_ram_only: bool,
     /// filepath is the filepath to the file backing this buffer storage.
     filepath: U8Slice,
-    /// lines is the content if this Buffer.
+    /// lines is the content of this Buffer.
     lines: std.ArrayList(U8Slice),
 
     // Constructors
@@ -100,11 +100,15 @@ pub const Buffer = struct {
         return rv;
     }
 
-    fn dump(self: Buffer) void {
+    // TODO(remy): comment
+    pub fn dump(self: Buffer, line_count: i64) void {
         var i: usize = 0;
         for (self.lines.items) |str| {
             std.log.debug("line {d}: {s}", .{ i, str.data.items });
             i += 1;
+            if (line_count > 0 and i > line_count) {
+                break;
+            }
         }
     }
 
@@ -129,6 +133,13 @@ pub const Buffer = struct {
             return BufferError.OutOfBuffer;
         }
         return &self.lines.items[line_number];
+    }
+
+    pub fn deleteLine(self: *Buffer, line_number: u64) !U8Slice {
+        if (line_number + 1 > self.lines.items.len) {
+            return BufferError.OutOfBuffer;
+        }
+        return self.lines.orderedRemove(@intCast(usize, line_number));
     }
 };
 
