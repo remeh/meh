@@ -122,19 +122,16 @@ pub const WidgetText = struct {
     // TODO(remy): unit test (at least to validate that there is no leaks)
     pub fn render(self: WidgetText) void {
         var draw_list = c.igGetWindowDrawList();
-
-        var one_char_size = ImVec2(0, 0);
-        c.igCalcTextSize(&one_char_size, "0", null, false, 0.0);
-
+        var one_char_size = self.app.oneCharSize();
         self.renderLines(draw_list, one_char_size);
         self.renderCursor(draw_list, one_char_size);
     }
 
-    fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {
-        self.cursor.render(draw_list, self.input_mode, self.visible_lines.a, Vec2f{ .a = one_char_size.x, .b = one_char_size.y });
+    fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: Vec2f) void {
+        self.cursor.render(draw_list, self.input_mode, self.visible_lines.a, Vec2f{ .a = one_char_size.a, .b = one_char_size.b });
     }
 
-    fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: c.ImVec2) void {
+    fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: Vec2f) void {
         var i: usize = @intCast(usize, self.visible_lines.a);
         var y_offset: f32 = 0.0;
 
@@ -145,13 +142,13 @@ pub const WidgetText = struct {
                 // empty line
                 if (buff.len == 0 or (buff.len == 1 and buff[0] == '\n')) {
                     c.ImDrawList_AddText_Vec2(draw_list, ImVec2(border_offset, border_offset + y_offset), 0xFFFFFFFF, "", 0);
-                    y_offset += one_char_size.y;
+                    y_offset += one_char_size.b;
                     continue;
                 }
 
                 buff[buff.len - 1] = 0; // replace the \n and finish the buffer with a 0 for the C-land
                 c.ImDrawList_AddText_Vec2(draw_list, ImVec2(border_offset, border_offset + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, buff), 0);
-                y_offset += one_char_size.y;
+                y_offset += one_char_size.b;
 
                 // std.log.debug("self.buffer.data.items[{d}..{d}] (len: {d}) data: {s}", .{ @intCast(usize, pos.a), @intCast(usize, pos.b), self.buffer.data.items.len, @ptrCast([*:0]const u8, buff) });
             } else |_| {

@@ -5,6 +5,7 @@ const Buffer = @import("buffer.zig").Buffer;
 const ImVec2 = @import("vec.zig").ImVec2;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
 const WidgetText = @import("widget_text.zig").WidgetText;
+const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 
 pub const FocusedWidget = enum {
@@ -26,11 +27,16 @@ pub const FontMode = enum {
 //                    for high resolutions (for the text to not look small).
 pub const App = struct {
     allocator: std.mem.Allocator,
-    editors: std.ArrayList(WidgetText),
     command: WidgetCommand,
+    editors: std.ArrayList(WidgetText),
     gl_context: c.SDL_GLContext,
     imgui_context: *c.ImGuiContext,
     sdl_window: *c.SDL_Window,
+
+    /// window_size is refreshed right before a frame rendering,
+    /// it means this value can be used as the source of truth of
+    /// the current windows size.
+    window_size: Vec2i,
 
     // TODO(remy): comment
     // TODO(remy): tests
@@ -67,7 +73,15 @@ pub const App = struct {
 
         // create the SDL Window
 
-        var sdl_window = c.SDL_CreateWindow("meh", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 800, 800, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_ALLOW_HIGHDPI);
+        var window_size = Vec2i{ .a = 800, .b = 800 };
+        var sdl_window = c.SDL_CreateWindow(
+            "meh",
+            c.SDL_WINDOWPOS_UNDEFINED,
+            c.SDL_WINDOWPOS_UNDEFINED,
+            @intCast(c_int, window_size.a),
+            @intCast(c_int, window_size.b),
+            c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_ALLOW_HIGHDPI,
+        );
 
         if (sdl_window == null) {
             // TODO(remy): return an error
@@ -111,6 +125,7 @@ pub const App = struct {
             .font_hidpi = font_hidpi,
             .focused_widget = FocusedWidget.Editor,
             .font_mode = FontMode.LowDPI,
+            .window_size = window_size,
         };
     }
 
@@ -161,10 +176,6 @@ pub const App = struct {
         c.ImGui_ImplSDL2_NewFrame();
         _ = c.igNewFrame();
 
-        var w: c_int = 0;
-        var h: c_int = 0;
-        c.SDL_GetWindowSize(self.sdl_window, &w, &h);
-
         var display_index: c_int = c.SDL_GetWindowDisplayIndex(self.sdl_window);
         var desktop_resolution: c.SDL_DisplayMode = undefined;
         _ = c.SDL_GetDesktopDisplayMode(display_index, &desktop_resolution); // get the resolution
@@ -173,9 +184,9 @@ pub const App = struct {
         var gl_w: c_int = 0;
         var gl_h: c_int = 0;
         c.SDL_GL_GetDrawableSize(self.sdl_window, &gl_w, &gl_h);
-        if ((gl_w > w and gl_h > h and self.font_mode != FontMode.HiDPI)) {
+        if ((gl_w > self.window_size.a and gl_h > self.window_size.b and self.font_mode != FontMode.HiDPI)) {
             self.setFontMode(FontMode.HiDPI);
-        } else if (gl_w == w and gl_h == h and desktop_resolution.h < 2000 and self.font_mode != FontMode.LowDPI) {
+        } else if (gl_w == self.window_size.a and gl_h == self.window_size.b and desktop_resolution.h < 2000 and self.font_mode != FontMode.LowDPI) {
             self.setFontMode(FontMode.LowDPI);
         } else if (desktop_resolution.h > 2000 and self.font_mode != FontMode.LowDPIBigFont) {
             self.setFontMode(FontMode.LowDPIBigFont);
@@ -185,7 +196,7 @@ pub const App = struct {
         // -----------
 
         // editor window
-        _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w), @intToFloat(f32, h)), 0);
+        _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a), @intToFloat(f32, self.window_size.b)), 0);
         _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
 
         self.currentWidgetText().render(); // FIXME(remy): currentWidgetText should not be used or be better implemented
@@ -193,7 +204,7 @@ pub const App = struct {
 
         // command input
         if (self.focused_widget == FocusedWidget.Command) {
-            _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, w) / 2, @intToFloat(f32, 38)), 0);
+            _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a) / 2, @intToFloat(f32, 38)), 0);
             _ = c.igSetNextWindowFocus();
             _ = c.igBegin("CommandWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
             c.igSetKeyboardFocusHere(1);
@@ -233,11 +244,45 @@ pub const App = struct {
         self.font_mode = font_mode;
     }
 
+    /// visibleLinesInWindow returns how many lines can be drawn on the window
+    /// depending on the size of the window.
+    fn visibleLinesInWindow(self: App) u64 {
+        var rv: f32 = 0.0;
+        switch (self.font_mode) {
+            .LowDPI => rv = @intToFloat(f32, self.window_size.b) / self.font_lowdpi.FontSize,
+            .LowDPIBigFont => rv = @intToFloat(f32, self.window_size.b) / self.font_lowdpibigfont.FontSize,
+            .HiDPI => rv = @intToFloat(f32, self.window_size.b) / (self.font_hidpi.FontSize * 0.5),
+        }
+        return @floatToInt(u64, rv);
+    }
+
+    /// oneCharSize returns the bounding box of one text char.
+    pub fn oneCharSize(_: App) Vec2f {
+        var v = ImVec2(0, 0);
+        c.igCalcTextSize(&v, "0", null, false, 0.0);
+        return Vec2f{ .a = v.x, .b = v.y };
+    }
+
     // TODO(remy): comment
     // TODO(remy): unit test
     pub fn quit(self: *App) void {
         // TODO(remy): messagebox to save
         self.is_running = false;
+    }
+
+    /// onWindowResized is called when the windows has just been resized.
+    fn onWindowResized(self: *App, w: i32, h: i32) void {
+        self.window_size.a = w;
+        self.window_size.b = h;
+
+        // change visible lines of every WidgetText
+        var visible_lines_count = self.visibleLinesInWindow();
+        for (self.editors.items) |editor, i| {
+            self.editors.items[i].visible_lines = Vec2i{
+                .a = editor.visible_lines.a,
+                .b = editor.visible_lines.a + @intCast(i64, visible_lines_count),
+            };
+        }
     }
 
     pub fn mainloop(self: *App) !void {
@@ -257,10 +302,18 @@ pub const App = struct {
                 switch (event.type) {
                     c.SDL_KEYDOWN => {
                         switch (event.key.keysym.sym) {
+                            c.SDLK_RETURN => {
+                                // TODO(remy): implement
+                            },
                             c.SDLK_ESCAPE => {
                                 self.focused_widget = FocusedWidget.Command;
                             },
                             else => {},
+                        }
+                    },
+                    c.SDL_WINDOWEVENT => {
+                        if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
+                            self.onWindowResized(event.window.data1, event.window.data2);
                         }
                     },
                     c.SDL_TEXTINPUT => {
