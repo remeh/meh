@@ -103,7 +103,7 @@ pub const WidgetText = struct {
             .allocator = allocator,
             .app = app,
             .editor = Editor.init(allocator, buffer),
-            .visible_lines = Vec2i{ .a = 0, .b = 50 },
+            .visible_lines = Vec2i{ .a = 0, .b = 50 }, // TODO(remy): visible line depending on app window size
             .cursor = Cursor.init(),
             .input_mode = InputMode.Insert,
         };
@@ -149,7 +149,7 @@ pub const WidgetText = struct {
                     continue;
                 }
 
-                buff[buff.len - 1] = 0; // finish the buffer with a 0 for the C-land
+                buff[buff.len - 1] = 0; // replace the \n and finish the buffer with a 0 for the C-land
                 c.ImDrawList_AddText_Vec2(draw_list, ImVec2(border_offset, border_offset + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, buff), 0);
                 y_offset += one_char_size.y;
 
@@ -209,7 +209,10 @@ pub const WidgetText = struct {
     // TODO(remy): comment
     // TODO(remy): unit tes
     pub fn newLine(self: *WidgetText) void {
-        self.editor.newLine(self.cursor.pos, true);
+        self.editor.newLine(self.cursor.pos, false) catch |err| {
+            std.log.err("WidgetText.newLine: {}", .{err});
+            return;
+        };
         // TODO(remy): smarter positioning of the cursor
         self.cursor.pos.a = 0;
         self.cursor.pos.b += 1;

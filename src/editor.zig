@@ -91,7 +91,8 @@ pub const Editor = struct {
                 // append the rest of data
                 try line.data.appendSlice(extra.bytes());
                 // remove the next line which has been appended already
-                _ = self.buffer.lines.orderedRemove(@intCast(usize, change.pos.b + 1)); // XXX(remy): are we sure with this +1?
+                var data = self.buffer.lines.orderedRemove(@intCast(usize, change.pos.b + 1)); // XXX(remy): are we sure with this +1?
+                data.deinit();
             },
             .DeleteChar => {
                 var line = try self.buffer.getLine(@intCast(u64, change.pos.b));
@@ -130,34 +131,29 @@ pub const Editor = struct {
     // TODO(remy): comment
     // TODO(remy): unit test
     // TODO(remy): what happens on the very last line of the buffer/editor?
-    pub fn newLine(self: *Editor, pos: Vec2i, after: bool) void {
-        if (after) {
-            var line = self.buffer.getLine(@intCast(u64, pos.b)) catch |err| {
-                std.log.err("Editor.newLine: {}", .{err});
-                return;
-            };
-            var rest = line.data.items[@intCast(usize, pos.a)..line.size()];
-            // TODO(remy): this should be a different method (which should contain the change stuff)
-            //             and this method should maybe be in the buffer itself?
-            line.data.shrinkAndFree(@intCast(usize, pos.a + 1));
-            var new_line = U8Slice.initFromSlice(self.allocator, rest) catch |err| {
-                std.log.err("Editor.newLine: can't create a new U8Slice: {}", .{err});
-                return;
-            };
-            self.buffer.lines.insert(@intCast(usize, pos.b) + 1, new_line) catch |err| {
-                std.log.err("Editor.newLine: can't insert a new line: {}", .{err});
-            };
-            // history
-            self.historyAppend(ChangeType.InsertNewLine, undefined, '\n', pos);
-        } else {
+    /// `above` is a special behavior where the new line is created above the current line.
+    pub fn newLine(self: *Editor, pos: Vec2i, above: bool) !void {
+        if (above) {
+            // TODO(remy): history entry
             var new_line = U8Slice.initEmpty(self.allocator);
             self.buffer.lines.insert(@intCast(usize, pos.b), new_line) catch |err| {
                 std.log.err("can't insert a new line: {}", .{err});
             };
-            // TODO(remy): history entry
+        } else {
+            // TODO(remy): this should be a different method (which should contain the change stuff)
+            //             and this method should maybe be in the buffer itself?
+            var line = try self.buffer.getLine(@intCast(u64, pos.b));
+            var rest = line.data.items[@intCast(usize, pos.a)..line.size()];
+            var new_line = try U8Slice.initFromSlice(self.allocator, rest);
+            try self.buffer.lines.insert(@intCast(usize, pos.b) + 1, new_line);
+            line.data.shrinkAndFree(@intCast(usize, pos.a));
+            try line.data.append('\n');
+            // history
+            self.historyAppend(ChangeType.InsertNewLine, undefined, 0, pos);
         }
     }
 
+    // TODO(remy): comment
     pub fn deleteChar(self: *Editor, pos: Vec2i, go_left: bool) !void {
         if (go_left) {} else {
             var line = try self.buffer.getLine(@intCast(u64, pos.b));
@@ -167,6 +163,29 @@ pub const Editor = struct {
         }
     }
 };
+
+test "editor_new_line_and_undo" {
+    const allocator = std.testing.allocator;
+    var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
+    try expect(editor.buffer.lines.items.len == 3);
+    try editor.newLine(Vec2i{ .a = 3, .b = 1 }, false);
+    try expect(editor.buffer.lines.items.len == 4);
+    var line = (try editor.buffer.getLine(2)).bytes();
+    std.log.debug("{s}", .{line});
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), " a second line\n"));
+    try editor.newLine(Vec2i{ .a = 0, .b = 2 }, false);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(3)).bytes(), " a second line\n"));
+    try editor.undo();
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and a second line\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "and a third"));
+    editor.deinit();
+}
 
 test "editor_delete_line_and_undo" {
     const allocator = std.testing.allocator;
