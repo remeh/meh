@@ -145,9 +145,9 @@ pub const Editor = struct {
             var line = try self.buffer.getLine(@intCast(u64, pos.b));
             var rest = line.data.items[@intCast(usize, pos.a)..line.size()];
             var new_line = try U8Slice.initFromSlice(self.allocator, rest);
-            try self.buffer.lines.insert(@intCast(usize, pos.b) + 1, new_line);
             line.data.shrinkAndFree(@intCast(usize, pos.a));
             try line.data.append('\n');
+            try self.buffer.lines.insert(@intCast(usize, pos.b) + 1, new_line);
             // history
             self.historyAppend(ChangeType.InsertNewLine, undefined, 0, pos);
         }
