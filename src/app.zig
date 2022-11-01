@@ -7,6 +7,7 @@ const WidgetCommand = @import("widget_command.zig").WidgetCommand;
 const WidgetText = @import("widget_text.zig").WidgetText;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
+const Vec2u = @import("vec.zig").Vec2u;
 
 pub const FocusedWidget = enum {
     Editor,
@@ -278,13 +279,14 @@ pub const App = struct {
         // change visible lines of every WidgetText
         var visible_lines_count = self.visibleLinesInWindow();
         for (self.editors.items) |editor, i| {
-            self.editors.items[i].visible_lines = Vec2i{
+            self.editors.items[i].visible_lines = Vec2u{
                 .a = editor.visible_lines.a,
-                .b = editor.visible_lines.a + @intCast(i64, visible_lines_count),
+                .b = editor.visible_lines.a + visible_lines_count,
             };
         }
     }
 
+    /// mainloop of the application.
     pub fn mainloop(self: *App) !void {
         c.SDL_StartTextInput(); // TODO(remy): do this only if current focus is the widget_text
         var event: c.SDL_Event = undefined;
@@ -299,6 +301,7 @@ pub const App = struct {
                 }
 
                 // XXX(remy): will we have to get a "currently focused" widget?
+                // XXX(remy): it should be the one receiving the events
                 switch (event.type) {
                     c.SDL_KEYDOWN => {
                         switch (event.key.keysym.sym) {
@@ -306,8 +309,16 @@ pub const App = struct {
                                 self.currentWidgetText().onReturn();
                             },
                             c.SDLK_ESCAPE => {
-                                self.currentWidgetText().onEscape();
+                                // if the onEscape isn't absorbed by the WidgetText,
+                                // we will want to change the focus on widgets.
+                                if (!self.currentWidgetText().onEscape()) {
+                                    self.focused_widget = FocusedWidget.Command;
+                                }
                             },
+                            c.SDLK_BACKSPACE => {
+                                self.currentWidgetText().onBackspace();
+                            },
+
                             else => {},
                         }
                     },
@@ -317,7 +328,7 @@ pub const App = struct {
                         }
                     },
                     c.SDL_TEXTINPUT => {
-                        _ = self.currentWidgetText().onTextInput(readTextFromInput(&event.text.text));
+                        _ = self.currentWidgetText().onTextInput(readTextFromSDLInput(&event.text.text));
                     },
                     c.SDL_MOUSEWHEEL => {
                         if (event.wheel.y < 0) {
@@ -336,7 +347,7 @@ pub const App = struct {
         }
     }
 
-    fn readTextFromInput(sdl_text_input: []const u8) []const u8 {
+    fn readTextFromSDLInput(sdl_text_input: []const u8) []const u8 {
         var i: usize = 0;
         while (i < sdl_text_input.len) : (i += 1) {
             if (sdl_text_input[i] == 0) {

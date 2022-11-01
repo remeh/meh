@@ -127,14 +127,14 @@ pub const Buffer = struct {
     // TODO(remy): unit test
     /// Returns a pointer for the caller to be able to modify the line, however, the
     /// pointer should never be null.
-    pub fn getLine(self: Buffer, line_number: u64) !*U8Slice {
+    pub fn getLine(self: Buffer, line_number: usize) !*U8Slice {
         if (line_number + 1 > self.lines.items.len) {
             return BufferError.OutOfBuffer;
         }
         return &self.lines.items[line_number];
     }
 
-    pub fn deleteLine(self: *Buffer, line_number: u64) !U8Slice {
+    pub fn deleteLine(self: *Buffer, line_number: usize) !U8Slice {
         if (line_number + 1 > self.lines.items.len) {
             return BufferError.OutOfBuffer;
         }

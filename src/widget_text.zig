@@ -8,6 +8,8 @@ const Editor = @import("editor.zig").Editor;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
+const Vec2u = @import("vec.zig").Vec2u;
+const Vec2utoi = @import("vec.zig").Vec2utoi;
 
 // TODO(remy): where should we define this?
 // TODO(remy): comment
@@ -26,14 +28,14 @@ pub const Cursor = struct {
     /// pos is the position relative to the editor
     /// This one is not dependant of utf8. 1 right means 1 character right, would it be
     /// an utf8 chars needing 3 bytes or one needing 1 byte.
-    pos: Vec2i,
+    pos: Vec2u,
 
     // Constructors
     // ------------
 
     pub fn init() Cursor {
         return Cursor{
-            .pos = Vec2i{ .a = 0, .b = 0 },
+            .pos = Vec2u{ .a = 0, .b = 0 },
         };
     }
 
@@ -42,7 +44,7 @@ pub const Cursor = struct {
 
     // TODO(remy): we probably miss the font size here
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
-    pub fn render(self: Cursor, draw_list: *c.ImDrawList, input_mode: InputMode, line_offset: i64, font_size: Vec2f) void {
+    pub fn render(self: Cursor, draw_list: *c.ImDrawList, input_mode: InputMode, line_offset: usize, font_size: Vec2f) void {
         switch (input_mode) {
             .Insert => {
                 var x1 = @intToFloat(f32, self.pos.a) * font_size.a;
@@ -83,7 +85,7 @@ pub const WidgetText = struct {
     cursor: Cursor, // TODO(remy): replace me with a custom (containing cursor mode)
     editor: Editor,
     input_mode: InputMode,
-    visible_lines: Vec2i,
+    visible_lines: Vec2u,
 
     // Constructors
     // ------------
@@ -107,7 +109,7 @@ pub const WidgetText = struct {
             .allocator = allocator,
             .app = app,
             .editor = Editor.init(allocator, buffer),
-            .visible_lines = Vec2i{ .a = 0, .b = 50 }, // TODO(remy): visible line depending on app window size
+            .visible_lines = Vec2u{ .a = 0, .b = 50 }, // TODO(remy): visible line depending on app window size
             .cursor = Cursor.init(),
             .input_mode = InputMode.Insert,
         };
@@ -134,7 +136,7 @@ pub const WidgetText = struct {
     }
 
     fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: Vec2f) void {
-        var i: usize = @intCast(usize, self.visible_lines.a);
+        var i: usize = self.visible_lines.a;
         var y_offset: f32 = 0.0;
 
         while (i < self.visible_lines.b) : (i += 1) {
@@ -200,10 +202,26 @@ pub const WidgetText = struct {
 
     // TODO(remy):
     // TODO(remy): comment
-    pub fn onEscape(self: *WidgetText) void {
+    /// returns true if the event has been absorbed by the WidgetText.
+    pub fn onEscape(self: *WidgetText) bool {
         switch (self.input_mode) {
             .Insert, .Replace => {
                 self.input_mode = InputMode.Command;
+                return true;
+            },
+            else => return false,
+        }
+    }
+
+    // TODO(remy):
+    // TODO(remy): comment
+    pub fn onBackspace(self: *WidgetText) void {
+        switch (self.input_mode) {
+            .Insert => {
+                self.editor.deleteUtf8Char(self.cursor.pos, true) catch |err| {
+                    std.log.err("WidgetText.onBackspace: {}", .{err});
+                };
+                self.moveCursor(Vec2i{ .a = -1, .b = 0 });
             },
             else => {},
         }
@@ -217,22 +235,29 @@ pub const WidgetText = struct {
     // FIXME(remy): utf8 support
     // FIXME(remy): going up and down should respect the new line size (+ utf8)
     pub fn moveCursor(self: *WidgetText, move: Vec2i) void {
+        var cursor_pos = Vec2utoi(self.cursor.pos);
+
         // x movement
-        if (self.cursor.pos.a + move.a <= 0) {
+        if (cursor_pos.a + move.a <= 0) {
             self.cursor.pos.a = 0;
-        } else if (self.cursor.pos.a + move.a >= self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) {
-            self.cursor.pos.a = @intCast(i64, self.editor.buffer.lines.items[@intCast(usize, self.cursor.pos.b)].size()) - 1;
+        } else if (cursor_pos.a + move.a >= self.editor.buffer.lines.items[self.cursor.pos.b].size()) {
+            self.cursor.pos.a = self.editor.buffer.lines.items[self.cursor.pos.b].size() - 1;
         } else {
-            self.cursor.pos.a += move.a;
+            self.cursor.pos.a = @intCast(usize, cursor_pos.a + move.a);
         }
+
         // y movement
-        if (self.cursor.pos.b + move.b <= 0) {
+        if (cursor_pos.b + move.b <= 0) {
             self.cursor.pos.b = 0;
-        } else if (self.cursor.pos.b + move.b >= @intCast(usize, self.editor.buffer.lines.items.len) - 1) {
-            self.cursor.pos.b = @intCast(i64, self.editor.buffer.lines.items.len) - 1;
+        } else if (cursor_pos.b + move.b >= @intCast(usize, self.editor.buffer.lines.items.len) - 1) {
+            self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
         } else {
-            self.cursor.pos.b += move.b;
+            self.cursor.pos.b = @intCast(usize, cursor_pos.b + move.b);
         }
+
+        // if the new line is smaller, go to the last char
+        var new_line_size = self.editor.buffer.lines.items[self.cursor.pos.b].size();
+        self.cursor.pos.a = @min(new_line_size - 1, self.cursor.pos.a);
     }
 
     // TODO(remy): comment
