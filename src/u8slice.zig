@@ -12,6 +12,9 @@ pub const U8Slice = struct {
     allocator: std.mem.Allocator,
     data: std.ArrayList(u8),
 
+    // Constructors
+    // ------------
+
     /// initEmpty creates an U8Slice without any data.
     pub fn initEmpty(allocator: std.mem.Allocator) U8Slice {
         return U8Slice{
@@ -34,6 +37,9 @@ pub const U8Slice = struct {
         return rv;
     }
 
+    // Methods
+    // -------
+
     /// size returns the size in bytes of the U8Slice.
     pub fn size(self: U8Slice) usize {
         return self.data.items.len;
@@ -42,15 +48,6 @@ pub const U8Slice = struct {
     // isEmpty returns true if this U8Slice is an empty slice of bytes.
     pub fn isEmpty(self: U8Slice) bool {
         return self.data.items.len == 0;
-    }
-
-    // insertChar inserts the given u8 into the given position at index.
-    // OutOfLine error is sent if idx is out of the u8slice.
-    pub fn insertChar(self: *U8Slice, idx: u64, ch: u8) !void {
-        if (idx > self.size()) {
-            return U8SliceError.OutOfLine;
-        }
-        try self.data.insert(@intCast(usize, idx), ch);
     }
 
     /// appendConst appends the given string to the u8slice.
@@ -65,10 +62,19 @@ pub const U8Slice = struct {
         try self.data.appendSlice(slice.bytes());
     }
 
-    // TODO(remy): comment
-    // TODO(remy): add in unit tests
+    /// bytes returns the data as a const u8 string.
     pub fn bytes(self: U8Slice) []const u8 {
         return self.data.items;
+    }
+
+    /// utf8pos receives a position in character, returns the offset in bytes in the line.
+    pub fn utf8pos(self: U8Slice, character_pos: usize) !usize {
+        var i: usize = 0;
+        var bytes_pos: usize = 0;
+        while (i < character_pos) : (i += 1) {
+            bytes_pos += try std.unicode.utf8ByteSequenceLength(self.data.items[bytes_pos]);
+        }
+        return bytes_pos;
     }
 
     /// deinit releases memory used by the U8Slice.

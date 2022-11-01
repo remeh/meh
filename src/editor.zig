@@ -173,7 +173,7 @@ pub const Editor = struct {
 
         // since utf8 could be one or multiple bytes, we have to find
         // in bytes where to insert this new text.
-        var insert_pos = try Editor.utf8LinePos(line, pos.a);
+        var insert_pos = try line.utf8pos(@intCast(usize, pos.a));
 
         // insert the new text
         try line.data.insertSlice(insert_pos, txt);
@@ -186,8 +186,7 @@ pub const Editor = struct {
     pub fn deleteUtf8Char(self: *Editor, pos: Vec2i, left: bool) !void {
         if (left) {} else {
             var line = try self.buffer.getLine(@intCast(u64, pos.b));
-
-            var remove_pos = try Editor.utf8LinePos(line, pos.a);
+            var remove_pos = try line.utf8pos(@intCast(usize, pos.a));
             // how many bytes to remove
             var to_remove: u3 = try std.unicode.utf8ByteSequenceLength(line.data.items[remove_pos]);
             var removed = U8Slice.initEmpty(self.allocator);
@@ -199,17 +198,6 @@ pub const Editor = struct {
             var utf8_pos = Vec2i{ .a = @intCast(i64, remove_pos), .b = pos.b };
             self.historyAppend(ChangeType.DeleteUtf8Char, removed, utf8_pos);
         }
-    }
-
-    /// utf8LinePos returns the given bytes offset in the given line (in `pos`)
-    /// for the given char (in `pos`).
-    fn utf8LinePos(line: *U8Slice, charPos: i64) !usize {
-        var i: usize = 0;
-        var bytes_pos: usize = 0;
-        while (i < charPos) : (i += 1) {
-            bytes_pos += try std.unicode.utf8ByteSequenceLength(line.data.items[bytes_pos]);
-        }
-        return bytes_pos;
     }
 };
 
