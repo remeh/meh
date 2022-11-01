@@ -303,10 +303,10 @@ pub const App = struct {
                     c.SDL_KEYDOWN => {
                         switch (event.key.keysym.sym) {
                             c.SDLK_RETURN => {
-                                // TODO(remy): implement
+                                self.currentWidgetText().onReturn();
                             },
                             c.SDLK_ESCAPE => {
-                                self.focused_widget = FocusedWidget.Command;
+                                self.currentWidgetText().onEscape();
                             },
                             else => {},
                         }
@@ -317,7 +317,7 @@ pub const App = struct {
                         }
                     },
                     c.SDL_TEXTINPUT => {
-                        _ = self.currentWidgetText().onTextInput(event.text.text[0]);
+                        _ = self.currentWidgetText().onTextInput(readTextFromInput(&event.text.text));
                     },
                     c.SDL_MOUSEWHEEL => {
                         if (event.wheel.y < 0) {
@@ -334,5 +334,15 @@ pub const App = struct {
 
             self.render();
         }
+    }
+
+    fn readTextFromInput(sdl_text_input: []const u8) []const u8 {
+        var i: usize = 0;
+        while (i < sdl_text_input.len) : (i += 1) {
+            if (sdl_text_input[i] == 0) {
+                return sdl_text_input[0..i];
+            }
+        }
+        return sdl_text_input[0..sdl_text_input.len];
     }
 };

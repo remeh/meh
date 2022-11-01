@@ -129,7 +129,6 @@ pub const Buffer = struct {
     /// pointer should never be null.
     pub fn getLine(self: Buffer, line_number: u64) !*U8Slice {
         if (line_number + 1 > self.lines.items.len) {
-            std.log.err("getLinePos: line_number out of bounds: line_number: {d}, self.lines.items.len: {d}", .{ line_number, self.lines.items.len });
             return BufferError.OutOfBuffer;
         }
         return &self.lines.items[line_number];

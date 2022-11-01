@@ -10,18 +10,23 @@ const Vec2i = @import("vec.zig").Vec2i;
 
 // TODO(remy): comment
 const ChangeType = enum {
-    /// `DeleteChar` is the action of having removed a character in a line.
+    /// `DeleteUtf8Char` is the action of having removed a character in a line.
     /// The vector `pos` contains the position of the removed character
-    /// before it was removed.
-    /// Deleted char is available in `ch`.
-    DeleteChar,
+    /// before it was removed. This pos is in utf8.
+    /// Deleted utf8 is available in `data`.
+    DeleteUtf8Char,
+    /// `InsertUtf8Char` is the action of inserting an utf8 character in a line.
+    /// The vector `pos` contains the position of the inserte character
+    /// the position it is inserted. This pos is in utf8.
+    /// There is no data in `data`.
+    InsertUtf8Char,
     /// `DeleteLine` is the action of a completely deleted line.
     /// The vector `pos` contains the line at which it was before deletion.
     /// Deleted line is available in `data`.
     DeleteLine,
     /// `InsertNewLine` is the action of creating a new line by inserting a newline char.
     /// The vector `pos` contains the character position where the newline char has been inserted.
-    /// There is no data in `data` or `ch`.
+    /// There is no data in `data`.
     InsertNewLine,
 };
 
@@ -31,7 +36,6 @@ const ChangeType = enum {
 const Change = struct {
     type: ChangeType,
     data: U8Slice,
-    ch: u8,
     /// depending on the `change_type`, only the first field of the
     /// vector could be used (for instance for a line action).
     pos: Vec2i,
@@ -67,9 +71,8 @@ pub const Editor = struct {
 
     /// historyAppend appends a new entry in the history.
     /// If the append fails, the memory is deleted to avoid any leak.
-    fn historyAppend(self: *Editor, change_type: ChangeType, data: U8Slice, ch: u8, pos: Vec2i) void {
+    fn historyAppend(self: *Editor, change_type: ChangeType, data: U8Slice, pos: Vec2i) void {
         self.history.append(Change{
-            .ch = ch,
             .data = data,
             .pos = pos,
             .type = change_type,
@@ -82,7 +85,6 @@ pub const Editor = struct {
     // TODO(remy): comment
     fn historyUndo(self: *Editor, change: Change) !void {
         switch (change.type) {
-            // TODO(remy): unit test
             .InsertNewLine => {
                 var extra = try self.buffer.getLine(@intCast(u64, change.pos.b + 1));
                 var line = try self.buffer.getLine(@intCast(u64, change.pos.b));
@@ -94,9 +96,19 @@ pub const Editor = struct {
                 var data = self.buffer.lines.orderedRemove(@intCast(usize, change.pos.b + 1)); // XXX(remy): are we sure with this +1?
                 data.deinit();
             },
-            .DeleteChar => {
+            .InsertUtf8Char => {
+                // size of the utf8 char
                 var line = try self.buffer.getLine(@intCast(u64, change.pos.b));
-                try line.insertChar(@intCast(usize, change.pos.a), change.ch);
+                var char_pos = @intCast(usize, change.pos.a);
+                var utf8_size = try std.unicode.utf8ByteSequenceLength(line.data.items[char_pos]);
+                while (utf8_size > 0) : (utf8_size -= 1) {
+                    _ = line.data.orderedRemove(char_pos);
+                }
+            },
+            .DeleteUtf8Char => {
+                var line = try self.buffer.getLine(@intCast(u64, change.pos.b));
+                try line.data.insertSlice(@intCast(usize, change.pos.a), change.data.bytes());
+                change.data.deinit();
             },
             .DeleteLine => {
                 try self.buffer.lines.insert(@intCast(usize, change.pos.a), change.data);
@@ -125,7 +137,7 @@ pub const Editor = struct {
     pub fn deleteLine(self: *Editor, line_pos: usize) void {
         var deleted_line = self.buffer.lines.orderedRemove(line_pos);
         // history
-        self.historyAppend(ChangeType.DeleteLine, deleted_line, 0, Vec2i{ .a = @intCast(i64, line_pos), .b = -1 });
+        self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2i{ .a = @intCast(i64, line_pos), .b = -1 });
     }
 
     // TODO(remy): comment
@@ -149,18 +161,55 @@ pub const Editor = struct {
             try line.data.append('\n');
             try self.buffer.lines.insert(@intCast(usize, pos.b) + 1, new_line);
             // history
-            self.historyAppend(ChangeType.InsertNewLine, undefined, 0, pos);
+            self.historyAppend(ChangeType.InsertNewLine, undefined, pos);
         }
     }
 
     // TODO(remy): comment
-    pub fn deleteChar(self: *Editor, pos: Vec2i, go_left: bool) !void {
-        if (go_left) {} else {
+    // TODO(remy): unit test
+    /// `txt` must be in utf8.
+    pub fn insertUtf8Text(self: *Editor, pos: Vec2i, txt: []const u8) !void {
+        var line = try self.buffer.getLine(@intCast(u64, pos.b));
+
+        // since utf8 could be one or multiple bytes, we have to find
+        // in bytes where to insert this new text.
+        var insert_pos = try Editor.utf8LinePos(line, pos.a);
+
+        // insert the new text
+        try line.data.insertSlice(insert_pos, txt);
+
+        var utf8_pos = Vec2i{ .a = @intCast(i64, insert_pos), .b = pos.b };
+        self.historyAppend(ChangeType.InsertUtf8Char, undefined, utf8_pos);
+    }
+
+    // TODO(remy): comment
+    pub fn deleteUtf8Char(self: *Editor, pos: Vec2i, left: bool) !void {
+        if (left) {} else {
             var line = try self.buffer.getLine(@intCast(u64, pos.b));
-            var ch = line.data.orderedRemove(@intCast(usize, pos.a));
-            // history
-            self.historyAppend(ChangeType.DeleteChar, undefined, ch, pos);
+
+            var remove_pos = try Editor.utf8LinePos(line, pos.a);
+            // how many bytes to remove
+            var to_remove: u3 = try std.unicode.utf8ByteSequenceLength(line.data.items[remove_pos]);
+            var removed = U8Slice.initEmpty(self.allocator);
+            while (to_remove > 0) : (to_remove -= 1) {
+                var ch = line.data.orderedRemove(remove_pos);
+                try removed.data.append(ch);
+            }
+
+            var utf8_pos = Vec2i{ .a = @intCast(i64, remove_pos), .b = pos.b };
+            self.historyAppend(ChangeType.DeleteUtf8Char, removed, utf8_pos);
         }
+    }
+
+    /// utf8LinePos returns the given bytes offset in the given line (in `pos`)
+    /// for the given char (in `pos`).
+    fn utf8LinePos(line: *U8Slice, charPos: i64) !usize {
+        var i: usize = 0;
+        var bytes_pos: usize = 0;
+        while (i < charPos) : (i += 1) {
+            bytes_pos += try std.unicode.utf8ByteSequenceLength(line.data.items[bytes_pos]);
+        }
+        return bytes_pos;
     }
 };
 
@@ -208,18 +257,18 @@ test "editor_delete_char_and_undo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
-    try editor.deleteChar(Vec2i{ .a = 0, .b = 0 }, false);
-    try editor.deleteChar(Vec2i{ .a = 0, .b = 0 }, false);
-    try editor.deleteChar(Vec2i{ .a = 0, .b = 0 }, false);
-    try editor.deleteChar(Vec2i{ .a = 0, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 0, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 0, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 0, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 0, .b = 0 }, false);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "o world\n"));
     try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "hello world\n"));
-    try editor.deleteChar(Vec2i{ .a = 6, .b = 0 }, false);
-    try editor.deleteChar(Vec2i{ .a = 6, .b = 0 }, false);
-    try editor.deleteChar(Vec2i{ .a = 6, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 6, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 6, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 6, .b = 0 }, false);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "hello ld\n"));
-    try editor.deleteChar(Vec2i{ .a = 1, .b = 1 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 1, .b = 1 }, false);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "ad a second line\n"));
     editor.deleteLine(1);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "and a third"));
@@ -229,5 +278,18 @@ test "editor_delete_char_and_undo" {
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "and a second line\n"));
     try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "hello world\n"));
+    editor.deinit();
+}
+
+test "editor_delete_utf8_char_and_undo" {
+    const allocator = std.testing.allocator;
+    var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_3"));
+    try expect(editor.buffer.lines.items.len == 1);
+    try editor.deleteUtf8Char(Vec2i{ .a = 0, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 0, .b = 0 }, false);
+    try editor.deleteUtf8Char(Vec2i{ .a = 0, .b = 0 }, false);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "îôûñé👻"));
+    try editor.undo();
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "🎃àéîôûñé👻"));
     editor.deinit();
 }

@@ -14,6 +14,7 @@ const Vec2i = @import("vec.zig").Vec2i;
 pub const border_offset = 5;
 
 pub const InputMode = enum {
+    Command,
     Insert,
     Replace,
     Visual,
@@ -22,6 +23,9 @@ pub const InputMode = enum {
 
 // TODO(remy): comment
 pub const Cursor = struct {
+    /// pos is the position relative to the editor
+    /// This one is not dependant of utf8. 1 right means 1 character right, would it be
+    /// an utf8 chars needing 3 bytes or one needing 1 byte.
     pos: Vec2i,
 
     // Constructors
@@ -116,8 +120,6 @@ pub const WidgetText = struct {
     // Rendering methods
     // -----------------
 
-    // pub fn set_window_size() // TODO(remy): implement me and unit test
-
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
     pub fn render(self: WidgetText) void {
@@ -162,21 +164,49 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    pub fn onTextInput(self: *WidgetText, ch: u8) bool {
-        switch (ch) {
-            'n' => self.newLine(),
-            'h' => self.moveCursor(Vec2i{ .a = -1, .b = 0 }),
-            'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }),
-            'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }),
-            'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }),
-            'd' => self.editor.deleteLine(@intCast(usize, self.cursor.pos.b)),
-            'x' => self.editor.deleteChar(self.cursor.pos, false) catch {},
-            'u' => self.undo(),
-            'i' => self.input_mode = .Insert, // TODO(remy): finish
-            'r' => self.input_mode = .Replace, // TODO(remy): finish
-            else => return false,
+    pub fn onTextInput(self: *WidgetText, txt: []const u8) bool {
+        switch (self.input_mode) {
+            .Insert => {
+                self.editor.insertUtf8Text(self.cursor.pos, txt) catch {}; // TODO(remy): do something with the error
+                self.cursor.pos.a += 1;
+            },
+            else => {
+                switch (txt[0]) {
+                    'n' => self.newLine(),
+                    'h' => self.moveCursor(Vec2i{ .a = -1, .b = 0 }),
+                    'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }),
+                    'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }),
+                    'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }),
+                    'd' => self.editor.deleteLine(@intCast(usize, self.cursor.pos.b)),
+                    'x' => self.editor.deleteUtf8Char(self.cursor.pos, false) catch {}, // TODO(remy): do something with the error
+                    'u' => self.undo(),
+                    'i' => self.input_mode = .Insert, // TODO(remy): finish
+                    'r' => self.input_mode = .Replace, // TODO(remy): finish
+                    else => return false,
+                }
+            },
         }
         return true;
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn onReturn(self: *WidgetText) void {
+        switch (self.input_mode) {
+            .Insert => self.newLine(),
+            else => self.moveCursor(Vec2i{ .a = 0, .b = 1 }),
+        }
+    }
+
+    // TODO(remy):
+    // TODO(remy): comment
+    pub fn onEscape(self: *WidgetText) void {
+        switch (self.input_mode) {
+            .Insert, .Replace => {
+                self.input_mode = InputMode.Command;
+            },
+            else => {},
+        }
     }
 
     // Text edition methods
@@ -184,6 +214,8 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
+    // FIXME(remy): utf8 support
+    // FIXME(remy): going up and down should respect the new line size (+ utf8)
     pub fn moveCursor(self: *WidgetText, move: Vec2i) void {
         // x movement
         if (self.cursor.pos.a + move.a <= 0) {
