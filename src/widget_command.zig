@@ -12,19 +12,26 @@ pub const WidgetCommand = struct {
     // ------------
 
     pub fn init() WidgetCommand {
-        return WidgetCommand{
-            .buff = std.mem.zeroes([8192]u8),
+        var rv = WidgetCommand{
+            .buff = undefined,
         };
+        rv.reset();
+        return rv;
     }
 
     // Methods
     // -------
+
     pub fn interpret(self: *WidgetCommand, app: *App) void {
         std.log.debug("WidgetCommand.interpret. buff: {s}", .{self.buff});
         // quit
         if (std.mem.eql(u8, self.buff[0..3], ":q!")) {
             app.quit();
         }
+        self.reset();
+    }
+
+    pub fn reset(self: *WidgetCommand) void {
         self.buff = std.mem.zeroes([8192]u8);
     }
 

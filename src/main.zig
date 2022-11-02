@@ -16,4 +16,6 @@ pub fn main() !void {
     }
     errdefer app.deinit();
     try app.mainloop();
+
+    app.deinit();
 }

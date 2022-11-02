@@ -170,7 +170,7 @@ pub const WidgetText = struct {
         switch (self.input_mode) {
             .Insert => {
                 self.editor.insertUtf8Text(self.cursor.pos, txt) catch {}; // TODO(remy): do something with the error
-                self.cursor.pos.a += 1;
+                self.moveCursor(Vec2i{ .a = 1, .b = 0 });
             },
             else => {
                 switch (txt[0]) {
@@ -179,7 +179,15 @@ pub const WidgetText = struct {
                     'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }),
                     'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }),
                     'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }),
-                    'd' => self.editor.deleteLine(@intCast(usize, self.cursor.pos.b)),
+                    'd' => {
+                        if (self.editor.deleteLine(@intCast(usize, self.cursor.pos.b))) {
+                            if (self.cursor.pos.b > 0 and self.cursor.pos.b >= self.editor.buffer.lines.items.len) {
+                                self.moveCursor(Vec2i{ .a = 0, .b = -1 });
+                            }
+                        } else |err| {
+                            std.log.err("WidgetText.onTextInput: can't delete line: {}", .{err});
+                        }
+                    },
                     'x' => self.editor.deleteUtf8Char(self.cursor.pos, false) catch {}, // TODO(remy): do something with the error
                     'u' => self.undo(),
                     'i' => self.input_mode = .Insert, // TODO(remy): finish

@@ -131,8 +131,9 @@ pub const App = struct {
     }
 
     pub fn deinit(self: *App) void {
-        for (self.editors.item) |editor| {
-            editor.deinit();
+        var i: usize = 0;
+        while (i < self.editors.items.len) : (i += 1) {
+            self.editors.items[i].deinit();
         }
         self.editors.deinit();
 
@@ -140,15 +141,17 @@ pub const App = struct {
         c.ImGui_ImplSDL2_Shutdown();
 
         c.igDestroyContext(self.imgui_context);
-        self.imgui_context = null;
+        self.imgui_context = undefined;
 
         c.SDL_GL_DeleteContext(self.gl_context);
-        self.gl_context = null;
+        self.gl_context = undefined;
 
         c.SDL_DestroyWindow(self.sdl_window);
-        self.sdl_window = null;
+        self.sdl_window = undefined;
 
         c.SDL_Quit();
+
+        std.log.debug("bye!", .{});
     }
 
     // Methods
@@ -205,7 +208,7 @@ pub const App = struct {
 
         // command input
         if (self.focused_widget == FocusedWidget.Command) {
-            _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a) / 2, @intToFloat(f32, 38)), 0);
+            _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a) * 0.8, @intToFloat(f32, 38)), 0);
             _ = c.igSetNextWindowFocus();
             _ = c.igBegin("CommandWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
             c.igSetKeyboardFocusHere(1);
@@ -300,50 +303,83 @@ pub const App = struct {
                     break;
                 }
 
-                // XXX(remy): will we have to get a "currently focused" widget?
-                // XXX(remy): it should be the one receiving the events
+                // events to handle independently of the currently focused widget
                 switch (event.type) {
-                    c.SDL_KEYDOWN => {
-                        switch (event.key.keysym.sym) {
-                            c.SDLK_RETURN => {
-                                self.currentWidgetText().onReturn();
-                            },
-                            c.SDLK_ESCAPE => {
-                                // if the onEscape isn't absorbed by the WidgetText,
-                                // we will want to change the focus on widgets.
-                                if (!self.currentWidgetText().onEscape()) {
-                                    self.focused_widget = FocusedWidget.Command;
-                                }
-                            },
-                            c.SDLK_BACKSPACE => {
-                                self.currentWidgetText().onBackspace();
-                            },
-
-                            else => {},
-                        }
-                    },
                     c.SDL_WINDOWEVENT => {
                         if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
                             self.onWindowResized(event.window.data1, event.window.data2);
                         }
                     },
-                    c.SDL_TEXTINPUT => {
-                        _ = self.currentWidgetText().onTextInput(readTextFromSDLInput(&event.text.text));
-                    },
-                    c.SDL_MOUSEWHEEL => {
-                        if (event.wheel.y < 0) {
-                            self.currentWidgetText().visible_lines.a += 3;
-                            self.currentWidgetText().visible_lines.b += 3;
-                        } else if (event.wheel.y > 0) {
-                            self.currentWidgetText().visible_lines.a -= 3;
-                            self.currentWidgetText().visible_lines.b -= 3;
-                        }
-                    },
                     else => {},
+                }
+
+                // events to handle differently per focused widget
+                // XXX(remy): will we have to get a "currently focused" widget?
+                // XXX(remy): it should be the one receiving the events
+                switch (self.focused_widget) {
+                    .Command => {
+                        self.commandEvents(event);
+                    },
+                    .Editor => {
+                        self.editorEvents(event);
+                    },
                 }
             }
 
             self.render();
+        }
+    }
+
+    fn commandEvents(self: *App, event: c.SDL_Event) void {
+        switch (event.type) {
+            c.SDL_KEYDOWN => {
+                switch (event.key.keysym.sym) {
+                    c.SDLK_ESCAPE => {
+                        self.focused_widget = FocusedWidget.Editor;
+                        self.command.reset();
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+
+    fn editorEvents(self: *App, event: c.SDL_Event) void {
+        switch (event.type) {
+            c.SDL_KEYDOWN => {
+                switch (event.key.keysym.sym) {
+                    c.SDLK_RETURN => {
+                        self.currentWidgetText().onReturn();
+                    },
+                    c.SDLK_ESCAPE => {
+                        // if the onEscape isn't absorbed by the WidgetText,
+                        // we will want to change the focus on widgets.
+                        if (!self.currentWidgetText().onEscape()) {
+                            self.focused_widget = FocusedWidget.Command;
+                        }
+                    },
+                    c.SDLK_BACKSPACE => {
+                        self.currentWidgetText().onBackspace();
+                    },
+
+                    else => {},
+                }
+            },
+            c.SDL_TEXTINPUT => {
+                _ = self.currentWidgetText().onTextInput(readTextFromSDLInput(&event.text.text));
+            },
+            c.SDL_MOUSEWHEEL => {
+                // FIXME(remy): should not go outside
+                if (event.wheel.y < 0) {
+                    self.currentWidgetText().visible_lines.a += 3;
+                    self.currentWidgetText().visible_lines.b += 3;
+                } else if (event.wheel.y > 0) {
+                    self.currentWidgetText().visible_lines.a -= 3;
+                    self.currentWidgetText().visible_lines.b -= 3;
+                }
+            },
+            else => {},
         }
     }
 
