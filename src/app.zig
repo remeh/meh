@@ -257,7 +257,7 @@ pub const App = struct {
             .LowDPIBigFont => rv = @intToFloat(f32, self.window_size.b) / self.font_lowdpibigfont.FontSize,
             .HiDPI => rv = @intToFloat(f32, self.window_size.b) / (self.font_hidpi.FontSize * 0.5),
         }
-        return @floatToInt(u64, rv);
+        return (@floatToInt(u64, @ceil(rv)));
     }
 
     /// oneCharSize returns the bounding box of one text char.
@@ -372,11 +372,9 @@ pub const App = struct {
             c.SDL_MOUSEWHEEL => {
                 // FIXME(remy): should not go outside
                 if (event.wheel.y < 0) {
-                    self.currentWidgetText().visible_lines.a += 3;
-                    self.currentWidgetText().visible_lines.b += 3;
+                    self.currentWidgetText().moveCursor(Vec2i{ .a = 0, .b = 8 }, true);
                 } else if (event.wheel.y > 0) {
-                    self.currentWidgetText().visible_lines.a -= 3;
-                    self.currentWidgetText().visible_lines.b -= 3;
+                    self.currentWidgetText().moveCursor(Vec2i{ .a = 0, .b = -8 }, true);
                 }
             },
             else => {},

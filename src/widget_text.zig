@@ -42,15 +42,17 @@ pub const Cursor = struct {
     // Methods
     // -------
 
-    // TODO(remy): we probably miss the font size here
+    /// `render` renders the cursor in the `WidgetText`.
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
-    pub fn render(self: Cursor, draw_list: *c.ImDrawList, input_mode: InputMode, line_offset: usize, font_size: Vec2f) void {
+    /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
+    /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
+    pub fn render(self: Cursor, draw_list: *c.ImDrawList, input_mode: InputMode, line_offset_in_buffer: usize, font_size: Vec2f) void {
         switch (input_mode) {
             .Insert => {
                 var x1 = @intToFloat(f32, self.pos.a) * font_size.a;
                 var x2 = x1 + 2;
-                var y1 = @intToFloat(f32, self.pos.b - line_offset) * font_size.b;
-                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset) * (font_size.b);
+                var y1 = @intToFloat(f32, self.pos.b - line_offset_in_buffer) * font_size.b;
+                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
                     ImVec2(border_offset + x1, border_offset + y1),
@@ -63,8 +65,8 @@ pub const Cursor = struct {
             else => {
                 var x1 = @intToFloat(f32, self.pos.a) * font_size.a;
                 var x2 = @intToFloat(f32, self.pos.a + 1) * font_size.a;
-                var y1 = @intToFloat(f32, self.pos.b - line_offset) * font_size.b;
-                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset) * (font_size.b);
+                var y1 = @intToFloat(f32, self.pos.b - line_offset_in_buffer) * font_size.b;
+                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
                     ImVec2(border_offset + x1, border_offset + y1),
@@ -109,7 +111,7 @@ pub const WidgetText = struct {
             .allocator = allocator,
             .app = app,
             .editor = Editor.init(allocator, buffer),
-            .visible_lines = Vec2u{ .a = 0, .b = 50 }, // TODO(remy): visible line depending on app window size
+            .visible_lines = Vec2u{ .a = 0, .b = 50 },
             .cursor = Cursor.init(),
             .input_mode = InputMode.Insert,
         };
@@ -132,7 +134,16 @@ pub const WidgetText = struct {
     }
 
     fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: Vec2f) void {
-        self.cursor.render(draw_list, self.input_mode, self.visible_lines.a, Vec2f{ .a = one_char_size.a, .b = one_char_size.b });
+        // render the cursor only if it is visible
+        if (self.isCursorVisible()) {
+            self.cursor.render(draw_list, self.input_mode, self.visible_lines.a, Vec2f{ .a = one_char_size.a, .b = one_char_size.b });
+        }
+    }
+
+    /// `isCursorVisible` returns true if the cursor is visible in the window.
+    /// TODO(remy): test
+    fn isCursorVisible(self: WidgetText) bool {
+        return (self.cursor.pos.b >= self.visible_lines.a and self.cursor.pos.b <= self.visible_lines.b);
     }
 
     fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: Vec2f) void {
@@ -161,6 +172,24 @@ pub const WidgetText = struct {
         }
     }
 
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    fn scrollToCursor(self: *WidgetText) void {
+        // the cursor is above
+        if (self.cursor.pos.b < self.visible_lines.a) {
+            var count_lines_visible = self.visible_lines.b - self.visible_lines.a;
+            self.visible_lines.a = self.cursor.pos.b;
+            self.visible_lines.b = self.visible_lines.a + count_lines_visible;
+        }
+
+        // the cursor is below
+        if (self.cursor.pos.b + 1 > self.visible_lines.b) { // FIXME(remy): this + 1 offset is suspicious
+            var distance = self.cursor.pos.b + 1 - self.visible_lines.b;
+            self.visible_lines.a += distance;
+            self.visible_lines.b += distance;
+        }
+    }
+
     // Events methods
     // --------------
 
@@ -170,19 +199,19 @@ pub const WidgetText = struct {
         switch (self.input_mode) {
             .Insert => {
                 self.editor.insertUtf8Text(self.cursor.pos, txt) catch {}; // TODO(remy): do something with the error
-                self.moveCursor(Vec2i{ .a = 1, .b = 0 });
+                self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
             },
             else => {
                 switch (txt[0]) {
                     'n' => self.newLine(),
-                    'h' => self.moveCursor(Vec2i{ .a = -1, .b = 0 }),
-                    'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }),
-                    'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }),
-                    'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }),
+                    'h' => self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true),
+                    'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
+                    'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true),
+                    'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true),
                     'd' => {
                         if (self.editor.deleteLine(@intCast(usize, self.cursor.pos.b))) {
                             if (self.cursor.pos.b > 0 and self.cursor.pos.b >= self.editor.buffer.lines.items.len) {
-                                self.moveCursor(Vec2i{ .a = 0, .b = -1 });
+                                self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true);
                             }
                         } else |err| {
                             std.log.err("WidgetText.onTextInput: can't delete line: {}", .{err});
@@ -204,7 +233,7 @@ pub const WidgetText = struct {
     pub fn onReturn(self: *WidgetText) void {
         switch (self.input_mode) {
             .Insert => self.newLine(),
-            else => self.moveCursor(Vec2i{ .a = 0, .b = 1 }),
+            else => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
         }
     }
 
@@ -229,7 +258,7 @@ pub const WidgetText = struct {
                 self.editor.deleteUtf8Char(self.cursor.pos, true) catch |err| {
                     std.log.err("WidgetText.onBackspace: {}", .{err});
                 };
-                self.moveCursor(Vec2i{ .a = -1, .b = 0 });
+                self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
             },
             else => {},
         }
@@ -242,17 +271,8 @@ pub const WidgetText = struct {
     // TODO(remy): unit test
     // FIXME(remy): utf8 support
     // FIXME(remy): going up and down should respect the new line size (+ utf8)
-    pub fn moveCursor(self: *WidgetText, move: Vec2i) void {
+    pub fn moveCursor(self: *WidgetText, move: Vec2i, scroll: bool) void {
         var cursor_pos = Vec2utoi(self.cursor.pos);
-
-        // x movement
-        if (cursor_pos.a + move.a <= 0) {
-            self.cursor.pos.a = 0;
-        } else if (cursor_pos.a + move.a >= self.editor.buffer.lines.items[self.cursor.pos.b].size()) {
-            self.cursor.pos.a = self.editor.buffer.lines.items[self.cursor.pos.b].size() - 1;
-        } else {
-            self.cursor.pos.a = @intCast(usize, cursor_pos.a + move.a);
-        }
 
         // y movement
         if (cursor_pos.b + move.b <= 0) {
@@ -263,9 +283,22 @@ pub const WidgetText = struct {
             self.cursor.pos.b = @intCast(usize, cursor_pos.b + move.b);
         }
 
+        // x movement
+        if (cursor_pos.a + move.a <= 0) {
+            self.cursor.pos.a = 0;
+        } else if (cursor_pos.a + move.a >= self.editor.buffer.lines.items[self.cursor.pos.b].size()) {
+            self.cursor.pos.a = self.editor.buffer.lines.items[self.cursor.pos.b].size() - 1;
+        } else {
+            self.cursor.pos.a = @intCast(usize, cursor_pos.a + move.a);
+        }
+
         // if the new line is smaller, go to the last char
         var new_line_size = self.editor.buffer.lines.items[self.cursor.pos.b].size();
         self.cursor.pos.a = @min(new_line_size - 1, self.cursor.pos.a);
+
+        if (scroll) {
+            self.scrollToCursor();
+        }
     }
 
     // TODO(remy): comment
