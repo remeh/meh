@@ -31,7 +31,7 @@ pub const WidgetCommand = struct {
         if (std.mem.eql(u8, self.buff[0..6], ":debug")) {
             var widget_text = app.currentWidgetText();
             std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text.editor.buffer.filepath.bytes(), widget_text.editor.buffer.lines.items.len });
-            std.log.debug("Lines visible: {}", .{widget_text.visible_lines});
+            std.log.debug("Viewport: {}", .{widget_text.viewport});
             std.log.debug("History entries count: {d}", .{widget_text.editor.history.items.len});
             std.log.debug("History entries:\n{}", .{widget_text.editor.history});
             std.log.debug("Cursor position: {}", .{widget_text.cursor.pos});

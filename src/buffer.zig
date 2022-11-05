@@ -159,4 +159,12 @@ test "init_from_file" {
     try expect(std.mem.eql(u8, buffer.filepath.bytes(), "tests/sample_1"));
     try expect(std.mem.eql(u8, buffer.lines.items[0].bytes(), "hello world\n"));
     buffer.deinit();
+    buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    try expect(buffer.in_ram_only == false);
+    try expect(buffer.lines.items.len == 3);
+    try expect(std.mem.eql(u8, buffer.filepath.bytes(), "tests/sample_2"));
+    try expect(std.mem.eql(u8, buffer.lines.items[0].bytes(), "hello world\n"));
+    try expect(std.mem.eql(u8, buffer.lines.items[1].bytes(), "and a second line\n"));
+    try expect(std.mem.eql(u8, buffer.lines.items[2].bytes(), "and a third"));
+    buffer.deinit();
 }

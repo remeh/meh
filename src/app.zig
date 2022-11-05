@@ -248,16 +248,16 @@ pub const App = struct {
         self.font_mode = font_mode;
     }
 
-    /// visibleLinesInWindow returns how many lines can be drawn on the window
+    /// visibleColumnsAndLinesInWindow returns how many lines can be drawn on the window
     /// depending on the size of the window.
-    fn visibleLinesInWindow(self: App) u64 {
-        var rv: f32 = 0.0;
-        switch (self.font_mode) {
-            .LowDPI => rv = @intToFloat(f32, self.window_size.b) / self.font_lowdpi.FontSize,
-            .LowDPIBigFont => rv = @intToFloat(f32, self.window_size.b) / self.font_lowdpibigfont.FontSize,
-            .HiDPI => rv = @intToFloat(f32, self.window_size.b) / (self.font_hidpi.FontSize * 0.5),
-        }
-        return (@floatToInt(u64, @ceil(rv)));
+    fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
+        var one_char_size = self.oneCharSize();
+        var columns: f32 = @intToFloat(f32, self.window_size.a) / one_char_size.a;
+        var lines: f32 = @intToFloat(f32, self.window_size.b) / one_char_size.b;
+        return Vec2u{
+            .a = @floatToInt(u64, @ceil(columns)),
+            .b = @floatToInt(u64, @ceil(lines)),
+        };
     }
 
     /// oneCharSize returns the bounding box of one text char.
@@ -280,11 +280,15 @@ pub const App = struct {
         self.window_size.b = h;
 
         // change visible lines of every WidgetText
-        var visible_lines_count = self.visibleLinesInWindow();
+        var visible_count = self.visibleColumnsAndLinesInWindow();
         for (self.editors.items) |editor, i| {
-            self.editors.items[i].visible_lines = Vec2u{
-                .a = editor.visible_lines.a,
-                .b = editor.visible_lines.a + visible_lines_count,
+            self.editors.items[i].viewport.lines = Vec2u{
+                .a = editor.viewport.lines.a,
+                .b = editor.viewport.lines.a + visible_count.b,
+            };
+            self.editors.items[i].viewport.columns = Vec2u{
+                .a = editor.viewport.columns.a,
+                .b = editor.viewport.columns.a + visible_count.a,
             };
         }
     }
@@ -370,11 +374,15 @@ pub const App = struct {
                 _ = self.currentWidgetText().onTextInput(readTextFromSDLInput(&event.text.text));
             },
             c.SDL_MOUSEWHEEL => {
-                // FIXME(remy): should not go outside
                 if (event.wheel.y < 0) {
                     self.currentWidgetText().moveCursor(Vec2i{ .a = 0, .b = 8 }, true);
                 } else if (event.wheel.y > 0) {
                     self.currentWidgetText().moveCursor(Vec2i{ .a = 0, .b = -8 }, true);
+                }
+                if (event.wheel.x < 0) {
+                    self.currentWidgetText().moveCursor(Vec2i{ .a = -4, .b = 0 }, true);
+                } else if (event.wheel.x > 0) {
+                    self.currentWidgetText().moveCursor(Vec2i{ .a = 4, .b = 0 }, true);
                 }
             },
             else => {},
