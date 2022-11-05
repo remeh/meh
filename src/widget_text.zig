@@ -13,7 +13,8 @@ const Vec2utoi = @import("vec.zig").Vec2utoi;
 
 // TODO(remy): where should we define this?
 // TODO(remy): comment
-pub const border_offset = 5;
+pub const global_x_offset = 5;
+pub const global_y_offset = 30;
 
 pub const InputMode = enum {
     Command,
@@ -59,8 +60,8 @@ pub const Cursor = struct {
                 var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
-                    ImVec2(border_offset + x1, border_offset + y1),
-                    ImVec2(border_offset + x2, border_offset + y2),
+                    ImVec2(global_x_offset + x1, global_y_offset + y1),
+                    ImVec2(global_x_offset + x2, global_y_offset + y2),
                     0xFFFFFFFF,
                     1.0,
                     0,
@@ -73,8 +74,8 @@ pub const Cursor = struct {
                 var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
-                    ImVec2(border_offset + x1, border_offset + y1),
-                    ImVec2(border_offset + x2, border_offset + y2),
+                    ImVec2(global_x_offset + x1, global_y_offset + y1),
+                    ImVec2(global_x_offset + x2, global_y_offset + y2),
                     0xFFFFFFFF,
                     1.0,
                     0,
@@ -164,7 +165,7 @@ pub const WidgetText = struct {
     fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: Vec2f) void {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
-        var y_offset: f32 = 0.0;
+        var y_offset: f32 = 0;
 
         var carray: [8192]u8 = undefined;
         var cbuff = &carray;
@@ -176,7 +177,7 @@ pub const WidgetText = struct {
 
                 // empty line
                 if (buff.len == 0 or (buff.len == 1 and buff[0] == '\n') or buff.len < self.viewport.columns.a) {
-                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(border_offset, border_offset + y_offset), 0xFFFFFFFF, "", 0);
+                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(global_x_offset, global_y_offset + y_offset), 0xFFFFFFFF, "", 0);
                     y_offset += one_char_size.b;
                     continue;
                 }
@@ -188,7 +189,7 @@ pub const WidgetText = struct {
 
                 // FIXME(remy): this is incorrect when there is no ending \n
                 buff[buff.len - 1] = 0; // replace the \n and finish the buffer with a 0 for the C-land
-                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(border_offset, border_offset + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, cbuff), 0);
+                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(global_x_offset, global_y_offset + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, cbuff), 0);
                 y_offset += one_char_size.b;
 
                 // std.log.debug("self.buffer.data.items[{d}..{d}] (len: {d}) data: {s}", .{ @intCast(usize, pos.a), @intCast(usize, pos.b), self.buffer.data.items.len, @ptrCast([*:0]const u8, buff) });

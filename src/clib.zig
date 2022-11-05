@@ -8,3 +8,8 @@ pub const c = @cImport({
     @cInclude("cimgui.h");
     @cInclude("cimgui_impl.h");
 });
+
+/// debugRect draws a pink debug rect.
+pub fn debugRect(min: c.ImVec2, max: c.ImVec2) void {
+    c.ImDrawList_AddRect(c.igGetForegroundDrawList_Nil(), min, max, 0xFFFF00FF, 1.0, 0, 0);
+}

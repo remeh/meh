@@ -1,6 +1,8 @@
 const std = @import("std");
 const c = @import("clib.zig").c;
 
+const debugRect = @import("clib.zig").debugRect;
+
 const Buffer = @import("buffer.zig").Buffer;
 const ImVec2 = @import("vec.zig").ImVec2;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
@@ -200,11 +202,21 @@ pub const App = struct {
         // -----------
 
         // editor window
+
+        // no padding on the editor window
+        c.igPushStyleVar_Vec2(c.ImGuiStyleVar_WindowPadding, c.ImVec2{ .x = 1.0, .y = 1.0 });
         _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a), @intToFloat(f32, self.window_size.b)), 0);
         _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
-
-        self.currentWidgetText().render(); // FIXME(remy): currentWidgetText should not be used or be better implemented
+        var open: bool = true;
+        if (c.igBeginTabBar("##EditorTabs", c.ImGuiTabBarFlags_Reorderable)) {
+            if (c.igBeginTabItem("filename##random", &open, c.ImGuiTabItemFlags_UnsavedDocument)) {
+                self.currentWidgetText().render(); // FIXME(remy): currentWidgetText should not be used or be better implemented
+                c.igEndTabItem();
+            }
+            c.igEndTabBar();
+        }
         c.igEnd();
+        c.igPopStyleVar(1);
 
         // command input
         if (self.focused_widget == FocusedWidget.Command) {
