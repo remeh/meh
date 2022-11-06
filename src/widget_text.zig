@@ -5,6 +5,7 @@ const expect = std.testing.expect;
 const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
 const Editor = @import("editor.zig").Editor;
+const EditorError = @import("editor.zig").EditorError;
 const ImVec2 = @import("vec.zig").ImVec2;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2f = @import("vec.zig").Vec2f;
@@ -377,9 +378,13 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     pub fn undo(self: *WidgetText) void {
-        self.editor.undo() catch |err| {
-            std.log.err("WidgetText.undo: can't undo: {}", .{err});
-        };
+        if (self.editor.undo()) |pos| {
+            self.cursor.pos = pos;
+        } else |err| {
+            if (err != EditorError.NothingToUndo) {
+                std.log.err("WidgetText.undo: can't undo: {}", .{err});
+            }
+        }
     }
 };
 

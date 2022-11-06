@@ -13,6 +13,10 @@ const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 
+pub const EditorError = error{
+    NothingToUndo,
+};
+
 // TODO(remy): comment
 pub const Editor = struct {
     allocator: std.mem.Allocator,
@@ -54,17 +58,22 @@ pub const Editor = struct {
         };
     }
 
-    pub fn undo(self: *Editor) !void {
+    /// undo un-does the last change and all previous changes of the same type.
+    /// returns the position at which should be the cursor.
+    pub fn undo(self: *Editor) !Vec2u {
         if (self.history.items.len == 0) {
-            return;
+            return EditorError.NothingToUndo;
         }
         var change = self.history.pop();
         var t = change.type;
         try History.undo(self, change);
+        var pos = change.pos;
         while (self.history.items.len > 0 and self.history.items[self.history.items.len - 1].type == t) {
             change = self.history.pop();
             try History.undo(self, change);
+            pos = change.pos;
         }
+        return pos;
     }
 
     // Text edition
