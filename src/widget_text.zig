@@ -6,6 +6,7 @@ const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
 const Editor = @import("editor.zig").Editor;
 const ImVec2 = @import("vec.zig").ImVec2;
+const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
@@ -13,8 +14,9 @@ const Vec2utoi = @import("vec.zig").Vec2utoi;
 
 // TODO(remy): where should we define this?
 // TODO(remy): comment
-pub const global_x_offset = 5;
-pub const global_y_offset = 30;
+pub const drawing_offset = Vec2f{ .a = 5, .b = 27 };
+// TODO(remy): comment
+pub const char_offset_before_move = 5;
 
 pub const InputMode = enum {
     Command,
@@ -60,8 +62,8 @@ pub const Cursor = struct {
                 var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
-                    ImVec2(global_x_offset + x1, global_y_offset + y1),
-                    ImVec2(global_x_offset + x2, global_y_offset + y2),
+                    ImVec2(drawing_offset.a + x1, drawing_offset.b + y1),
+                    ImVec2(drawing_offset.a + x2, drawing_offset.b + y2),
                     0xFFFFFFFF,
                     1.0,
                     0,
@@ -74,8 +76,8 @@ pub const Cursor = struct {
                 var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
-                    ImVec2(global_x_offset + x1, global_y_offset + y1),
-                    ImVec2(global_x_offset + x2, global_y_offset + y2),
+                    ImVec2(drawing_offset.a + x1, drawing_offset.b + y1),
+                    ImVec2(drawing_offset.a + x2, drawing_offset.b + y2),
                     0xFFFFFFFF,
                     1.0,
                     0,
@@ -173,23 +175,22 @@ pub const WidgetText = struct {
         while (i < self.viewport.lines.b) : (i += 1) {
             j = self.viewport.columns.a;
             if (self.editor.buffer.getLine(i)) |line| {
-                var buff: []u8 = line.data.items;
+                var buff: *[]u8 = &line.data.items; // uses a pointer only to avoid a copy
 
                 // empty line
-                if (buff.len == 0 or (buff.len == 1 and buff[0] == '\n') or buff.len < self.viewport.columns.a) {
-                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(global_x_offset, global_y_offset + y_offset), 0xFFFFFFFF, "", 0);
+                if (buff.len == 0 or (buff.len == 1 and buff.*[0] == '\n') or buff.len < self.viewport.columns.a) {
+                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(drawing_offset.a, drawing_offset.b + y_offset), 0xFFFFFFFF, "", 0);
                     y_offset += one_char_size.b;
                     continue;
                 }
 
+                // grab only what's visible in the viewport in the temporary buffer
                 while (j < self.viewport.columns.b and j < buff.len) : (j += 1) {
-                    cbuff[j - self.viewport.columns.a] = buff[j];
+                    cbuff[j - self.viewport.columns.a] = buff.*[j];
                 }
                 cbuff[j - self.viewport.columns.a] = 0;
 
-                // FIXME(remy): this is incorrect when there is no ending \n
-                buff[buff.len - 1] = 0; // replace the \n and finish the buffer with a 0 for the C-land
-                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(global_x_offset, global_y_offset + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, cbuff), 0);
+                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(drawing_offset.a, drawing_offset.b + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, cbuff), 0);
                 y_offset += one_char_size.b;
 
                 // std.log.debug("self.buffer.data.items[{d}..{d}] (len: {d}) data: {s}", .{ @intCast(usize, pos.a), @intCast(usize, pos.b), self.buffer.data.items.len, @ptrCast([*:0]const u8, buff) });
@@ -210,8 +211,8 @@ pub const WidgetText = struct {
         }
 
         // the cursor is below
-        if (self.cursor.pos.b + 3 > self.viewport.lines.b) { // FIXME(remy): this + 3 offset is suspicious
-            var distance = self.cursor.pos.b + 3 - self.viewport.lines.b;
+        if (self.cursor.pos.b + char_offset_before_move > self.viewport.lines.b) { // FIXME(remy): this + 3 offset is suspicious
+            var distance = self.cursor.pos.b + char_offset_before_move - self.viewport.lines.b;
             self.viewport.lines.a += distance;
             self.viewport.lines.b += distance;
         }
@@ -224,8 +225,8 @@ pub const WidgetText = struct {
         }
 
         // the cursor is on the right
-        if (self.cursor.pos.a + 3 > self.viewport.columns.b) {
-            var distance = self.cursor.pos.a + 3 - self.viewport.columns.b;
+        if (self.cursor.pos.a + char_offset_before_move > self.viewport.columns.b) {
+            var distance = self.cursor.pos.a + char_offset_before_move - self.viewport.columns.b;
             self.viewport.columns.a += distance;
             self.viewport.columns.b += distance;
         }
@@ -310,10 +311,25 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    // FIXME(remy): utf8 support
-    // FIXME(remy): going up and down should respect the new line size (+ utf8)
     pub fn moveCursor(self: *WidgetText, move: Vec2i, scroll: bool) void {
         var cursor_pos = Vec2utoi(self.cursor.pos);
+        var line: *U8Slice = undefined;
+        var utf8size: usize = 0;
+
+        if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
+            line = l;
+        } else |err| {
+            // still, report the error
+            std.log.err("WidgetText.moveCursor: can't get line {d}: {}", .{ cursor_pos.b, err });
+            return;
+        }
+
+        if (line.utf8size()) |size| {
+            utf8size = size;
+        } else |err| {
+            std.log.err("WidgetText.moveCursor: can't get line {d} utf8size: {}", .{ cursor_pos.b, err });
+            return;
+        }
 
         // y movement
         if (cursor_pos.b + move.b <= 0) {
@@ -327,15 +343,18 @@ pub const WidgetText = struct {
         // x movement
         if (cursor_pos.a + move.a <= 0) {
             self.cursor.pos.a = 0;
-        } else if (cursor_pos.a + move.a >= self.editor.buffer.lines.items[self.cursor.pos.b].size()) {
-            self.cursor.pos.a = self.editor.buffer.lines.items[self.cursor.pos.b].size() - 1;
+        } else if (cursor_pos.a + move.a >= utf8size) {
+            self.cursor.pos.a = utf8size - 1;
         } else {
             self.cursor.pos.a = @intCast(usize, cursor_pos.a + move.a);
         }
 
         // if the new line is smaller, go to the last char
-        var new_line_size = self.editor.buffer.lines.items[self.cursor.pos.b].size();
-        self.cursor.pos.a = @min(new_line_size - 1, self.cursor.pos.a);
+        if (self.editor.buffer.lines.items[self.cursor.pos.b].utf8size()) |new_line_size| {
+            self.cursor.pos.a = @min(new_line_size - 1, self.cursor.pos.a);
+        } else |err| {
+            std.log.err("WidgetText.moveCursor: can't get utf8size of the new line {d}: {}", .{ cursor_pos.b, err });
+        }
 
         if (scroll) {
             self.scrollToCursor();
@@ -343,15 +362,17 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): comment
-    // TODO(remy): unit tes
+    // TODO(remy): unit test
     pub fn newLine(self: *WidgetText) void {
         self.editor.newLine(self.cursor.pos, false) catch |err| {
             std.log.err("WidgetText.newLine: {}", .{err});
             return;
         };
         // TODO(remy): smarter positioning of the cursor
-        self.cursor.pos.a = 0;
-        self.cursor.pos.b += 1;
+        self.moveCursor(Vec2i{ .a = -10000, .b = 1 }, true);
+        // self.moveCursorSpecial(CursorMove.NextLine);
+        // self.moveCursorSpecial(CursorMove.StartOfLine);
+        // self.moveCursorSpecial(CursorMove.RespectPreviousIndent);
     }
 
     // TODO(remy): comment

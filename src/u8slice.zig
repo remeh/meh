@@ -45,6 +45,17 @@ pub const U8Slice = struct {
         return self.data.items.len;
     }
 
+    /// utf8Size returns the amount of utf8 characters in the U8Slice.
+    pub fn utf8size(self: U8Slice) !usize {
+        var rv: usize = 0;
+        var bytes_pos: usize = 0;
+        while (bytes_pos < self.data.items.len) {
+            bytes_pos += try std.unicode.utf8ByteSequenceLength(self.data.items[bytes_pos]);
+            rv += 1;
+        }
+        return rv;
+    }
+
     // isEmpty returns true if this U8Slice is an empty slice of bytes.
     pub fn isEmpty(self: U8Slice) bool {
         return self.data.items.len == 0;
@@ -72,6 +83,9 @@ pub const U8Slice = struct {
         var i: usize = 0;
         var bytes_pos: usize = 0;
         while (i < character_pos) : (i += 1) {
+            if (bytes_pos >= self.data.items.len) {
+                return U8SliceError.OutOfLine;
+            }
             bytes_pos += try std.unicode.utf8ByteSequenceLength(self.data.items[bytes_pos]);
         }
         return bytes_pos;
@@ -101,9 +115,32 @@ test "init_from_slice_and_size_without_utf8" {
 
 test "init_from_slice_and_size_with_utf8" {
     const allocator = std.testing.allocator;
-    var str = try U8Slice.initFromSlice(allocator, "hello world 😃");
-    try expect(str.size() == 16);
+    var str = try U8Slice.initFromSlice(allocator, "👻hello world 😃! éà");
+    try expect(str.size() == 26);
+    try expect(try str.utf8size() == 18);
     try expect(str.isEmpty() == false);
+    str.deinit();
+}
+
+test "init_from_slice_and_utf8_pos" {
+    const allocator = std.testing.allocator;
+    var str = try U8Slice.initFromSlice(allocator, "👻hello world 😃! éà");
+    try expect(str.isEmpty() == false);
+    try expect(try str.utf8pos(0) == 0);
+    try expect(try str.utf8pos(1) == 4);
+    try expect(try str.utf8pos(2) == 5);
+    try expect(try str.utf8pos(12) == 15);
+    try expect(try str.utf8pos(13) == 16);
+    try expect(try str.utf8pos(14) == 20);
+    try expect(try str.utf8pos(15) == 21);
+    try expect(try str.utf8pos(16) == 22);
+    try expect(try str.utf8pos(17) == 24);
+    try expect(try str.utf8pos(18) == 26);
+    if (str.utf8pos(19)) |_| {
+        try expect(0 == 1); // should never happen since the 19th char is out of bounds
+    } else |err| {
+        try expect(err == U8SliceError.OutOfLine);
+    }
     str.deinit();
 }
 

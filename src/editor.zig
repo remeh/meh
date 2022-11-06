@@ -94,12 +94,10 @@ pub const Editor = struct {
                 std.log.err("can't insert a new line: {}", .{err});
             };
         } else {
-            // TODO(remy): this should be a different method (which should contain the change stuff)
-            //             and this method should maybe be in the buffer itself?
             var line = try self.buffer.getLine(pos.b);
-            var rest = line.data.items[pos.a..line.size()];
+            var rest = line.data.items[try line.utf8pos(pos.a)..line.size()];
             var new_line = try U8Slice.initFromSlice(self.allocator, rest);
-            line.data.shrinkAndFree(pos.a);
+            line.data.shrinkAndFree(try line.utf8pos(pos.a));
             try line.data.append('\n');
             try self.buffer.lines.insert(pos.b + 1, new_line);
             // history
@@ -114,7 +112,7 @@ pub const Editor = struct {
         var line = try self.buffer.getLine(@intCast(u64, pos.b));
 
         // since utf8 could be one or multiple bytes, we have to find
-        // in bytes where to insert this new text.
+        // in bytes where to insert this new text in the slice.
         var insert_pos = try line.utf8pos(pos.a);
 
         // insert the new text

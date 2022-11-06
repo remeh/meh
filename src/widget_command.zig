@@ -37,7 +37,7 @@ pub const WidgetCommand = struct {
             std.log.debug("Cursor position: {}", .{widget_text.cursor.pos});
             if (widget_text.editor.buffer.getLine(widget_text.cursor.pos.b)) |line| {
                 if (line != undefined) {
-                    std.log.debug("Line size: {d}", .{line.size()});
+                    std.log.debug("Line size: {d}, utf8 size: {any}", .{ line.size(), line.utf8size() });
                     std.log.debug("Line content:\n{s}", .{line.bytes()});
                 } else {
                     std.log.debug("Line: undefined", .{});
