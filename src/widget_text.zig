@@ -27,6 +27,17 @@ pub const InputMode = enum {
     VLine,
 };
 
+pub const CursorMove = enum {
+    EndOfLine,
+    StartOfLine,
+    EndOfWord,
+    StartOfWord,
+    NextSpace,
+    PreviousSpace,
+    NextLine,
+    PreviousLine,
+};
+
 // TODO(remy): comment
 pub const Cursor = struct {
     /// pos is the position relative to the editor
@@ -160,7 +171,6 @@ pub const WidgetText = struct {
     /// `isCursorVisible` returns true if the cursor is visible in the window.
     /// TODO(remy): test
     fn isCursorVisible(self: WidgetText) bool {
-        // TODO(remy): columns
         return (self.cursor.pos.b >= self.viewport.lines.a and self.cursor.pos.b <= self.viewport.lines.b and
             self.cursor.pos.a >= self.viewport.columns.a and self.cursor.pos.a <= self.viewport.columns.b);
     }
@@ -364,16 +374,49 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
+    pub fn moveCursorSpecial(self: *WidgetText, move: CursorMove, scroll: bool) void {
+        var scrolled = false;
+        switch (move) {
+            .EndOfLine => {
+                if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
+                    self.cursor.pos.a = l.size();
+                } else |err| {
+                    std.log.err("WidgetText.moveCursorSpecial.EndOfLine: {}", .{err});
+                }
+            },
+            .StartOfLine => {
+                self.cursor.pos.a = 0;
+            },
+            .EndOfWord => {}, // TODO(remy): implement
+            .StartOfWord => {}, // TODO(remy): implement
+            .NextSpace => {}, // TODO(remy): implement
+            .PreviousSpace => {}, // TODO(remy): implement
+            .NextLine => {
+                self.moveCursor(Vec2i{ .a = 0, .b = 1 }, scroll);
+                scrolled = scroll;
+            },
+            .PreviousLine => {
+                self.moveCursor(Vec2i{ .a = 0, .b = -1 }, scroll);
+                scrolled = scroll;
+            },
+        }
+
+        if (scroll and !scrolled) {
+            self.scrollToCursor();
+        }
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
     pub fn newLine(self: *WidgetText) void {
         self.editor.newLine(self.cursor.pos, false) catch |err| {
             std.log.err("WidgetText.newLine: {}", .{err});
             return;
         };
+        self.moveCursorSpecial(CursorMove.NextLine, true);
+        self.moveCursorSpecial(CursorMove.StartOfLine, true);
         // TODO(remy): smarter positioning of the cursor
-        self.moveCursor(Vec2i{ .a = -10000, .b = 1 }, true);
-        // self.moveCursorSpecial(CursorMove.NextLine);
-        // self.moveCursorSpecial(CursorMove.StartOfLine);
-        // self.moveCursorSpecial(CursorMove.RespectPreviousIndent);
+        // self.moveCursorSpecial(CursorMove.RespectPreviousIndent); // TODO
     }
 
     // TODO(remy): comment
@@ -433,21 +476,6 @@ test "editor moveCursor" {
     std.log.debug("{d}", .{size});
     // try expect(widget.cursor.pos.a == buffer.lines.items[0].size() - 1); // FIXME(remy): broken unit test
     // try expect(widget.cursor.pos.b == buffer.lines.items.len - 1);
-
-    widget.deinit();
-}
-
-test "widget scroll to cursor" {
-    const allocator = std.testing.allocator;
-    var app: *App = undefined;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_3");
-    var widget = WidgetText.initWithBuffer(allocator, app, buffer);
-
-    // move to the end of the document
-    try expect(widget.cursor.pos.a == 0);
-    try expect(widget.cursor.pos.b == 0);
-    try expect(widget.viewport.lines.a == 0);
-    try expect(widget.viewport.lines.b == 50);
 
     widget.deinit();
 }

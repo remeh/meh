@@ -205,18 +205,22 @@ pub const App = struct {
 
         // no padding on the editor window
         c.igPushStyleVar_Vec2(c.ImGuiStyleVar_WindowPadding, c.ImVec2{ .x = 1.0, .y = 1.0 });
+        c.igPushStyleVar_Float(c.ImGuiStyleVar_TabRounding, 3.0);
         _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a), @intToFloat(f32, self.window_size.b)), 0);
         _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
         var open: bool = true;
+        var filename: [8192]u8 = std.mem.zeroes([8192]u8);
         if (c.igBeginTabBar("##EditorTabs", c.ImGuiTabBarFlags_Reorderable)) {
-            if (c.igBeginTabItem("filename##random", &open, c.ImGuiTabItemFlags_UnsavedDocument)) {
+            // TODO(remy): for (self.editors) |editor| blablabla
+            std.mem.copy(u8, &filename, self.currentWidgetText().editor.buffer.filepath.bytes()); // TODO(remy): add random after ## (or full path?)
+            if (c.igBeginTabItem(@ptrCast([*c]const u8, &filename), &open, c.ImGuiTabItemFlags_UnsavedDocument)) {
                 self.currentWidgetText().render(); // FIXME(remy): currentWidgetText should not be used or be better implemented
                 c.igEndTabItem();
             }
             c.igEndTabBar();
         }
         c.igEnd();
-        c.igPopStyleVar(1);
+        c.igPopStyleVar(2);
 
         // command input
         if (self.focused_widget == FocusedWidget.Command) {
@@ -330,8 +334,6 @@ pub const App = struct {
                 }
 
                 // events to handle differently per focused widget
-                // XXX(remy): will we have to get a "currently focused" widget?
-                // XXX(remy): it should be the one receiving the events
                 switch (self.focused_widget) {
                     .Command => {
                         self.commandEvents(event);
