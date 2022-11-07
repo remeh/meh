@@ -364,6 +364,8 @@ pub const App = struct {
     }
 
     fn editorEvents(self: *App, event: c.SDL_Event) void {
+        var input_state = c.SDL_GetKeyboardState(null);
+        var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
@@ -380,7 +382,6 @@ pub const App = struct {
                     c.SDLK_BACKSPACE => {
                         self.currentWidgetText().onBackspace();
                     },
-
                     else => {},
                 }
             },

@@ -36,6 +36,7 @@ pub const CursorMove = enum {
     PreviousSpace,
     NextLine,
     PreviousLine,
+    RespectPreviousIndent,
 };
 
 // TODO(remy): comment
@@ -251,16 +252,45 @@ pub const WidgetText = struct {
     pub fn onTextInput(self: *WidgetText, txt: []const u8) bool {
         switch (self.input_mode) {
             .Insert => {
+                // TODO(remy): what if there is a selection
                 self.editor.insertUtf8Text(self.cursor.pos, txt) catch {}; // TODO(remy): do something with the error
                 self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
             },
             else => {
                 switch (txt[0]) {
-                    'n' => self.newLine(),
+                    // movements
                     'h' => self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true),
                     'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
                     'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true),
                     'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true),
+                    // start inserting
+                    'i' => self.input_mode = .Insert, // TODO(remy): finish
+                    'I' => {
+                        self.moveCursorSpecial(CursorMove.StartOfLine, true);
+                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                    },
+                    'a' => {
+                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                        self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
+                    },
+                    'A' => {
+                        self.moveCursorSpecial(CursorMove.EndOfLine, true);
+                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                    },
+                    'O' => {
+                        self.moveCursorSpecial(CursorMove.StartOfLine, true);
+                        self.newLine();
+                        self.moveCursorSpecial(CursorMove.PreviousLine, true);
+                        self.moveCursorSpecial(CursorMove.RespectPreviousIndent, true);
+                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                    },
+                    'o' => {
+                        self.moveCursorSpecial(CursorMove.EndOfLine, true);
+                        self.newLine();
+                        self.moveCursorSpecial(CursorMove.RespectPreviousIndent, true);
+                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                    },
+                    // others
                     'd' => {
                         if (self.editor.deleteLine(@intCast(usize, self.cursor.pos.b))) {
                             if (self.cursor.pos.b > 0 and self.cursor.pos.b >= self.editor.buffer.lines.items.len) {
@@ -270,9 +300,13 @@ pub const WidgetText = struct {
                             std.log.err("WidgetText.onTextInput: can't delete line: {}", .{err});
                         }
                     },
-                    'x' => self.editor.deleteUtf8Char(self.cursor.pos, false) catch {}, // TODO(remy): do something with the error
-                    'u' => self.undo(),
-                    'i' => self.input_mode = .Insert, // TODO(remy): finish
+                    'x' => {
+                        self.editor.deleteUtf8Char(self.cursor.pos, false) catch {}; // TODO(remy): do something with the error
+                        // TODO(remy): what if there is a selection
+                    },
+                    'u' => {
+                        self.undo();
+                    },
                     'r' => self.input_mode = .Replace, // TODO(remy): finish
                     else => return false,
                 }
@@ -362,7 +396,11 @@ pub const WidgetText = struct {
 
         // if the new line is smaller, go to the last char
         if (self.editor.buffer.lines.items[self.cursor.pos.b].utf8size()) |new_line_size| {
-            self.cursor.pos.a = @min(new_line_size - 1, self.cursor.pos.a);
+            if (new_line_size == 0) {
+                self.cursor.pos.a = 0;
+            } else {
+                self.cursor.pos.a = @min(new_line_size - 1, self.cursor.pos.a);
+            }
         } else |err| {
             std.log.err("WidgetText.moveCursor: can't get utf8size of the new line {d}: {}", .{ cursor_pos.b, err });
         }
@@ -379,7 +417,11 @@ pub const WidgetText = struct {
         switch (move) {
             .EndOfLine => {
                 if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
-                    self.cursor.pos.a = l.size();
+                    if (l.bytes()[l.bytes().len - 1] == '\n') {
+                        self.cursor.pos.a = l.size() - 1;
+                    } else {
+                        self.cursor.pos.a = l.size();
+                    }
                 } else |err| {
                     std.log.err("WidgetText.moveCursorSpecial.EndOfLine: {}", .{err});
                 }
@@ -387,10 +429,18 @@ pub const WidgetText = struct {
             .StartOfLine => {
                 self.cursor.pos.a = 0;
             },
-            .EndOfWord => {}, // TODO(remy): implement
-            .StartOfWord => {}, // TODO(remy): implement
-            .NextSpace => {}, // TODO(remy): implement
-            .PreviousSpace => {}, // TODO(remy): implement
+            .EndOfWord => {
+                std.log.debug("moveCursorSpecial.StartOfWord: implement me!", .{}); // TODO(remy): implement
+            },
+            .StartOfWord => {
+                std.log.debug("moveCursorSpecial.StartOfWord: implement me!", .{}); // TODO(remy): implement
+            },
+            .NextSpace => {
+                std.log.debug("moveCursorSpecial.NextSpace: implement me!", .{}); // TODO(remy): implement
+            },
+            .PreviousSpace => {
+                std.log.debug("moveCursorSpecial.PreviousSpace: implement me!", .{});
+            },
             .NextLine => {
                 self.moveCursor(Vec2i{ .a = 0, .b = 1 }, scroll);
                 scrolled = scroll;
@@ -398,6 +448,9 @@ pub const WidgetText = struct {
             .PreviousLine => {
                 self.moveCursor(Vec2i{ .a = 0, .b = -1 }, scroll);
                 scrolled = scroll;
+            },
+            .RespectPreviousIndent => {
+                std.log.debug("moveCursorSpecial.RespectPreviousIndent: implement me!", .{}); // TODO(remy): implement
             },
         }
 
