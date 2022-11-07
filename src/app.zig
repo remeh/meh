@@ -382,23 +382,18 @@ pub const App = struct {
                     c.SDLK_BACKSPACE => {
                         self.currentWidgetText().onBackspace();
                     },
-                    else => {},
+                    else => {
+                        if (ctrl) {
+                            _ = self.currentWidgetText().onCtrlKeyDown(event.key.keysym.sym);
+                        }
+                    },
                 }
             },
             c.SDL_TEXTINPUT => {
                 _ = self.currentWidgetText().onTextInput(readTextFromSDLInput(&event.text.text));
             },
             c.SDL_MOUSEWHEEL => {
-                if (event.wheel.y < 0) {
-                    self.currentWidgetText().moveCursor(Vec2i{ .a = 0, .b = 8 }, true);
-                } else if (event.wheel.y > 0) {
-                    self.currentWidgetText().moveCursor(Vec2i{ .a = 0, .b = -8 }, true);
-                }
-                if (event.wheel.x < 0) {
-                    self.currentWidgetText().moveCursor(Vec2i{ .a = -4, .b = 0 }, true);
-                } else if (event.wheel.x > 0) {
-                    self.currentWidgetText().moveCursor(Vec2i{ .a = 4, .b = 0 }, true);
-                }
+                _ = self.currentWidgetText().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
             },
             else => {},
         }

@@ -18,6 +18,8 @@ const Vec2utoi = @import("vec.zig").Vec2utoi;
 pub const drawing_offset = Vec2f{ .a = 5, .b = 27 };
 // TODO(remy): comment
 pub const char_offset_before_move = 5;
+// TODO(remy): comment
+pub const page_move = 8;
 
 pub const InputMode = enum {
     Command,
@@ -32,6 +34,8 @@ pub const CursorMove = enum {
     StartOfLine,
     EndOfWord,
     StartOfWord,
+    StartOfBuffer,
+    EndOfBuffer,
     NextSpace,
     PreviousSpace,
     NextLine,
@@ -247,6 +251,21 @@ pub const WidgetText = struct {
     // Events methods
     // --------------
 
+    /// onCtrlKeyDown is called when a key has been pressed while a ctrl key is held down.
+    pub fn onCtrlKeyDown(self: *WidgetText, keycode: i32) bool {
+        std.log.debug("keycode: {d}", .{keycode});
+        switch (keycode) {
+            'd' => {
+                self.moveCursor(Vec2i{ .a = 0, .b = page_move }, true);
+            },
+            'u' => {
+                self.moveCursor(Vec2i{ .a = 0, .b = -page_move }, true);
+            },
+            else => {},
+        }
+        return true;
+    }
+
     // TODO(remy): comment
     // TODO(remy): unit test
     pub fn onTextInput(self: *WidgetText, txt: []const u8) bool {
@@ -263,32 +282,34 @@ pub const WidgetText = struct {
                     'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
                     'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true),
                     'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true),
+                    'g' => self.moveCursorSpecial(CursorMove.StartOfBuffer, true),
+                    'G' => self.moveCursorSpecial(CursorMove.EndOfBuffer, true),
                     // start inserting
                     'i' => self.input_mode = .Insert, // TODO(remy): finish
                     'I' => {
                         self.moveCursorSpecial(CursorMove.StartOfLine, true);
-                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                        self.setInputMode(.Insert);
                     },
                     'a' => {
-                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                        self.setInputMode(.Insert);
                         self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
                     },
                     'A' => {
                         self.moveCursorSpecial(CursorMove.EndOfLine, true);
-                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                        self.setInputMode(.Insert);
                     },
                     'O' => {
                         self.moveCursorSpecial(CursorMove.StartOfLine, true);
                         self.newLine();
                         self.moveCursorSpecial(CursorMove.PreviousLine, true);
                         self.moveCursorSpecial(CursorMove.RespectPreviousIndent, true);
-                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                        self.setInputMode(.Insert);
                     },
                     'o' => {
                         self.moveCursorSpecial(CursorMove.EndOfLine, true);
                         self.newLine();
                         self.moveCursorSpecial(CursorMove.RespectPreviousIndent, true);
-                        self.input_mode = .Insert; // TODO(remy): setInputMode()
+                        self.setInputMode(.Insert);
                     },
                     // others
                     'd' => {
@@ -313,6 +334,19 @@ pub const WidgetText = struct {
             },
         }
         return true;
+    }
+
+    pub fn onMouseWheel(self: *WidgetText, move: Vec2i) void {
+        if (move.b < 0) {
+            self.moveCursor(Vec2i{ .a = 0, .b = page_move }, true);
+        } else if (move.b > 0) {
+            self.moveCursor(Vec2i{ .a = 0, .b = -page_move }, true);
+        }
+        if (move.a < 0) {
+            self.moveCursor(Vec2i{ .a = -(page_move / 2), .b = 0 }, true);
+        } else if (move.a > 0) {
+            self.moveCursor(Vec2i{ .a = (page_move / 2), .b = 0 }, true);
+        }
     }
 
     // TODO(remy): comment
@@ -435,6 +469,12 @@ pub const WidgetText = struct {
             .StartOfWord => {
                 std.log.debug("moveCursorSpecial.StartOfWord: implement me!", .{}); // TODO(remy): implement
             },
+            .StartOfBuffer => {
+                self.cursor.pos.b = 0;
+            },
+            .EndOfBuffer => {
+                self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
+            },
             .NextSpace => {
                 std.log.debug("moveCursorSpecial.NextSpace: implement me!", .{}); // TODO(remy): implement
             },
@@ -470,6 +510,14 @@ pub const WidgetText = struct {
         self.moveCursorSpecial(CursorMove.StartOfLine, true);
         // TODO(remy): smarter positioning of the cursor
         // self.moveCursorSpecial(CursorMove.RespectPreviousIndent); // TODO
+    }
+
+    // Others
+    // ------
+
+    // TODO(remy): comment
+    fn setInputMode(self: *WidgetText, input_mode: InputMode) void {
+        self.input_mode = input_mode;
     }
 
     // TODO(remy): comment
