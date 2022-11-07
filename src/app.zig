@@ -204,6 +204,8 @@ pub const App = struct {
         // editor window
 
         // no padding on the editor window
+        c.igPushStyleColor_U32(c.ImGuiCol_Tab, 0xFF222222);
+        c.igPushStyleColor_U32(c.ImGuiCol_TabActive, 0xFF333333);
         c.igPushStyleVar_Vec2(c.ImGuiStyleVar_WindowPadding, c.ImVec2{ .x = 1.0, .y = 1.0 });
         c.igPushStyleVar_Float(c.ImGuiStyleVar_TabRounding, 3.0);
         _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a), @intToFloat(f32, self.window_size.b)), 0);
@@ -221,6 +223,7 @@ pub const App = struct {
         }
         c.igEnd();
         c.igPopStyleVar(2);
+        c.igPopStyleColor(2);
 
         // command input
         if (self.focused_widget == FocusedWidget.Command) {
