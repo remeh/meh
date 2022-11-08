@@ -44,7 +44,10 @@ pub const CursorMove = enum {
     PreviousSpace,
     NextLine,
     PreviousLine,
-    RespectPreviousIndent,
+    /// RespectPreviousLineIndent replicates previous line indentation on the current one.
+    RespectPreviousLineIndent,
+    /// AfterIndentation moves the cursor right until it is not on a space
+    AfterIndentation,
 };
 
 // TODO(remy): comment
@@ -123,9 +126,11 @@ pub const WidgetText = struct {
     // TODO(remy): comment
     viewport: WidgetTextViewport,
     one_char_size: Vec2f, // refreshed before every frame
+    // TODO(remy): move selection stuff in a new struct
     /// When a selection is started (either from mouse or from the keyboard),
     /// `start_selection_pos` contains the starting position of the selection.
     start_selection_pos: Vec2u,
+    selection: bool,
 
     // Constructors
     // ------------
@@ -135,15 +140,16 @@ pub const WidgetText = struct {
         return WidgetText{
             .allocator = allocator,
             .app = app,
+            .cursor = Cursor.init(),
             .editor = Editor.init(allocator, buffer),
+            .input_mode = InputMode.Insert,
+            .one_char_size = Vec2f{ .a = 0, .b = 0 },
+            .selection = false,
+            .start_selection_pos = Vec2u{ .a = 0, .b = 0 },
             .viewport = WidgetTextViewport{
                 .lines = Vec2u{ .a = 0, .b = 50 },
                 .columns = Vec2u{ .a = 0, .b = 100 },
             },
-            .cursor = Cursor.init(),
-            .input_mode = InputMode.Insert,
-            .one_char_size = Vec2f{ .a = 0, .b = 0 },
-            .start_selection_pos = Vec2u{ .a = 0, .b = 0 },
         };
     }
 
@@ -295,9 +301,12 @@ pub const WidgetText = struct {
     pub fn onTextInput(self: *WidgetText, txt: []const u8) bool {
         switch (self.input_mode) {
             .Insert => {
-                // TODO(remy): what if there is a selection
-                self.editor.insertUtf8Text(self.cursor.pos, txt) catch {}; // TODO(remy): do something with the error
-                self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
+                // TODO(remy): selection support
+                if (self.editor.insertUtf8Text(self.cursor.pos, txt)) {
+                    self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
+                } else |err| {
+                    std.log.err("WidgetText.onTextInput: can't insert utf8 text: {}", .{err});
+                }
             },
             else => {
                 switch (txt[0]) {
@@ -309,7 +318,7 @@ pub const WidgetText = struct {
                     'g' => self.moveCursorSpecial(CursorMove.StartOfBuffer, true),
                     'G' => self.moveCursorSpecial(CursorMove.EndOfBuffer, true),
                     // start inserting
-                    'i' => self.input_mode = .Insert, // TODO(remy): finish
+                    'i' => self.setInputMode(.Insert),
                     'I' => {
                         self.moveCursorSpecial(CursorMove.StartOfLine, true);
                         self.setInputMode(.Insert);
@@ -326,13 +335,13 @@ pub const WidgetText = struct {
                         self.moveCursorSpecial(CursorMove.StartOfLine, true);
                         self.newLine();
                         self.moveCursorSpecial(CursorMove.PreviousLine, true);
-                        self.moveCursorSpecial(CursorMove.RespectPreviousIndent, true);
+                        self.moveCursorSpecial(CursorMove.RespectPreviousLineIndent, true);
+                        self.moveCursorSpecial(CursorMove.EndOfLine, true);
                         self.setInputMode(.Insert);
                     },
                     'o' => {
                         self.moveCursorSpecial(CursorMove.EndOfLine, true);
                         self.newLine();
-                        self.moveCursorSpecial(CursorMove.RespectPreviousIndent, true);
                         self.setInputMode(.Insert);
                     },
                     // others
@@ -341,10 +350,12 @@ pub const WidgetText = struct {
                             if (self.cursor.pos.b > 0 and self.cursor.pos.b >= self.editor.buffer.lines.items.len) {
                                 self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true);
                             }
+                            self.validateCursorPosition(true);
                         } else |err| {
                             std.log.err("WidgetText.onTextInput: can't delete line: {}", .{err});
                         }
                     },
+                    // TODO(remy): selection support
                     'x' => {
                         // edge-case: last char of the line
                         if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
@@ -356,9 +367,12 @@ pub const WidgetText = struct {
                                 // special case, we don't want to do delete anything
                                 return true;
                             }
-                        } else |_| {} // TODO(remy): do something with the error
-                        self.editor.deleteUtf8Char(self.cursor.pos, false) catch {}; // TODO(remy): do something with the error
-                        // TODO(remy): what if there is a selection
+                        } else |err| {
+                            std.log.err("WidgetText.onTextInput: can't get line while executing 'x' input: {}", .{err});
+                        }
+                        self.editor.deleteUtf8Char(self.cursor.pos, false) catch |err| {
+                            std.log.err("WidgetText.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
+                        };
                     },
                     'u' => {
                         self.undo();
@@ -455,10 +469,17 @@ pub const WidgetText = struct {
     }
 
     pub fn onStartSelection(self: *WidgetText, window_pos: Vec2u) void {
+        if (window_pos.a < @floatToInt(usize, drawing_offset.a) or window_pos.b < @floatToInt(usize, drawing_offset.b)) {
+            return;
+        }
         self.start_selection_pos = self.cursorPosFromWindowPos(window_pos);
     }
 
     pub fn onStopSelection(self: *WidgetText, window_pos: Vec2u) void {
+        if (window_pos.a < @floatToInt(usize, drawing_offset.a) or window_pos.b < @floatToInt(usize, drawing_offset.b)) {
+            return;
+        }
+
         var stop_selection_pos = self.cursorPosFromWindowPos(window_pos);
 
         // selection has stopped where it has started, consider this as a click.
@@ -478,8 +499,8 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    /// If you want to make sure the cursor is on a valid position, you can call
-    /// it with a zero vector `moveCursor(Vec2i{.a = 0, .b = 0}, true)`.
+    /// If you want to make sure the cursor is on a valid position, consider
+    /// using `validateCursorPosition`.
     pub fn moveCursor(self: *WidgetText, move: Vec2i, scroll: bool) void {
         var cursor_pos = Vec2utoi(self.cursor.pos);
         var line: *U8Slice = undefined;
@@ -599,8 +620,32 @@ pub const WidgetText = struct {
                 self.moveCursor(Vec2i{ .a = 0, .b = -1 }, scroll);
                 scrolled = scroll;
             },
-            .RespectPreviousIndent => {
-                std.log.debug("moveCursorSpecial.RespectPreviousIndent: implement me!", .{}); // TODO(remy): implement
+            // TODO(remy): unit test
+            .AfterIndentation => {
+                if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
+                    if (l.size() == 0) {
+                        return;
+                    }
+                    var i: usize = 0;
+                    while (l.bytes()[i] == char_space) : (i += 1) {}
+                    self.moveCursor(Vec2i{ .a = @intCast(i64, i), .b = 0 }, true);
+                } else |_| {} // TODO(remy): do something with the error
+            },
+            // TODO(remy): unit test
+            .RespectPreviousLineIndent => {
+                if (self.cursor.pos.b == 0) {
+                    return;
+                }
+                if (self.editor.buffer.getLine(self.cursor.pos.b - 1)) |l| {
+                    if (l.size() == 0) {
+                        return;
+                    }
+                    var i: usize = 0;
+                    var start_line_pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
+                    while (l.bytes()[i] == char_space) : (i += 1) {
+                        self.editor.insertUtf8Text(start_line_pos, string_space) catch {}; // TODO(remy): do something with the error
+                    }
+                } else |_| {} // TODO(remy): do something with the error
             },
         }
 
@@ -621,8 +666,8 @@ pub const WidgetText = struct {
         };
         self.moveCursorSpecial(CursorMove.NextLine, true);
         self.moveCursorSpecial(CursorMove.StartOfLine, true);
-        // TODO(remy): smarter positioning of the cursor
-        // self.moveCursorSpecial(CursorMove.RespectPreviousIndent); // TODO
+        self.moveCursorSpecial(CursorMove.RespectPreviousLineIndent, true);
+        self.moveCursorSpecial(CursorMove.AfterIndentation, true);
     }
 
     // Others
