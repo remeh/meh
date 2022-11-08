@@ -20,6 +20,10 @@ pub const drawing_offset = Vec2f{ .a = 5, .b = 27 };
 pub const char_offset_before_move = 5;
 // TODO(remy): comment
 pub const page_move = 8;
+// TODO(remy): comment
+pub const tab_spaces = 4;
+pub const char_space = ' ';
+pub const string_space = " ";
 
 pub const InputMode = enum {
     Command,
@@ -336,6 +340,40 @@ pub const WidgetText = struct {
         return true;
     }
 
+    // TODO(remy): support untabbing selection
+    // TODO(remy): automatically respect previous indent on empty lines
+    pub fn onTab(self: *WidgetText, shift: bool) void {
+        switch (self.input_mode) {
+            .Insert => {
+                var i: usize = 0;
+                while (i < tab_spaces) : (i += 1) {
+                    self.editor.insertUtf8Text(self.cursor.pos, string_space) catch {}; // TODO(remy): grab the error
+                }
+                self.moveCursor(Vec2i{ .a = 4, .b = 0 }, true);
+            },
+            else => {
+                var i: usize = 0;
+                var pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
+                if (shift) {
+                    if (self.editor.buffer.getLine(pos.b)) |line| {
+                        while (i < tab_spaces) : (i += 1) {
+                            if (line.size() > 0 and line.data.items[0] == char_space) {
+                                self.editor.deleteUtf8Char(pos, false) catch {}; // TODO(remy): grab the error
+                            }
+                        }
+                    } else |_| {} // TODO(remy): grab the error
+                } else {
+                    while (i < tab_spaces) : (i += 1) {
+                        self.editor.insertUtf8Text(pos, string_space) catch {}; // TODO(remy): grab the error
+                    }
+                }
+            },
+        }
+
+        // make sure the cursor is on a viable position.
+        self.moveCursor(Vec2i{ .a = 0, .b = 0 }, true);
+    }
+
     pub fn onMouseWheel(self: *WidgetText, move: Vec2i) void {
         if (move.b < 0) {
             self.moveCursor(Vec2i{ .a = 0, .b = page_move }, true);
@@ -390,6 +428,8 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
+    /// If you want to make sure the cursor is on a valid position, you can call
+    /// it with a zero vector `moveCursor(Vec2i{.a = 0, .b = 0}, true)`.
     pub fn moveCursor(self: *WidgetText, move: Vec2i, scroll: bool) void {
         var cursor_pos = Vec2utoi(self.cursor.pos);
         var line: *U8Slice = undefined;
