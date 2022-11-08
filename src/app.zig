@@ -216,7 +216,7 @@ pub const App = struct {
             // TODO(remy): for (self.editors) |editor| blablabla
             std.mem.copy(u8, &filename, self.currentWidgetText().editor.buffer.filepath.bytes()); // TODO(remy): add random after ## (or full path?)
             if (c.igBeginTabItem(@ptrCast([*c]const u8, &filename), &open, c.ImGuiTabItemFlags_UnsavedDocument)) {
-                self.currentWidgetText().render(); // FIXME(remy): currentWidgetText should not be used or be better implemented
+                self.currentWidgetText().render(self.oneCharSize()); // FIXME(remy): currentWidgetText should not be used or be better implemented
                 c.igEndTabItem();
             }
             c.igEndTabBar();
@@ -401,6 +401,12 @@ pub const App = struct {
             },
             c.SDL_MOUSEWHEEL => {
                 _ = self.currentWidgetText().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
+            },
+            c.SDL_MOUSEBUTTONDOWN => {
+                self.currentWidgetText().onStartSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) });
+            },
+            c.SDL_MOUSEBUTTONUP => {
+                self.currentWidgetText().onStopSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) });
             },
             else => {},
         }

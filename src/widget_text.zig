@@ -122,22 +122,13 @@ pub const WidgetText = struct {
     input_mode: InputMode,
     // TODO(remy): comment
     viewport: WidgetTextViewport,
+    one_char_size: Vec2f, // refreshed before every frame
+    /// When a selection is started (either from mouse or from the keyboard),
+    /// `start_selection_pos` contains the starting position of the selection.
+    start_selection_pos: Vec2u,
 
     // Constructors
     // ------------
-
-    // TODO(remy): comment
-    pub fn initEmpty(allocator: std.mem.Allocator, app: *App) WidgetText {
-        var buffer = Buffer.initEmpty(allocator);
-        return WidgetText{
-            .allocator = allocator,
-            .app = app,
-            .editor = Editor.init(allocator, buffer),
-            .viewport = undefined,
-            .cursor = Cursor.init(),
-            .input_mode = InputMode.Insert,
-        };
-    }
 
     // TODO(remy): comment
     pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer) WidgetText {
@@ -151,6 +142,8 @@ pub const WidgetText = struct {
             },
             .cursor = Cursor.init(),
             .input_mode = InputMode.Insert,
+            .one_char_size = Vec2f{ .a = 0, .b = 0 },
+            .start_selection_pos = Vec2u{ .a = 0, .b = 0 },
         };
     }
 
@@ -163,17 +156,17 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
-    pub fn render(self: WidgetText) void {
+    pub fn render(self: *WidgetText, one_char_size: Vec2f) void {
         var draw_list = c.igGetWindowDrawList();
-        var one_char_size = self.app.oneCharSize();
-        self.renderLines(draw_list, one_char_size);
-        self.renderCursor(draw_list, one_char_size);
+        self.one_char_size = one_char_size;
+        self.renderLines(draw_list);
+        self.renderCursor(draw_list);
     }
 
-    fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: Vec2f) void {
+    fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList) void {
         // render the cursor only if it is visible
         if (self.isCursorVisible()) {
-            self.cursor.render(draw_list, self.input_mode, self.viewport, Vec2f{ .a = one_char_size.a, .b = one_char_size.b });
+            self.cursor.render(draw_list, self.input_mode, self.viewport, Vec2f{ .a = self.one_char_size.a, .b = self.one_char_size.b });
         }
     }
 
@@ -184,7 +177,7 @@ pub const WidgetText = struct {
             self.cursor.pos.a >= self.viewport.columns.a and self.cursor.pos.a <= self.viewport.columns.b);
     }
 
-    fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, one_char_size: Vec2f) void {
+    fn renderLines(self: WidgetText, draw_list: *c.ImDrawList) void {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
         var y_offset: f32 = 0;
@@ -200,7 +193,7 @@ pub const WidgetText = struct {
                 // empty line
                 if (buff.len == 0 or (buff.len == 1 and buff.*[0] == '\n') or buff.len < self.viewport.columns.a) {
                     c.ImDrawList_AddText_Vec2(draw_list, ImVec2(drawing_offset.a, drawing_offset.b + y_offset), 0xFFFFFFFF, "", 0);
-                    y_offset += one_char_size.b;
+                    y_offset += self.one_char_size.b;
                     continue;
                 }
 
@@ -211,7 +204,7 @@ pub const WidgetText = struct {
                 cbuff[j - self.viewport.columns.a] = 0;
 
                 c.ImDrawList_AddText_Vec2(draw_list, ImVec2(drawing_offset.a, drawing_offset.b + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, cbuff), 0);
-                y_offset += one_char_size.b;
+                y_offset += self.one_char_size.b;
 
                 // std.log.debug("self.buffer.data.items[{d}..{d}] (len: {d}) data: {s}", .{ @intCast(usize, pos.a), @intCast(usize, pos.b), self.buffer.data.items.len, @ptrCast([*:0]const u8, buff) });
             } else |_| {
@@ -250,6 +243,26 @@ pub const WidgetText = struct {
             self.viewport.columns.a += distance;
             self.viewport.columns.b += distance;
         }
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    fn cursorPosFromWindowPos(self: WidgetText, click_window_pos: Vec2u) Vec2u {
+        var rv = Vec2u{ .a = 0, .b = 0 };
+
+        // remove the offset
+        var in_editor = Vec2u{
+            .a = click_window_pos.a - @floatToInt(usize, drawing_offset.a),
+            .b = click_window_pos.b - @floatToInt(usize, drawing_offset.b),
+        };
+
+        rv.a = in_editor.a / @floatToInt(usize, self.one_char_size.a);
+        rv.b = in_editor.b / @floatToInt(usize, self.one_char_size.b);
+
+        rv.a += self.viewport.columns.a;
+        rv.b += self.viewport.lines.a;
+
+        return rv;
     }
 
     // Events methods
@@ -420,6 +433,22 @@ pub const WidgetText = struct {
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
             },
             else => {},
+        }
+    }
+
+    pub fn onStartSelection(self: *WidgetText, window_pos: Vec2u) void {
+        self.start_selection_pos = self.cursorPosFromWindowPos(window_pos);
+    }
+
+    pub fn onStopSelection(self: *WidgetText, window_pos: Vec2u) void {
+        var stop_selection_pos = self.cursorPosFromWindowPos(window_pos);
+        if (self.start_selection_pos.a == stop_selection_pos.a and
+            self.start_selection_pos.b == stop_selection_pos.b)
+        {
+            // same place, move the cursor there
+            self.cursor.pos = self.start_selection_pos;
+            // make sure the position is on text
+            self.moveCursor(Vec2i{ .a = 0, .b = 0 }, true);
         }
     }
 
