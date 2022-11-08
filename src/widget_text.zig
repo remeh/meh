@@ -265,6 +265,13 @@ pub const WidgetText = struct {
         return rv;
     }
 
+    fn setCursorPos(self: *WidgetText, pos: Vec2u, scroll: bool) void {
+        self.cursor.pos = pos;
+        if (scroll) {
+            self.scrollToCursor();
+        }
+    }
+
     // Events methods
     // --------------
 
@@ -308,8 +315,8 @@ pub const WidgetText = struct {
                         self.setInputMode(.Insert);
                     },
                     'a' => {
-                        self.setInputMode(.Insert);
                         self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
+                        self.setInputMode(.Insert);
                     },
                     'A' => {
                         self.moveCursorSpecial(CursorMove.EndOfLine, true);
@@ -339,6 +346,17 @@ pub const WidgetText = struct {
                         }
                     },
                     'x' => {
+                        // edge-case: last char of the line
+                        if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
+                            if (line.size() > 0 and
+                                ((self.cursor.pos.a == line.size() - 1 and self.cursor.pos.b < self.editor.buffer.lines.items.len - 1) // normal line
+                                or // normal line
+                                (self.cursor.pos.a == line.size() and self.cursor.pos.b == self.editor.buffer.lines.items.len - 1)) // very last line
+                            ) {
+                                // special case, we don't want to do delete anything
+                                return true;
+                            }
+                        } else |_| {} // TODO(remy): do something with the error
                         self.editor.deleteUtf8Char(self.cursor.pos, false) catch {}; // TODO(remy): do something with the error
                         // TODO(remy): what if there is a selection
                     },
@@ -384,7 +402,7 @@ pub const WidgetText = struct {
         }
 
         // make sure the cursor is on a viable position.
-        self.moveCursor(Vec2i{ .a = 0, .b = 0 }, true);
+        self.validateCursorPosition(true);
     }
 
     pub fn onMouseWheel(self: *WidgetText, move: Vec2i) void {
@@ -442,13 +460,16 @@ pub const WidgetText = struct {
 
     pub fn onStopSelection(self: *WidgetText, window_pos: Vec2u) void {
         var stop_selection_pos = self.cursorPosFromWindowPos(window_pos);
+
+        // selection has stopped where it has started, consider this as a click.
         if (self.start_selection_pos.a == stop_selection_pos.a and
             self.start_selection_pos.b == stop_selection_pos.b)
         {
-            // same place, move the cursor there
-            self.cursor.pos = self.start_selection_pos;
+            self.setCursorPos(self.start_selection_pos, false);
             // make sure the position is on text
-            self.moveCursor(Vec2i{ .a = 0, .b = 0 }, true);
+            self.validateCursorPosition(true);
+            // enter insert mode
+            self.setInputMode(.Insert);
         }
     }
 
@@ -482,8 +503,6 @@ pub const WidgetText = struct {
         // y movement
         if (cursor_pos.b + move.b <= 0) {
             self.cursor.pos.b = 0;
-        } else if (cursor_pos.b + move.b >= @intCast(usize, self.editor.buffer.lines.items.len) - 1) {
-            self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
         } else {
             self.cursor.pos.b = @intCast(usize, cursor_pos.b + move.b);
         }
@@ -491,21 +510,36 @@ pub const WidgetText = struct {
         // x movement
         if (cursor_pos.a + move.a <= 0) {
             self.cursor.pos.a = 0;
-        } else if (cursor_pos.a + move.a >= utf8size) {
-            self.cursor.pos.a = utf8size - 1;
         } else {
             self.cursor.pos.a = @intCast(usize, cursor_pos.a + move.a);
         }
 
-        // if the new line is smaller, go to the last char
-        if (self.editor.buffer.lines.items[self.cursor.pos.b].utf8size()) |new_line_size| {
-            if (new_line_size == 0) {
+        self.validateCursorPosition(scroll);
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn validateCursorPosition(self: *WidgetText, scroll: bool) void {
+        if (self.cursor.pos.b >= self.editor.buffer.lines.items.len and self.editor.buffer.lines.items.len > 0) {
+            self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
+        }
+
+        if (self.editor.buffer.lines.items[self.cursor.pos.b].utf8size()) |utf8size| {
+            if (utf8size == 0) {
                 self.cursor.pos.a = 0;
             } else {
-                self.cursor.pos.a = @min(new_line_size - 1, self.cursor.pos.a);
+                if (self.cursor.pos.a >= utf8size) {
+                    // there is a edge case: on the last line, we're OK going one
+                    // char out, in order to be able to insert new things there.
+                    if (self.cursor.pos.b < @intCast(i64, self.editor.buffer.lines.items.len) - 1) {
+                        self.cursor.pos.a = utf8size - 1;
+                    } else {
+                        self.cursor.pos.a = utf8size;
+                    }
+                }
             }
         } else |err| {
-            std.log.err("WidgetText.moveCursor: can't get utf8size of the new line {d}: {}", .{ cursor_pos.b, err });
+            std.log.err("WidgetText.moveCursor: can't get utf8size of the line {d}: {}", .{ self.cursor.pos.b, err });
         }
 
         if (scroll) {
@@ -520,10 +554,14 @@ pub const WidgetText = struct {
         switch (move) {
             .EndOfLine => {
                 if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
-                    if (l.bytes()[l.bytes().len - 1] == '\n') {
-                        self.cursor.pos.a = l.size() - 1;
-                    } else {
-                        self.cursor.pos.a = l.size();
+                    if (l.utf8size()) |utf8size| {
+                        if (l.bytes()[l.bytes().len - 1] == '\n') {
+                            self.cursor.pos.a = utf8size - 1;
+                        } else {
+                            self.cursor.pos.a = utf8size;
+                        }
+                    } else |err| {
+                        std.log.err("WidgetText.moveCursorSpecial.EndOfLine: can't get utf8size of the line: {}", .{err});
                     }
                 } else |err| {
                     std.log.err("WidgetText.moveCursorSpecial.EndOfLine: {}", .{err});
@@ -539,10 +577,13 @@ pub const WidgetText = struct {
                 std.log.debug("moveCursorSpecial.StartOfWord: implement me!", .{}); // TODO(remy): implement
             },
             .StartOfBuffer => {
+                self.cursor.pos.a = 0;
                 self.cursor.pos.b = 0;
             },
             .EndOfBuffer => {
                 self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
+                self.moveCursorSpecial(CursorMove.EndOfLine, scroll);
+                scrolled = scroll;
             },
             .NextSpace => {
                 std.log.debug("moveCursorSpecial.NextSpace: implement me!", .{}); // TODO(remy): implement
@@ -566,6 +607,9 @@ pub const WidgetText = struct {
         if (scroll and !scrolled) {
             self.scrollToCursor();
         }
+
+        // make sure the cursor is on a valid position
+        self.validateCursorPosition(scroll and !scrolled);
     }
 
     // TODO(remy): comment
@@ -586,13 +630,22 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     fn setInputMode(self: *WidgetText, input_mode: InputMode) void {
+        // there is a edge case when entering insert mode while on the very last
+        // char of the document.
+        if (input_mode == .Insert) {
+            if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
+                if (line.utf8size()) |utf8size| {
+                    if (self.cursor.pos.a == utf8size) {}
+                } else |_| {}
+            } else |_| {}
+        }
         self.input_mode = input_mode;
     }
 
     // TODO(remy): comment
     pub fn undo(self: *WidgetText) void {
         if (self.editor.undo()) |pos| {
-            self.cursor.pos = pos;
+            self.setCursorPos(pos, true);
         } else |err| {
             if (err != EditorError.NothingToUndo) {
                 std.log.err("WidgetText.undo: can't undo: {}", .{err});
@@ -601,7 +654,7 @@ pub const WidgetText = struct {
     }
 };
 
-test "editor moveCursor" {
+test "widget_text moveCursor" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
@@ -650,7 +703,32 @@ test "editor moveCursor" {
     widget.deinit();
 }
 
-test "widget_init_deinit" {
+test "widget_text moveCursorSpecial" {
+    const allocator = std.testing.allocator;
+    var app: *App = undefined;
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    var widget = WidgetText.initWithBuffer(allocator, app, buffer);
+    widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
+
+    widget.moveCursorSpecial(CursorMove.EndOfLine, true);
+    try expect(widget.cursor.pos.a == 11);
+    try expect(widget.cursor.pos.b == 0);
+    widget.moveCursorSpecial(CursorMove.StartOfLine, true);
+    try expect(widget.cursor.pos.a == 0);
+    try expect(widget.cursor.pos.b == 0);
+    widget.moveCursorSpecial(CursorMove.StartOfBuffer, true);
+    try expect(widget.cursor.pos.a == 0);
+    try expect(widget.cursor.pos.b == 0);
+    widget.moveCursorSpecial(CursorMove.EndOfBuffer, true);
+    try expect(widget.cursor.pos.b == 2);
+    // this one is the very end of the document, should not go "outside" of
+    // the buffer of one extra char.
+    try expect(widget.cursor.pos.b == 11);
+
+    widget.deinit();
+}
+
+test "widget_text init deinit" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");

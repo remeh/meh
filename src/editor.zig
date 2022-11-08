@@ -136,8 +136,6 @@ pub const Editor = struct {
         var line = try self.buffer.getLine(pos.b);
         if (left and pos.a == 0) {
             // TODO(remy): removing a line.
-        } else if (!left and pos.a == line.data.items.len - 1) {
-            // TODO(remy): merging the line.
         } else {
             var remove_pos: usize = 0;
             if (left) {
@@ -175,7 +173,7 @@ test "editor_new_line_and_undo" {
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(3)).bytes(), " a second line\n"));
-    try editor.undo();
+    _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and a second line\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "and a third"));
@@ -191,7 +189,7 @@ test "editor_delete_line_and_undo" {
     try editor.deleteLine(0);
     try expect(editor.buffer.lines.items.len == 1);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "and a third"));
-    try editor.undo();
+    _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and a second line\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "and a third"));
@@ -208,7 +206,7 @@ test "editor_delete_char_and_undo" {
     try editor.deleteUtf8Char(Vec2u{ .a = 0, .b = 0 }, false);
     try editor.deleteUtf8Char(Vec2u{ .a = 0, .b = 0 }, false);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "o world\n"));
-    try editor.undo();
+    _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "hello world\n"));
     try editor.deleteUtf8Char(Vec2u{ .a = 6, .b = 0 }, false);
     try editor.deleteUtf8Char(Vec2u{ .a = 6, .b = 0 }, false);
@@ -218,12 +216,14 @@ test "editor_delete_char_and_undo" {
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "ad a second line\n"));
     try editor.deleteLine(1);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "and a third"));
-    try editor.undo();
+    _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "ad a second line\n"));
-    try editor.undo();
+    _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "and a second line\n"));
-    try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "hello world\n"));
+    _ = editor.undo() catch |err| {
+        try expect(err == EditorError.NothingToUndo);
+    };
     editor.deinit();
 }
 
@@ -235,7 +235,7 @@ test "editor_delete_utf8_char_and_undo" {
     try editor.deleteUtf8Char(Vec2u{ .a = 0, .b = 0 }, false);
     try editor.deleteUtf8Char(Vec2u{ .a = 0, .b = 0 }, false);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "îôûñé👻"));
-    try editor.undo();
+    _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "🎃àéîôûñé👻"));
     editor.deinit();
 }
