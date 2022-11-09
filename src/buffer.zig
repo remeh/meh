@@ -108,21 +108,8 @@ pub const Buffer = struct {
             return BufferError.NoFilepath;
         }
 
-        // FIXME(remy): remove
-        var filepath = try U8Slice.initFromSlice(self.allocator, self.filepath.bytes());
-        defer filepath.deinit();
-        try filepath.appendConst(".meh");
-
         // check if the file exists, if not, try creating it
-        var file: std.fs.File = undefined;
-        if (std.fs.cwd().openFile(filepath.bytes(), .{ .mode = .write_only })) |f| {
-            file = f;
-        } else |err| {
-            if (err == std.fs.File.OpenError.FileNotFound) {
-                // try creating the file
-                file = try std.fs.cwd().createFile(filepath.bytes(), .{ .truncate = true });
-            }
-        }
+        var file = try (std.fs.cwd().createFile(self.filepath.bytes(), .{ .truncate = true }));
 
         // at this point, the file is opened, defer closing it.
         defer file.close();
