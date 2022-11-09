@@ -419,6 +419,8 @@ pub const WidgetText = struct {
         self.validateCursorPosition(true);
     }
 
+    // FIXME(remy): this should move the viewport but not moving the
+    // the cursor.
     pub fn onMouseWheel(self: *WidgetText, move: Vec2i) void {
         if (move.b < 0) {
             self.moveCursor(Vec2i{ .a = 0, .b = page_move }, true);

@@ -6,6 +6,7 @@ const Vec2i = @import("vec.zig").Vec2i;
 
 pub const BufferError = error{
     OutOfBuffer,
+    NoFilepath,
 };
 
 // TODO(remy): comment
@@ -101,7 +102,45 @@ pub const Buffer = struct {
     }
 
     // TODO(remy): comment
-    pub fn dump(self: Buffer, line_count: i64) void {
+    // TODO(remy): unit test
+    pub fn writeOnDisk(self: *Buffer) !void {
+        if (self.filepath.size() == 0) {
+            return BufferError.NoFilepath;
+        }
+
+        // FIXME(remy): remove
+        var filepath = try U8Slice.initFromSlice(self.allocator, self.filepath.bytes());
+        defer filepath.deinit();
+        try filepath.appendConst(".meh");
+
+        // check if the file exists, if not, try creating it
+        var file: std.fs.File = undefined;
+        if (std.fs.cwd().openFile(filepath.bytes(), .{ .mode = .write_only })) |f| {
+            file = f;
+        } else |err| {
+            if (err == std.fs.File.OpenError.FileNotFound) {
+                // try creating the file
+                file = try std.fs.cwd().createFile(filepath.bytes(), .{ .truncate = true });
+            }
+        }
+
+        // at this point, the file is opened, defer closing it.
+        defer file.close();
+
+        var buf_writer = std.io.bufferedWriter(file.writer());
+        var bytes_written: usize = 0;
+
+        for (self.lines.items) |line| {
+            bytes_written += try buf_writer.writer().write(line.bytes());
+        }
+
+        try buf_writer.flush();
+        self.in_ram_only = false;
+        std.log.debug("Buffer.writeOnDisk: write file {s}, bytes written: {d}", .{ self.filepath.bytes(), bytes_written });
+    }
+
+    // TODO(remy): remove
+    fn dump(self: Buffer, line_count: i64) void {
         var i: usize = 0;
         for (self.lines.items) |str| {
             std.log.debug("line {d}: {s}", .{ i, str.data.items });
