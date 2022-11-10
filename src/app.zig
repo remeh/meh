@@ -16,6 +16,8 @@ pub const FocusedWidget = enum {
     Command,
 };
 
+pub const EditorDrawingOffset = Vec2f{ .a = 55, .b = 27 };
+
 pub const FontMode = enum {
     LowDPI,
     LowDPIBigFont,
@@ -211,13 +213,13 @@ pub const App = struct {
         _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a), @intToFloat(f32, self.window_size.b)), 0);
         _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
 
-        // clean call
+        // clean the screen
         var draw_list = c.igGetWindowDrawList();
         c.ImDrawList_AddRectFilled(
             draw_list,
             ImVec2(0, 0),
             ImVec2(@intToFloat(f32, gl_w), @intToFloat(f32, gl_h)),
-            0xFF000000,
+            0xFF1E1E1E,
             1.0,
             0,
         );
@@ -282,8 +284,8 @@ pub const App = struct {
     /// depending on the size of the window.
     fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
         var one_char_size = self.oneCharSize();
-        var columns: f32 = @intToFloat(f32, self.window_size.a) / one_char_size.a;
-        var lines: f32 = @intToFloat(f32, self.window_size.b) / one_char_size.b;
+        var columns: f32 = (@intToFloat(f32, self.window_size.a) - EditorDrawingOffset.a) / one_char_size.a;
+        var lines: f32 = (@intToFloat(f32, self.window_size.b) - EditorDrawingOffset.b) / one_char_size.b;
         return Vec2u{
             .a = @floatToInt(u64, @ceil(columns)),
             .b = @floatToInt(u64, @ceil(lines)),
@@ -396,12 +398,10 @@ pub const App = struct {
                     c.SDLK_RETURN => {
                         self.currentWidgetText().onReturn();
                     },
-                    c.SDLK_ESCAPE => {
-                        // if the onEscape isn't absorbed by the WidgetText,
-                        // we will want to change the focus on widgets.
-                        if (!self.currentWidgetText().onEscape()) {
-                            self.focused_widget = FocusedWidget.Command;
-                        }
+                    c.SDLK_ESCAPE => _ = self.currentWidgetText().onEscape(),
+                    c.SDLK_COLON => {
+                        self.focused_widget = FocusedWidget.Command;
+                        // TODO(remy):    self.command.buff[0] = ':';
                     },
                     c.SDLK_BACKSPACE => {
                         self.currentWidgetText().onBackspace();

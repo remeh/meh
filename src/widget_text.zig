@@ -3,6 +3,7 @@ const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
+const EditorDrawingOffset = @import("app.zig").EditorDrawingOffset;
 const Buffer = @import("buffer.zig").Buffer;
 const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
@@ -15,7 +16,6 @@ const Vec2utoi = @import("vec.zig").Vec2utoi;
 
 // TODO(remy): where should we define this?
 // TODO(remy): comment
-pub const drawing_offset = Vec2f{ .a = 5, .b = 27 };
 // TODO(remy): comment
 pub const char_offset_before_move = 5;
 // TODO(remy): comment
@@ -86,8 +86,8 @@ pub const Cursor = struct {
                 var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
-                    ImVec2(drawing_offset.a + x1, drawing_offset.b + y1),
-                    ImVec2(drawing_offset.a + x2, drawing_offset.b + y2),
+                    ImVec2(EditorDrawingOffset.a + x1, EditorDrawingOffset.b + y1),
+                    ImVec2(EditorDrawingOffset.a + x2, EditorDrawingOffset.b + y2),
                     0xFFFFFFFF,
                     1.0,
                     0,
@@ -100,8 +100,8 @@ pub const Cursor = struct {
                 var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
-                    ImVec2(drawing_offset.a + x1, drawing_offset.b + y1),
-                    ImVec2(drawing_offset.a + x2, drawing_offset.b + y2),
+                    ImVec2(EditorDrawingOffset.a + x1, EditorDrawingOffset.b + y1),
+                    ImVec2(EditorDrawingOffset.a + x2, EditorDrawingOffset.b + y2),
                     0xFFFFFFFF,
                     1.0,
                     0,
@@ -198,7 +198,7 @@ pub const WidgetText = struct {
 
                 // empty line
                 if (buff.len == 0 or (buff.len == 1 and buff.*[0] == '\n') or buff.len < self.viewport.columns.a) {
-                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(drawing_offset.a, drawing_offset.b + y_offset), 0xFFFFFFFF, "", 0);
+                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(EditorDrawingOffset.a, EditorDrawingOffset.b + y_offset), 0xFFC0C0C0, "", 0);
                     y_offset += self.one_char_size.b;
                     continue;
                 }
@@ -209,7 +209,7 @@ pub const WidgetText = struct {
                 }
                 cbuff[j - self.viewport.columns.a] = 0;
 
-                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(drawing_offset.a, drawing_offset.b + y_offset), 0xFFFFFFFF, @ptrCast([*:0]const u8, cbuff), 0);
+                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(EditorDrawingOffset.a, EditorDrawingOffset.b + y_offset), 0xFFC0C0C0, @ptrCast([*:0]const u8, cbuff), 0);
                 y_offset += self.one_char_size.b;
 
                 // std.log.debug("self.buffer.data.items[{d}..{d}] (len: {d}) data: {s}", .{ @intCast(usize, pos.a), @intCast(usize, pos.b), self.buffer.data.items.len, @ptrCast([*:0]const u8, buff) });
@@ -258,8 +258,8 @@ pub const WidgetText = struct {
 
         // remove the offset
         var in_editor = Vec2u{
-            .a = click_window_pos.a - @floatToInt(usize, drawing_offset.a),
-            .b = click_window_pos.b - @floatToInt(usize, drawing_offset.b),
+            .a = click_window_pos.a - @floatToInt(usize, EditorDrawingOffset.a),
+            .b = click_window_pos.b - @floatToInt(usize, EditorDrawingOffset.b),
         };
 
         rv.a = in_editor.a / @floatToInt(usize, self.one_char_size.a);
@@ -471,14 +471,14 @@ pub const WidgetText = struct {
     }
 
     pub fn onStartSelection(self: *WidgetText, window_pos: Vec2u) void {
-        if (window_pos.a < @floatToInt(usize, drawing_offset.a) or window_pos.b < @floatToInt(usize, drawing_offset.b)) {
+        if (window_pos.a < @floatToInt(usize, EditorDrawingOffset.a) or window_pos.b < @floatToInt(usize, EditorDrawingOffset.b)) {
             return;
         }
         self.start_selection_pos = self.cursorPosFromWindowPos(window_pos);
     }
 
     pub fn onStopSelection(self: *WidgetText, window_pos: Vec2u) void {
-        if (window_pos.a < @floatToInt(usize, drawing_offset.a) or window_pos.b < @floatToInt(usize, drawing_offset.b)) {
+        if (window_pos.a < @floatToInt(usize, EditorDrawingOffset.a) or window_pos.b < @floatToInt(usize, EditorDrawingOffset.b)) {
             return;
         }
 
@@ -525,7 +525,8 @@ pub const WidgetText = struct {
             self.viewport.lines.b = @intCast(usize, lines_b);
         }
 
-        const longest_visible_line = self.editor.buffer.longestLine(self.viewport.lines.a, self.viewport.lines.b);
+        // +5 here to allow some space on the window right border and the text
+        const longest_visible_line = self.editor.buffer.longestLine(self.viewport.lines.a, self.viewport.lines.b) + 5;
 
         // columns
 
