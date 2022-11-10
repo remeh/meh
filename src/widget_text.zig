@@ -421,16 +421,16 @@ pub const WidgetText = struct {
 
     // FIXME(remy): this should move the viewport but not moving the
     // the cursor.
-    pub fn onMouseWheel(self: *WidgetText, move: Vec2i) void {
+    pub fn onMouseWheel(self: *WidgetText, move: Vec2i, visible_cols_and_lines: Vec2u) void {
         if (move.b < 0) {
-            self.moveCursor(Vec2i{ .a = 0, .b = page_move }, true);
+            self.moveViewport(Vec2i{ .a = 0, .b = page_move }, visible_cols_and_lines);
         } else if (move.b > 0) {
-            self.moveCursor(Vec2i{ .a = 0, .b = -page_move }, true);
+            self.moveViewport(Vec2i{ .a = 0, .b = -page_move }, visible_cols_and_lines);
         }
         if (move.a < 0) {
-            self.moveCursor(Vec2i{ .a = -(page_move / 2), .b = 0 }, true);
+            self.moveViewport(Vec2i{ .a = -(page_move / 2), .b = 0 }, visible_cols_and_lines);
         } else if (move.a > 0) {
-            self.moveCursor(Vec2i{ .a = (page_move / 2), .b = 0 }, true);
+            self.moveViewport(Vec2i{ .a = (page_move / 2), .b = 0 }, visible_cols_and_lines);
         }
     }
 
@@ -498,6 +498,55 @@ pub const WidgetText = struct {
 
     // Text edition methods
     // -------------------
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    // TODO(remy): implement smooth movement
+    pub fn moveViewport(self: *WidgetText, move: Vec2i, visible_cols_and_lines: Vec2u) void {
+        var cols_a: i64 = 0;
+        var cols_b: i64 = 0;
+        var lines_a: i64 = 0;
+        var lines_b: i64 = 0;
+        cols_a = @intCast(i64, self.viewport.columns.a) + move.a;
+        cols_b = @intCast(i64, self.viewport.columns.b) + move.a;
+
+        // lines
+
+        lines_a = @intCast(i64, self.viewport.lines.a) + move.b;
+        lines_b = @intCast(i64, self.viewport.lines.b) + move.b;
+
+        if (lines_a < 0) {
+            self.viewport.lines.a = 0;
+            self.viewport.lines.b = visible_cols_and_lines.b;
+        } else if (lines_a > self.editor.buffer.lines.items.len) {
+            return;
+        } else {
+            self.viewport.lines.a = @intCast(usize, lines_a);
+            self.viewport.lines.b = @intCast(usize, lines_b);
+        }
+
+        const longest_visible_line = self.editor.buffer.longestLine(self.viewport.lines.a, self.viewport.lines.b);
+
+        // columns
+
+        if (cols_a < 0) {
+            self.viewport.columns.a = 0;
+            self.viewport.columns.b = visible_cols_and_lines.a;
+        } else if (cols_b > longest_visible_line) {
+            self.viewport.columns.a = @intCast(usize, @max(0, @intCast(i64, longest_visible_line) - @intCast(i64, visible_cols_and_lines.a)));
+            self.viewport.columns.b = longest_visible_line;
+        } else {
+            self.viewport.columns.a = @intCast(usize, cols_a);
+            self.viewport.columns.b = @intCast(usize, cols_b);
+        }
+
+        if (self.viewport.columns.b > longest_visible_line) {
+            self.viewport.columns.a = @intCast(usize, @max(0, @intCast(i64, longest_visible_line) - @intCast(i64, visible_cols_and_lines.a)));
+            self.viewport.columns.b = @max(longest_visible_line, visible_cols_and_lines.a);
+        } else {
+            self.viewport.columns.b = self.viewport.columns.a + visible_cols_and_lines.a;
+        }
+    }
 
     // TODO(remy): comment
     // TODO(remy): unit test

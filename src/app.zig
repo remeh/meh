@@ -210,7 +210,20 @@ pub const App = struct {
         c.igPushStyleVar_Float(c.ImGuiStyleVar_TabRounding, 3.0);
         _ = c.igSetNextWindowSize(ImVec2(@intToFloat(f32, self.window_size.a), @intToFloat(f32, self.window_size.b)), 0);
         _ = c.igBegin("EditorWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
+
+        // clean call
+        var draw_list = c.igGetWindowDrawList();
+        c.ImDrawList_AddRectFilled(
+            draw_list,
+            ImVec2(0, 0),
+            ImVec2(@intToFloat(f32, gl_w), @intToFloat(f32, gl_h)),
+            0xFF000000,
+            1.0,
+            0,
+        );
+
         var open: bool = true;
+
         var filename: [8192]u8 = std.mem.zeroes([8192]u8);
         if (c.igBeginTabBar("##EditorTabs", c.ImGuiTabBarFlags_Reorderable)) {
             // TODO(remy): for (self.editors) |editor| blablabla
@@ -407,7 +420,7 @@ pub const App = struct {
                 _ = self.currentWidgetText().onTextInput(readTextFromSDLInput(&event.text.text));
             },
             c.SDL_MOUSEWHEEL => {
-                _ = self.currentWidgetText().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
+                _ = self.currentWidgetText().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y }, self.visibleColumnsAndLinesInWindow());
             },
             c.SDL_MOUSEBUTTONDOWN => {
                 self.currentWidgetText().onStartSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) });

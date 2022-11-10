@@ -166,6 +166,27 @@ pub const Buffer = struct {
         }
         return self.lines.orderedRemove(@intCast(usize, line_number));
     }
+
+    /// longestLine returns the size of the longest line in the lines visible
+    /// between the given interval.
+    pub fn longestLine(self: *Buffer, line_start: usize, line_end: usize) usize {
+        if (line_start >= self.lines.items.len) {
+            return 0;
+        }
+
+        var rv: usize = 0;
+        var i: usize = line_start;
+
+        while (i < line_end) : (i += 1) {
+            if (i < self.lines.items.len) {
+                if (self.getLine(i)) |line| {
+                    rv = @max(line.size(), rv);
+                } else |_| {}
+            }
+        }
+
+        return rv;
+    }
 };
 
 test "init_empty" {
