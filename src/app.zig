@@ -231,7 +231,7 @@ pub const App = struct {
             // TODO(remy): for (self.editors) |editor| blablabla
             std.mem.copy(u8, &filename, self.currentWidgetText().editor.buffer.filepath.bytes()); // TODO(remy): add random after ## (or full path?)
             if (c.igBeginTabItem(@ptrCast([*c]const u8, &filename), &open, c.ImGuiTabItemFlags_UnsavedDocument)) {
-                self.currentWidgetText().render(self.oneCharSize()); // FIXME(remy): currentWidgetText should not be used or be better implemented
+                self.currentWidgetText().render(self.oneCharSize(), self.window_size); // FIXME(remy): currentWidgetText should not be used or be better implemented
                 c.igEndTabItem();
             }
             c.igEndTabBar();

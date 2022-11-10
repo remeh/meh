@@ -162,10 +162,11 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
-    pub fn render(self: *WidgetText, one_char_size: Vec2f) void {
+    pub fn render(self: *WidgetText, one_char_size: Vec2f, window_size: Vec2i) void {
         var draw_list = c.igGetWindowDrawList();
         self.one_char_size = one_char_size;
         self.renderLines(draw_list);
+        self.renderLineNumbers(draw_list, window_size);
         self.renderCursor(draw_list);
     }
 
@@ -176,11 +177,52 @@ pub const WidgetText = struct {
         }
     }
 
-    /// `isCursorVisible` returns true if the cursor is visible in the window.
-    /// TODO(remy): test
-    fn isCursorVisible(self: WidgetText) bool {
-        return (self.cursor.pos.b >= self.viewport.lines.a and self.cursor.pos.b <= self.viewport.lines.b and
-            self.cursor.pos.a >= self.viewport.columns.a and self.cursor.pos.a <= self.viewport.columns.b);
+    fn renderLineNumbers(self: WidgetText, draw_list: *c.ImDrawList, window_size: Vec2i) void {
+        var carray: [128]u8 = std.mem.zeroes([128]u8);
+        var cbuff = &carray;
+
+        var i: usize = self.viewport.lines.a;
+        var y_offset: f32 = EditorDrawingOffset.b;
+
+        c.ImDrawList_AddRectFilled(
+            draw_list,
+            ImVec2(0, EditorDrawingOffset.b),
+            ImVec2(EditorDrawingOffset.a - 10, @intToFloat(f32, window_size.b)),
+            0xFF1A1A1A,
+            1.0,
+            0,
+        );
+
+        while (i < self.viewport.lines.b and i < self.editor.buffer.lines.items.len) : (i += 1) {
+            _ = std.fmt.bufPrintZ(cbuff, "{d}", .{i + 1}) catch |err| {
+                std.log.err("WidgetText.renderLineNumbers: can't render line number {}: {}", .{ i, err });
+                return;
+            };
+
+            var text_color: c_uint = 0xFF5A5A5A;
+
+            if (i == self.cursor.pos.b) {
+                c.ImDrawList_AddRectFilled(
+                    draw_list,
+                    ImVec2(0, y_offset),
+                    ImVec2(EditorDrawingOffset.a - 10, y_offset + self.one_char_size.b),
+                    0xFF777777,
+                    0.0,
+                    0,
+                );
+                text_color = 0xFF000000;
+            }
+
+            c.ImDrawList_AddText_Vec2(
+                draw_list,
+                ImVec2(10, y_offset),
+                text_color,
+                cbuff,
+                0,
+            );
+
+            y_offset += self.one_char_size.b;
+        }
     }
 
     fn renderLines(self: WidgetText, draw_list: *c.ImDrawList) void {
@@ -188,7 +230,7 @@ pub const WidgetText = struct {
         var j: usize = self.viewport.columns.a;
         var y_offset: f32 = 0;
 
-        var carray: [8192]u8 = undefined;
+        var carray: [8192]u8 = std.mem.zeroes([8192]u8);
         var cbuff = &carray;
 
         while (i < self.viewport.lines.b) : (i += 1) {
@@ -251,6 +293,13 @@ pub const WidgetText = struct {
         }
     }
 
+    /// `isCursorVisible` returns true if the cursor is visible in the window.
+    /// TODO(remy): test
+    fn isCursorVisible(self: WidgetText) bool {
+        return (self.cursor.pos.b >= self.viewport.lines.a and self.cursor.pos.b <= self.viewport.lines.b and
+            self.cursor.pos.a >= self.viewport.columns.a and self.cursor.pos.a <= self.viewport.columns.b);
+    }
+
     // TODO(remy): comment
     // TODO(remy): unit test
     fn cursorPosFromWindowPos(self: WidgetText, click_window_pos: Vec2u) Vec2u {
@@ -283,7 +332,6 @@ pub const WidgetText = struct {
 
     /// onCtrlKeyDown is called when a key has been pressed while a ctrl key is held down.
     pub fn onCtrlKeyDown(self: *WidgetText, keycode: i32) bool {
-        std.log.debug("keycode: {d}", .{keycode});
         switch (keycode) {
             'd' => {
                 self.moveCursor(Vec2i{ .a = 0, .b = page_move }, true);
