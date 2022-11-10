@@ -244,8 +244,6 @@ pub const App = struct {
         c.igRender();
         c.ImGui_ImplOpenGL3_RenderDrawData(c.igGetDrawData());
         c.SDL_GL_SwapWindow(self.sdl_window);
-
-        c.SDL_Delay(16);
     }
 
     fn setFontMode(self: *App, font_mode: FontMode) void {
@@ -318,8 +316,9 @@ pub const App = struct {
         var event: c.SDL_Event = undefined;
         self.is_running = true;
         while (self.is_running) {
+            var to_refresh = false;
             while (c.SDL_PollEvent(&event) > 0) {
-                _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
+                to_refresh = c.ImGui_ImplSDL2_ProcessEvent(&event) or to_refresh;
 
                 if (event.type == c.SDL_QUIT) {
                     self.quit();
@@ -332,6 +331,7 @@ pub const App = struct {
                         if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
                             self.onWindowResized(event.window.data1, event.window.data2);
                         }
+                        to_refresh = true;
                     },
                     else => {},
                 }
@@ -340,14 +340,21 @@ pub const App = struct {
                 switch (self.focused_widget) {
                     .Command => {
                         self.commandEvents(event);
+                        to_refresh = true;
                     },
                     .Editor => {
                         self.editorEvents(event);
+                        to_refresh = true;
                     },
                 }
             }
 
-            self.render();
+            if (to_refresh) {
+                self.render();
+            } else {
+                c.SDL_Delay(16);
+            }
+            to_refresh = false;
         }
     }
 
