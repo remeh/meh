@@ -16,8 +16,6 @@ pub const FocusedWidget = enum {
     Command,
 };
 
-pub const EditorDrawingOffset = Vec2f{ .a = 55, .b = 27 };
-
 pub const FontMode = enum {
     LowDPI,
     LowDPIBigFont,
@@ -38,6 +36,8 @@ pub const App = struct {
     imgui_context: *c.ImGuiContext,
     sdl_window: *c.SDL_Window,
 
+    editor_drawing_offset: Vec2f,
+
     /// window_size is refreshed right before a frame rendering,
     /// it means this value can be used as the source of truth of
     /// the current windows size.
@@ -54,6 +54,7 @@ pub const App = struct {
     is_running: bool,
 
     // TODO(remy): comment
+    current_widget_text_tab: usize,
     focused_widget: FocusedWidget,
 
     // Constructors
@@ -119,8 +120,10 @@ pub const App = struct {
         // return the created app
         return App{
             .allocator = allocator,
+            .editor_drawing_offset = Vec2f{ .a = 64, .b = 27 },
             .editors = std.ArrayList(WidgetText).init(allocator),
             .command = WidgetCommand.init(),
+            .current_widget_text_tab = 0,
             .gl_context = gl_context,
             .imgui_context = imgui_context,
             .is_running = true,
@@ -173,7 +176,7 @@ pub const App = struct {
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
     pub fn currentWidgetText(self: App) *WidgetText {
-        return &self.editors.items[0];
+        return &self.editors.items[self.current_widget_text_tab];
     }
 
     fn render(self: *App) void {
@@ -225,14 +228,20 @@ pub const App = struct {
         );
 
         var open: bool = true;
+        var filename: [8192]u8 = undefined;
 
-        var filename: [8192]u8 = std.mem.zeroes([8192]u8);
         if (c.igBeginTabBar("##EditorTabs", c.ImGuiTabBarFlags_Reorderable)) {
-            // TODO(remy): for (self.editors) |editor| blablabla
-            std.mem.copy(u8, &filename, self.currentWidgetText().editor.buffer.filepath.bytes()); // TODO(remy): add random after ## (or full path?)
-            if (c.igBeginTabItem(@ptrCast([*c]const u8, &filename), &open, c.ImGuiTabItemFlags_UnsavedDocument)) {
-                self.currentWidgetText().render(self.oneCharSize(), self.window_size); // FIXME(remy): currentWidgetText should not be used or be better implemented
-                c.igEndTabItem();
+            var i: usize = 0;
+            while (i < self.editors.items.len) : (i += 1) {
+                filename = std.mem.zeroes([8192]u8);
+                var widget = &self.editors.items[i];
+                std.mem.copy(u8, &filename, widget.editor.buffer.filepath.bytes()); // TODO(remy): add random after ## (or full path?)
+                if (c.igBeginTabItem(@ptrCast([*c]const u8, &filename), &open, c.ImGuiTabItemFlags_UnsavedDocument)) {
+                    self.current_widget_text_tab = i;
+                    widget.render(self.oneCharSize(), self.window_size, self.editor_drawing_offset);
+
+                    c.igEndTabItem();
+                }
             }
             c.igEndTabBar();
         }
@@ -267,14 +276,17 @@ pub const App = struct {
             .LowDPI => {
                 c.igGetIO().*.FontDefault = self.font_lowdpi;
                 c.igGetIO().*.FontGlobalScale = 1.0;
+                self.editor_drawing_offset.a = 7 * 8; // 7 chars of width 8
             },
             .LowDPIBigFont => {
                 c.igGetIO().*.FontDefault = self.font_lowdpibigfont;
                 c.igGetIO().*.FontGlobalScale = 1.0;
+                self.editor_drawing_offset.a = 7 * 10; // 7 chars of width 10
             },
             .HiDPI => {
                 c.igGetIO().*.FontDefault = self.font_hidpi;
                 c.igGetIO().*.FontGlobalScale = 0.5;
+                self.editor_drawing_offset.a = 7 * 8; // 7 chars of width 8
             },
         }
         self.font_mode = font_mode;
@@ -284,8 +296,8 @@ pub const App = struct {
     /// depending on the size of the window.
     fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
         var one_char_size = self.oneCharSize();
-        var columns: f32 = (@intToFloat(f32, self.window_size.a) - EditorDrawingOffset.a) / one_char_size.a;
-        var lines: f32 = (@intToFloat(f32, self.window_size.b) - EditorDrawingOffset.b) / one_char_size.b;
+        var columns: f32 = (@intToFloat(f32, self.window_size.a) - self.editor_drawing_offset.a) / one_char_size.a;
+        var lines: f32 = (@intToFloat(f32, self.window_size.b) - self.editor_drawing_offset.b) / one_char_size.b;
         return Vec2u{
             .a = @floatToInt(u64, @ceil(columns)),
             .b = @floatToInt(u64, @ceil(lines)),
@@ -366,9 +378,8 @@ pub const App = struct {
 
             if (to_refresh) {
                 self.render();
-            } else {
-                c.SDL_Delay(16);
             }
+            c.SDL_Delay(1);
             to_refresh = false;
         }
     }
@@ -423,10 +434,10 @@ pub const App = struct {
                 _ = self.currentWidgetText().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y }, self.visibleColumnsAndLinesInWindow());
             },
             c.SDL_MOUSEBUTTONDOWN => {
-                self.currentWidgetText().onStartSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) });
+                self.currentWidgetText().onStartSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) }, self.editor_drawing_offset);
             },
             c.SDL_MOUSEBUTTONUP => {
-                self.currentWidgetText().onStopSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) });
+                self.currentWidgetText().onStopSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) }, self.editor_drawing_offset);
             },
             else => {},
         }

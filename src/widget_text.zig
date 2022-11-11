@@ -3,7 +3,6 @@ const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
-const EditorDrawingOffset = @import("app.zig").EditorDrawingOffset;
 const Buffer = @import("buffer.zig").Buffer;
 const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
@@ -73,7 +72,7 @@ pub const Cursor = struct {
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
-    pub fn render(self: Cursor, draw_list: *c.ImDrawList, input_mode: InputMode, viewport: WidgetTextViewport, font_size: Vec2f) void {
+    pub fn render(self: Cursor, draw_list: *c.ImDrawList, input_mode: InputMode, viewport: WidgetTextViewport, editor_drawing_offset: Vec2f, font_size: Vec2f) void {
         // TODO(remy): columns
         var col_offset_in_buffer = viewport.columns.a;
         var line_offset_in_buffer = viewport.lines.a;
@@ -86,8 +85,8 @@ pub const Cursor = struct {
                 var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
-                    ImVec2(EditorDrawingOffset.a + x1, EditorDrawingOffset.b + y1),
-                    ImVec2(EditorDrawingOffset.a + x2, EditorDrawingOffset.b + y2),
+                    ImVec2(editor_drawing_offset.a + x1, editor_drawing_offset.b + y1),
+                    ImVec2(editor_drawing_offset.a + x2, editor_drawing_offset.b + y2),
                     0xFFFFFFFF,
                     1.0,
                     0,
@@ -100,8 +99,8 @@ pub const Cursor = struct {
                 var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
                 c.ImDrawList_AddRectFilled(
                     draw_list,
-                    ImVec2(EditorDrawingOffset.a + x1, EditorDrawingOffset.b + y1),
-                    ImVec2(EditorDrawingOffset.a + x2, EditorDrawingOffset.b + y2),
+                    ImVec2(editor_drawing_offset.a + x1, editor_drawing_offset.b + y1),
+                    ImVec2(editor_drawing_offset.a + x2, editor_drawing_offset.b + y2),
                     0xFFFFFFFF,
                     1.0,
                     0,
@@ -162,32 +161,32 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
-    pub fn render(self: *WidgetText, one_char_size: Vec2f, window_size: Vec2i) void {
+    pub fn render(self: *WidgetText, one_char_size: Vec2f, window_size: Vec2i, editor_drawing_offset: Vec2f) void {
         var draw_list = c.igGetWindowDrawList();
         self.one_char_size = one_char_size;
-        self.renderLines(draw_list);
-        self.renderLineNumbers(draw_list, window_size);
-        self.renderCursor(draw_list);
+        self.renderLines(draw_list, editor_drawing_offset);
+        self.renderLineNumbers(draw_list, window_size, editor_drawing_offset);
+        self.renderCursor(draw_list, editor_drawing_offset);
     }
 
-    fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList) void {
+    fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList, editor_drawing_offset: Vec2f) void {
         // render the cursor only if it is visible
         if (self.isCursorVisible()) {
-            self.cursor.render(draw_list, self.input_mode, self.viewport, Vec2f{ .a = self.one_char_size.a, .b = self.one_char_size.b });
+            self.cursor.render(draw_list, self.input_mode, self.viewport, editor_drawing_offset, Vec2f{ .a = self.one_char_size.a, .b = self.one_char_size.b });
         }
     }
 
-    fn renderLineNumbers(self: WidgetText, draw_list: *c.ImDrawList, window_size: Vec2i) void {
+    fn renderLineNumbers(self: WidgetText, draw_list: *c.ImDrawList, window_size: Vec2i, editor_drawing_offset: Vec2f) void {
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
 
         var i: usize = self.viewport.lines.a;
-        var y_offset: f32 = EditorDrawingOffset.b;
+        var y_offset: f32 = editor_drawing_offset.b;
 
         c.ImDrawList_AddRectFilled(
             draw_list,
-            ImVec2(0, EditorDrawingOffset.b),
-            ImVec2(EditorDrawingOffset.a - 10, @intToFloat(f32, window_size.b)),
+            ImVec2(0, editor_drawing_offset.b),
+            ImVec2(editor_drawing_offset.a - 10, @intToFloat(f32, window_size.b)),
             0xFF1A1A1A,
             1.0,
             0,
@@ -205,7 +204,7 @@ pub const WidgetText = struct {
                 c.ImDrawList_AddRectFilled(
                     draw_list,
                     ImVec2(0, y_offset),
-                    ImVec2(EditorDrawingOffset.a - 10, y_offset + self.one_char_size.b),
+                    ImVec2(editor_drawing_offset.a - 10, y_offset + self.one_char_size.b),
                     0xFF777777,
                     0.0,
                     0,
@@ -225,7 +224,7 @@ pub const WidgetText = struct {
         }
     }
 
-    fn renderLines(self: WidgetText, draw_list: *c.ImDrawList) void {
+    fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, editor_drawing_offset: Vec2f) void {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
         var y_offset: f32 = 0;
@@ -240,7 +239,7 @@ pub const WidgetText = struct {
 
                 // empty line
                 if (buff.len == 0 or (buff.len == 1 and buff.*[0] == '\n') or buff.len < self.viewport.columns.a) {
-                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(EditorDrawingOffset.a, EditorDrawingOffset.b + y_offset), 0xFFC0C0C0, "", 0);
+                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(editor_drawing_offset.a, editor_drawing_offset.b + y_offset), 0xFFC0C0C0, "", 0);
                     y_offset += self.one_char_size.b;
                     continue;
                 }
@@ -251,7 +250,7 @@ pub const WidgetText = struct {
                 }
                 cbuff[j - self.viewport.columns.a] = 0;
 
-                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(EditorDrawingOffset.a, EditorDrawingOffset.b + y_offset), 0xFFC0C0C0, @ptrCast([*:0]const u8, cbuff), 0);
+                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(editor_drawing_offset.a, editor_drawing_offset.b + y_offset), 0xFFC0C0C0, @ptrCast([*:0]const u8, cbuff), 0);
                 y_offset += self.one_char_size.b;
 
                 // std.log.debug("self.buffer.data.items[{d}..{d}] (len: {d}) data: {s}", .{ @intCast(usize, pos.a), @intCast(usize, pos.b), self.buffer.data.items.len, @ptrCast([*:0]const u8, buff) });
@@ -302,13 +301,13 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    fn cursorPosFromWindowPos(self: WidgetText, click_window_pos: Vec2u) Vec2u {
+    fn cursorPosFromWindowPos(self: WidgetText, click_window_pos: Vec2u, editor_drawing_offset: Vec2f) Vec2u {
         var rv = Vec2u{ .a = 0, .b = 0 };
 
         // remove the offset
         var in_editor = Vec2u{
-            .a = click_window_pos.a - @floatToInt(usize, EditorDrawingOffset.a),
-            .b = click_window_pos.b - @floatToInt(usize, EditorDrawingOffset.b),
+            .a = click_window_pos.a - @floatToInt(usize, editor_drawing_offset.a),
+            .b = click_window_pos.b - @floatToInt(usize, editor_drawing_offset.b),
         };
 
         rv.a = in_editor.a / @floatToInt(usize, self.one_char_size.a);
@@ -518,19 +517,19 @@ pub const WidgetText = struct {
         }
     }
 
-    pub fn onStartSelection(self: *WidgetText, window_pos: Vec2u) void {
-        if (window_pos.a < @floatToInt(usize, EditorDrawingOffset.a) or window_pos.b < @floatToInt(usize, EditorDrawingOffset.b)) {
+    pub fn onStartSelection(self: *WidgetText, window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+        if (window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
             return;
         }
-        self.start_selection_pos = self.cursorPosFromWindowPos(window_pos);
+        self.start_selection_pos = self.cursorPosFromWindowPos(window_pos, editor_drawing_offset);
     }
 
-    pub fn onStopSelection(self: *WidgetText, window_pos: Vec2u) void {
-        if (window_pos.a < @floatToInt(usize, EditorDrawingOffset.a) or window_pos.b < @floatToInt(usize, EditorDrawingOffset.b)) {
+    pub fn onStopSelection(self: *WidgetText, window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+        if (window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
             return;
         }
 
-        var stop_selection_pos = self.cursorPosFromWindowPos(window_pos);
+        var stop_selection_pos = self.cursorPosFromWindowPos(window_pos, editor_drawing_offset);
 
         // selection has stopped where it has started, consider this as a click.
         if (self.start_selection_pos.a == stop_selection_pos.a and
@@ -840,8 +839,7 @@ test "widget_text moveCursor" {
     try expect(widget.cursor.pos.b == 0);
     // big move right and up, should reach the last line and its end
     widget.moveCursor(Vec2i{ .a = 100, .b = 100 }, true);
-    var size = buffer.lines.items[0].size();
-    std.log.debug("{d}", .{size});
+    // var size = buffer.lines.items[0].size();
     // try expect(widget.cursor.pos.a == buffer.lines.items[0].size() - 1); // FIXME(remy): broken unit test
     // try expect(widget.cursor.pos.b == buffer.lines.items.len - 1);
 
@@ -868,7 +866,8 @@ test "widget_text moveCursorSpecial" {
     try expect(widget.cursor.pos.b == 2);
     // this one is the very end of the document, should not go "outside" of
     // the buffer of one extra char.
-    try expect(widget.cursor.pos.b == 11);
+    try expect(widget.cursor.pos.a == 11);
+    try expect(widget.cursor.pos.b == 2);
 
     widget.deinit();
 }

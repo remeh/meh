@@ -3,6 +3,11 @@ const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
+const char_space = @import("widget_text.zig").char_space;
+
+const WidgetCommandError = error{
+    ArgsOutOfBounds,
+};
 
 // TODO(remy): comment
 pub const WidgetCommand = struct {
@@ -13,7 +18,7 @@ pub const WidgetCommand = struct {
 
     pub fn init() WidgetCommand {
         var rv = WidgetCommand{
-            .buff = undefined,
+            .buff = std.mem.zeroes([8192]u8),
         };
         rv.reset();
         return rv;
@@ -23,20 +28,40 @@ pub const WidgetCommand = struct {
     // -------
 
     pub fn interpret(self: *WidgetCommand, app: *App) void {
-        std.log.debug("WidgetCommand.interpret. buff: {s}", .{self.buff});
+        var command = self.getArg(0) catch {
+            return;
+        };
+
         // quit
-        if (std.mem.eql(u8, self.buff[0..2], "q!")) {
+        if (std.mem.eql(u8, command, "q!")) {
             app.quit();
         }
+
         // write
-        if (std.mem.eql(u8, self.buff[0..1], "w")) {
+        if (std.mem.eql(u8, command, "w")) {
             var wt = app.currentWidgetText();
             wt.editor.buffer.writeOnDisk() catch |err| {
                 std.log.err("Command.interpret: can't execute {s}: {}", .{ self.buff, err });
             };
         }
+
+        // open file
+        if (std.mem.eql(u8, command, "o")) {
+            if (self.countArgs() < 2) {
+                // TODO(remy): report errors in the app instead of in console
+                std.log.err("WidgetCommand.interpret: not enough arguments for 'o'", .{});
+                return;
+            }
+            if (self.getArg(1)) |f| {
+                app.openFile(f) catch |err| {
+                    std.log.err("WidgetCommand.interpret: can't open file: {}", .{err});
+                };
+                std.log.debug("{d}", .{app.editors.items.len});
+            } else |_| {}
+        }
+
         // debug
-        if (std.mem.eql(u8, self.buff[0..5], "debug")) {
+        if (std.mem.eql(u8, command, "debug")) {
             var widget_text = app.currentWidgetText();
             std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text.editor.buffer.filepath.bytes(), widget_text.editor.buffer.lines.items.len });
             std.log.debug("Window size: {}", .{app.window_size});
@@ -56,6 +81,7 @@ pub const WidgetCommand = struct {
                 std.log.debug("Line errored while using getLine: {}", .{err});
             }
         }
+
         self.reset();
     }
 
@@ -70,4 +96,77 @@ pub const WidgetCommand = struct {
         // we don't use it for now, here for later usage.
         return 0;
     }
+
+    /// countArgs returns how many arguments there currently is in the buff.
+    /// The first one (the command) is part of this total.
+    fn countArgs(self: WidgetCommand) usize {
+        var rv: usize = 1;
+        var i: usize = 0;
+        var was_space = false;
+        while (i < self.buff.len) : (i += 1) {
+            if (self.buff[i] == 0) {
+                return rv;
+            }
+            if (self.buff[i] == char_space) {
+                was_space = true;
+            } else {
+                if (was_space) {
+                    rv += 1;
+                }
+                was_space = false;
+            }
+        }
+        return 0;
+    }
+
+    /// getArg returns the arg at the given position.
+    /// Starts at 0, 0 being the command.
+    fn getArg(self: WidgetCommand, idx: usize) ![]const u8 {
+        if (idx > self.countArgs()) {
+            return WidgetCommandError.ArgsOutOfBounds;
+        }
+
+        // find the end
+        var size: usize = 0;
+        while (size < self.buff.len) : (size += 1) {
+            if (self.buff[size] == 0) {
+                break;
+            }
+        }
+
+        var arg: ?[]const u8 = undefined;
+        var it = std.mem.split(u8, self.buff[0..size], " ");
+        var i: usize = 0;
+        arg = it.first();
+        while (arg != null) {
+            if (arg.?.len == 0) {
+                arg = it.next();
+                continue;
+            }
+            if (i == idx) {
+                return arg.?;
+            }
+            i += 1;
+            arg = it.next();
+        }
+
+        return WidgetCommandError.ArgsOutOfBounds;
+    }
 };
+
+test "widget_command get args" {
+    var wc = WidgetCommand{
+        .buff = std.mem.zeroes([8192]u8),
+    };
+    std.mem.copy(u8, &wc.buff, "q");
+    try expect(wc.countArgs() == 1);
+    std.mem.copy(u8, &wc.buff, "o file.zig");
+    try expect(wc.countArgs() == 2);
+    std.mem.copy(u8, &wc.buff, "o  file.zig   file2.zig  file3.zig ");
+    try expect(wc.countArgs() == 4);
+    try expect(std.mem.eql(u8, try wc.getArg(0), "o"));
+    try expect(std.mem.eql(u8, try wc.getArg(1), "file.zig"));
+    try expect(std.mem.eql(u8, try wc.getArg(2), "file2.zig"));
+    try expect(std.mem.eql(u8, try wc.getArg(3), "file3.zig"));
+    try expect(wc.getArg(4) == WidgetCommandError.ArgsOutOfBounds);
+}
