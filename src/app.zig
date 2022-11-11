@@ -35,6 +35,9 @@ pub const App = struct {
     gl_context: c.SDL_GLContext,
     imgui_context: *c.ImGuiContext,
     sdl_window: *c.SDL_Window,
+    /// first_render is used to computes and validates a few things (window size, font sizes)
+    /// once the first frame has been rendered.
+    first_render: bool,
 
     editor_drawing_offset: Vec2f,
 
@@ -128,11 +131,12 @@ pub const App = struct {
             .imgui_context = imgui_context,
             .is_running = true,
             .sdl_window = sdl_window.?,
+            .first_render = true,
             .font_lowdpi = font_lowdpi,
             .font_lowdpibigfont = font_lowdpibigfont,
             .font_hidpi = font_hidpi,
-            .focused_widget = FocusedWidget.Editor,
             .font_mode = FontMode.LowDPI,
+            .focused_widget = FocusedWidget.Editor,
             .window_size = window_size,
         };
     }
@@ -169,7 +173,7 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         var buffer = try Buffer.initFromFile(self.allocator, filepath);
-        var editor = WidgetText.initWithBuffer(self.allocator, self, buffer);
+        var editor = WidgetText.initWithBuffer(self.allocator, self, buffer, self.visibleColumnsAndLinesInWindow());
         try self.editors.append(editor);
     }
 
@@ -268,6 +272,17 @@ pub const App = struct {
         c.igRender();
         c.ImGui_ImplOpenGL3_RenderDrawData(c.igGetDrawData());
         c.SDL_GL_SwapWindow(self.sdl_window);
+
+        // FIXME(remy): added this to see if that's fixing the bug on gnome3
+        if (self.first_render) {
+            var w: c_int = undefined;
+            var h: c_int = undefined;
+            c.SDL_GetWindowSize(self.sdl_window, &w, &h);
+            self.window_size.a = w;
+            self.window_size.b = h;
+            self.onWindowResized(w, h);
+            self.first_render = false;
+        }
     }
 
     fn setFontMode(self: *App, font_mode: FontMode) void {
@@ -294,7 +309,13 @@ pub const App = struct {
 
     /// visibleColumnsAndLinesInWindow returns how many lines can be drawn on the window
     /// depending on the size of the window.
-    fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
+    pub fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
+        // If no frame has been rendered, we can't compute the oneCharSize(),
+        // meanwhile, return some values.
+        if (self.first_render) {
+            return Vec2u{ .a = 100, .b = 50 };
+        }
+
         var one_char_size = self.oneCharSize();
         var columns: f32 = (@intToFloat(f32, self.window_size.a) - self.editor_drawing_offset.a) / one_char_size.a;
         var lines: f32 = (@intToFloat(f32, self.window_size.b) - self.editor_drawing_offset.b) / one_char_size.b;
@@ -376,10 +397,7 @@ pub const App = struct {
                 }
             }
 
-            if (to_refresh) {
-                self.render();
-            }
-            c.SDL_Delay(1);
+            self.render();
             to_refresh = false;
         }
     }
@@ -411,7 +429,9 @@ pub const App = struct {
                     },
                     c.SDLK_ESCAPE => _ = self.currentWidgetText().onEscape(),
                     c.SDLK_COLON => {
-                        self.focused_widget = FocusedWidget.Command;
+                        if (self.currentWidgetText().input_mode == .Command) {
+                            self.focused_widget = FocusedWidget.Command;
+                        }
                         // TODO(remy):    self.command.buff[0] = ':';
                     },
                     c.SDLK_BACKSPACE => {

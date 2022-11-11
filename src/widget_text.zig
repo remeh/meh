@@ -135,7 +135,7 @@ pub const WidgetText = struct {
     // ------------
 
     // TODO(remy): comment
-    pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer) WidgetText {
+    pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer, cols_and_lines: Vec2u) WidgetText {
         return WidgetText{
             .allocator = allocator,
             .app = app,
@@ -146,8 +146,8 @@ pub const WidgetText = struct {
             .selection = false,
             .start_selection_pos = Vec2u{ .a = 0, .b = 0 },
             .viewport = WidgetTextViewport{
-                .lines = Vec2u{ .a = 0, .b = 50 },
-                .columns = Vec2u{ .a = 0, .b = 100 },
+                .columns = Vec2u{ .a = 0, .b = cols_and_lines.a },
+                .lines = Vec2u{ .a = 0, .b = cols_and_lines.b },
             },
         };
     }
