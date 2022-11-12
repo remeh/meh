@@ -33,7 +33,7 @@ pub const WidgetCommand = struct {
         };
 
         // quit
-        if (std.mem.eql(u8, command, "q!")) {
+        if (std.mem.eql(u8, command, "q") or std.mem.eql(u8, command, "q!")) {
             app.quit();
         }
 

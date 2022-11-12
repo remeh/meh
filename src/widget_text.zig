@@ -271,7 +271,7 @@ pub const WidgetText = struct {
         }
 
         // the cursor is below
-        if (self.cursor.pos.b + char_offset_before_move > self.viewport.lines.b) { // FIXME(remy): this + 3 offset is suspicious
+        if (self.cursor.pos.b + char_offset_before_move > self.viewport.lines.b) {
             var distance = self.cursor.pos.b + char_offset_before_move - self.viewport.lines.b;
             self.viewport.lines.a += distance;
             self.viewport.lines.b += distance;
@@ -337,6 +337,32 @@ pub const WidgetText = struct {
             },
             'u' => {
                 self.moveCursor(Vec2i{ .a = 0, .b = -page_move }, true);
+            },
+            'v' => {
+                // read data from the clipboard
+                var data = c.SDL_GetClipboardText();
+                defer c.SDL_free(data);
+                // turn into an U8Slice
+                var str = U8Slice.initFromCSlice(self.allocator, data) catch |err| {
+                    std.log.err("WidgetText.onCtrlKeyDown: can't get clipboard data: {}", .{err});
+                    return true;
+                };
+                defer str.deinit();
+                // paste in the editor
+                self.editor.paste(self.cursor.pos, str) catch |err| {
+                    std.log.err("WidgetText.onCtrlKeyDown: can't paste clipboard data: {}", .{err});
+                    return true;
+                };
+                // move the cursor
+                // TODO(remy): lines move
+                var x_move: usize = 0;
+                if (str.utf8size()) |size| {
+                    x_move = size;
+                } else |err| {
+                    std.log.err("WidgetText.onCtrlKeyDown: can't compute x move: {}", .{err});
+                }
+
+                self.moveCursor(Vec2i{ .a = @intCast(i64, x_move), .b = 0 }, true);
             },
             else => {},
         }

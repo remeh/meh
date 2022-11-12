@@ -12,7 +12,7 @@ pub const ChangeType = enum {
     /// Deleted utf8 is available in `data`.
     DeleteUtf8Char,
     /// `InsertUtf8Char` is the action of inserting an utf8 character in a line.
-    /// The vector `pos` contains the position of the inserte character
+    /// The vector `pos` contains the position of the inserted character
     /// the position it is inserted. This pos is in utf8.
     /// There is no data in `data`.
     InsertUtf8Char,

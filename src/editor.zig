@@ -114,6 +114,18 @@ pub const Editor = struct {
         }
     }
 
+    pub fn paste(self: *Editor, pos: Vec2u, txt: U8Slice) !void {
+        var i: usize = 0;
+        var insert_pos: Vec2u = Vec2u{ .a = pos.a, .b = pos.b };
+        // TODO(remy): deal with \n
+        while (i < txt.data.items.len) {
+            var to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
+            try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add]);
+            insert_pos.a += to_add;
+            i += to_add;
+        }
+    }
+
     // TODO(remy): comment
     // TODO(remy): unit test
     /// `txt` must be in utf8.

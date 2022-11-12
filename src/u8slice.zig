@@ -37,6 +37,19 @@ pub const U8Slice = struct {
         return rv;
     }
 
+    /// initFromCSlice creates an U8Slice with the given bytes.
+    pub fn initFromCSlice(allocator: std.mem.Allocator, str: [*c]u8) !U8Slice {
+        var rv = initEmpty(allocator);
+        var i: usize = 0;
+        while (true) : (i += 1) {
+            if (str[i] == 0) {
+                break;
+            }
+            try rv.data.append(str[i]);
+        }
+        return rv;
+    }
+
     // Methods
     // -------
 
