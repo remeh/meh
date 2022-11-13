@@ -454,6 +454,9 @@ pub const App = struct {
             c.SDL_MOUSEWHEEL => {
                 _ = self.currentWidgetText().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y }, self.visibleColumnsAndLinesInWindow());
             },
+            c.SDL_MOUSEMOTION => {
+                self.currentWidgetText().onMouseMove(Vec2u{ .a = @intCast(usize, event.motion.x), .b = @intCast(usize, event.motion.y) }, self.editor_drawing_offset);
+            },
             c.SDL_MOUSEBUTTONDOWN => {
                 self.currentWidgetText().onStartSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) }, self.editor_drawing_offset);
             },

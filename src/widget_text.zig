@@ -115,6 +115,14 @@ pub const WidgetTextViewport = struct {
     columns: Vec2u,
 };
 
+pub const WidgetTextSelection = struct {
+    initial: Vec2u,
+    start: Vec2u,
+    stop: Vec2u,
+    active: bool,
+    in_progress: bool,
+};
+
 // TODO(remy): comment
 pub const WidgetText = struct {
     allocator: std.mem.Allocator,
@@ -124,12 +132,8 @@ pub const WidgetText = struct {
     input_mode: InputMode,
     // TODO(remy): comment
     viewport: WidgetTextViewport,
+    selection: WidgetTextSelection,
     one_char_size: Vec2f, // refreshed before every frame
-    // TODO(remy): move selection stuff in a new struct
-    /// When a selection is started (either from mouse or from the keyboard),
-    /// `start_selection_pos` contains the starting position of the selection.
-    start_selection_pos: Vec2u,
-    selection: bool,
 
     // Constructors
     // ------------
@@ -143,11 +147,16 @@ pub const WidgetText = struct {
             .editor = Editor.init(allocator, buffer),
             .input_mode = InputMode.Insert,
             .one_char_size = Vec2f{ .a = 0, .b = 0 },
-            .selection = false,
-            .start_selection_pos = Vec2u{ .a = 0, .b = 0 },
             .viewport = WidgetTextViewport{
                 .columns = Vec2u{ .a = 0, .b = cols_and_lines.a },
                 .lines = Vec2u{ .a = 0, .b = cols_and_lines.b },
+            },
+            .selection = WidgetTextSelection{
+                .start = Vec2u{ .a = 0, .b = 0 },
+                .initial = Vec2u{ .a = 0, .b = 0 },
+                .stop = Vec2u{ .a = 0, .b = 0 },
+                .active = false,
+                .in_progress = false,
             },
         };
     }
@@ -164,6 +173,7 @@ pub const WidgetText = struct {
     pub fn render(self: *WidgetText, one_char_size: Vec2f, window_size: Vec2i, editor_drawing_offset: Vec2f) void {
         var draw_list = c.igGetWindowDrawList();
         self.one_char_size = one_char_size;
+        self.renderSelection(draw_list, editor_drawing_offset);
         self.renderLines(draw_list, editor_drawing_offset);
         self.renderLineNumbers(draw_list, window_size, editor_drawing_offset);
         self.renderCursor(draw_list, editor_drawing_offset);
@@ -258,6 +268,43 @@ pub const WidgetText = struct {
                 // TODO(remy): do something with the error
             }
         }
+    }
+
+    fn renderSelection(self: WidgetText, draw_list: *c.ImDrawList, editor_drawing_offset: Vec2f) void {
+        if (!self.selection.active and !self.selection.in_progress) {
+            return;
+        }
+
+        var i: usize = self.viewport.lines.a;
+        var y_offset: f32 = 0;
+
+        while (i < self.viewport.lines.b) : (i += 1) {
+            if (i >= self.selection.start.b and i <= self.selection.stop.b) {
+                var start_x = editor_drawing_offset.a;
+                // start of the line or not?
+                if (self.selection.start.b == i) {
+                    start_x += @intToFloat(f32, self.selection.start.a) * self.one_char_size.a;
+                }
+                // end of the line or not?
+                var end_x = start_x + 800;
+                if (self.selection.stop.b == i) {
+                    end_x = editor_drawing_offset.a + @intToFloat(f32, self.selection.stop.a) * self.one_char_size.a;
+                }
+                // at least a part of this line is selected
+                c.ImDrawList_AddRectFilled(
+                    draw_list,
+                    ImVec2(start_x, editor_drawing_offset.b + y_offset),
+                    ImVec2(end_x, editor_drawing_offset.b + y_offset + self.one_char_size.b),
+                    0xFFAFAFAF,
+                    0.0,
+                    0,
+                );
+            }
+
+            y_offset += self.one_char_size.b;
+        }
+
+        return;
     }
 
     // TODO(remy): comment
@@ -537,30 +584,60 @@ pub const WidgetText = struct {
         }
     }
 
-    pub fn onStartSelection(self: *WidgetText, window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
-        if (window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
+    pub fn onMouseMove(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+        if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
             return;
         }
-        self.start_selection_pos = self.cursorPosFromWindowPos(window_pos, editor_drawing_offset);
+
+        var window_pos = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
+
+        if (self.selection.in_progress) {
+            if (window_pos.b < self.selection.initial.b or (window_pos.b == self.selection.initial.b and window_pos.a < self.selection.initial.a)) {
+                self.selection.start = window_pos;
+                self.selection.stop = self.selection.initial;
+            } else {
+                self.selection.start = self.selection.initial;
+                self.selection.stop = window_pos;
+            }
+        }
     }
 
-    pub fn onStopSelection(self: *WidgetText, window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
-        if (window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
+    pub fn onStartSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+        if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
             return;
         }
 
-        var stop_selection_pos = self.cursorPosFromWindowPos(window_pos, editor_drawing_offset);
+        self.selection.start = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
+        self.selection.initial = self.selection.start;
+        self.selection.stop = self.selection.start;
 
-        // selection has stopped where it has started, consider this as a click.
-        if (self.start_selection_pos.a == stop_selection_pos.a and
-            self.start_selection_pos.b == stop_selection_pos.b)
+        self.selection.in_progress = true;
+        self.selection.active = false;
+    }
+
+    pub fn onStopSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+        if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
+            return;
+        }
+
+        // in all cases, selection isn't in progress anwymore
+        self.selection.in_progress = false;
+
+        // selection has stopped where it has been initiated, consider this as a click.
+        if (self.selection.stop.a == self.selection.start.a and
+            self.selection.stop.b == self.selection.start.b)
         {
-            self.setCursorPos(self.start_selection_pos, false);
+            self.setCursorPos(self.selection.initial, false);
             // make sure the position is on text
             self.validateCursorPosition(true);
             // enter insert mode
             self.setInputMode(.Insert);
+            // selection inactive
+            self.selection.active = false;
+            return;
         }
+
+        self.selection.active = true;
     }
 
     // Text edition methods
