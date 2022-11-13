@@ -455,16 +455,33 @@ pub const App = struct {
                 _ = self.currentWidgetText().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y }, self.visibleColumnsAndLinesInWindow());
             },
             c.SDL_MOUSEMOTION => {
-                self.currentWidgetText().onMouseMove(Vec2u{ .a = @intCast(usize, event.motion.x), .b = @intCast(usize, event.motion.y) }, self.editor_drawing_offset);
+                self.currentWidgetText().onMouseMove(sdlMousePosToVec2u(event.motion.x, event.motion.y), self.editor_drawing_offset);
             },
             c.SDL_MOUSEBUTTONDOWN => {
-                self.currentWidgetText().onStartSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) }, self.editor_drawing_offset);
+                self.currentWidgetText().onMouseStartSelection(sdlMousePosToVec2u(event.button.x, event.button.y), self.editor_drawing_offset);
             },
             c.SDL_MOUSEBUTTONUP => {
-                self.currentWidgetText().onStopSelection(Vec2u{ .a = @intCast(usize, event.button.x), .b = @intCast(usize, event.button.y) }, self.editor_drawing_offset);
+                self.currentWidgetText().onMouseStopSelection(sdlMousePosToVec2u(event.button.x, event.button.y), self.editor_drawing_offset);
             },
             else => {},
         }
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    fn sdlMousePosToVec2u(x: c_int, y: c_int) Vec2u {
+        var rv = Vec2u{ .a = 0, .b = 0 };
+        if (x < 0) {
+            rv.a = 0;
+        } else {
+            rv.a = @intCast(usize, x);
+        }
+        if (y < 0) {
+            rv.b = 0;
+        } else {
+            rv.b = @intCast(usize, y);
+        }
+        return rv;
     }
 
     fn readTextFromSDLInput(sdl_text_input: []const u8) []const u8 {

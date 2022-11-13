@@ -28,8 +28,6 @@ pub const InputMode = enum {
     Command,
     Insert,
     Replace,
-    Visual,
-    VLine,
 };
 
 pub const CursorMove = enum {
@@ -279,29 +277,40 @@ pub const WidgetText = struct {
         var y_offset: f32 = 0;
 
         while (i < self.viewport.lines.b) : (i += 1) {
-            if (i >= self.selection.start.b and i <= self.selection.stop.b) {
-                var start_x = editor_drawing_offset.a;
-                // start of the line or not?
-                if (self.selection.start.b == i) {
-                    start_x += @intToFloat(f32, self.selection.start.a) * self.one_char_size.a;
-                }
-                // end of the line or not?
-                var end_x = start_x + 800;
-                if (self.selection.stop.b == i) {
-                    end_x = editor_drawing_offset.a + @intToFloat(f32, self.selection.stop.a) * self.one_char_size.a;
-                }
-                // at least a part of this line is selected
-                c.ImDrawList_AddRectFilled(
-                    draw_list,
-                    ImVec2(start_x, editor_drawing_offset.b + y_offset),
-                    ImVec2(end_x, editor_drawing_offset.b + y_offset + self.one_char_size.b),
-                    0xFFAFAFAF,
-                    0.0,
-                    0,
-                );
-            }
+            if (self.editor.buffer.getLine(i)) |line| {
+                var utf8size = line.utf8size() catch |err| {
+                    std.log.err("WidgetText.renderSelection: can't get utf8size of line {d}: {}", .{ i, err });
+                    return;
+                };
 
-            y_offset += self.one_char_size.b;
+                var viewport_x_offset = @intToFloat(f32, self.viewport.columns.a) * self.one_char_size.a;
+
+                if (i >= self.selection.start.b and i <= self.selection.stop.b) {
+                    var start_x = editor_drawing_offset.a;
+                    // start of the line or not?
+                    if (self.selection.start.b == i) {
+                        start_x += @intToFloat(f32, self.selection.start.a) * self.one_char_size.a - viewport_x_offset;
+                    }
+                    // end of the line or not?
+                    var end_x = editor_drawing_offset.a + (@intToFloat(f32, utf8size - 1)) * self.one_char_size.a - viewport_x_offset;
+                    if (self.selection.stop.b == i) {
+                        end_x = editor_drawing_offset.a + @intToFloat(f32, self.selection.stop.a) * self.one_char_size.a - viewport_x_offset;
+                    }
+                    // at least a part of this line is selected
+                    c.ImDrawList_AddRectFilled(
+                        draw_list,
+                        ImVec2(start_x, editor_drawing_offset.b + y_offset),
+                        ImVec2(end_x, editor_drawing_offset.b + y_offset + self.one_char_size.b),
+                        0x66AFAFAF,
+                        0.0,
+                        0,
+                    );
+                }
+                y_offset += self.one_char_size.b;
+            } else |err| {
+                std.log.err("WidgetText.renderSelection: can't get line {d}: {}", .{ i, err });
+                return;
+            }
         }
 
         return;
@@ -373,6 +382,70 @@ pub const WidgetText = struct {
         }
     }
 
+    fn startSelection(self: *WidgetText, cursor_pos: Vec2u) void {
+        self.setInputMode(.Command);
+
+        self.selection.start = cursor_pos;
+        self.selection.initial = self.selection.start;
+        self.selection.stop = self.selection.start;
+
+        self.selection.in_progress = true;
+        self.selection.active = false;
+    }
+
+    // TODO(remy): unit test
+    fn updateSelection(self: *WidgetText, cursor_pos: Vec2u) void {
+        if (self.selection.in_progress) {
+            if (cursor_pos.b < self.selection.initial.b or (cursor_pos.b == self.selection.initial.b and cursor_pos.a < self.selection.initial.a)) {
+                self.selection.start = cursor_pos;
+                self.selection.stop = self.selection.initial;
+            } else {
+                self.selection.start = self.selection.initial;
+                self.selection.stop = cursor_pos;
+            }
+        }
+    }
+
+    // TODO(remy): unit test
+    fn stopSelection(self: *WidgetText, active: bool) void {
+        if (!self.selection.in_progress) {
+            return;
+        }
+
+        // in all cases, selection isn't in progress anwymore
+        self.selection.in_progress = false;
+
+        // selection has stopped where it has been initiated, consider this as a click.
+        if (self.selection.stop.a == self.selection.start.a and
+            self.selection.stop.b == self.selection.start.b)
+        {
+            self.setCursorPos(self.selection.initial, false);
+            // make sure the position is on text
+            self.validateCursorPosition(true);
+            // enter insert mode
+            self.setInputMode(.Insert);
+            // selection inactive
+            self.selection.active = false;
+            return;
+        }
+
+        self.selection.active = active;
+    }
+
+    // TODO(remy): unit test
+    pub fn paste(self: *WidgetText) !void {
+        // read data from the clipboard
+        var data = c.SDL_GetClipboardText();
+        defer c.SDL_free(data);
+        // turn into an U8Slice
+        var str = try U8Slice.initFromCSlice(self.allocator, data);
+        defer str.deinit();
+        // paste in the editor
+        var new_cursor_pos = try self.editor.paste(self.cursor.pos, str);
+        // move the cursor
+        self.setCursorPos(new_cursor_pos, true);
+    }
+
     // Events methods
     // --------------
 
@@ -388,22 +461,10 @@ pub const WidgetText = struct {
                 self.moveCursor(Vec2i{ .a = 0, .b = -page_move }, true);
             },
             'v' => {
-                // read data from the clipboard
-                var data = c.SDL_GetClipboardText();
-                defer c.SDL_free(data);
-                // turn into an U8Slice
-                var str = U8Slice.initFromCSlice(self.allocator, data) catch |err| {
-                    std.log.err("WidgetText.onCtrlKeyDown: can't get clipboard data: {}", .{err});
-                    return true;
+                self.paste() catch |err| {
+                    std.log.err("WidgetText.onCtrlKeyDown: can't paste: {}", .{err});
                 };
-                defer str.deinit();
-                // paste in the editor
-                var new_cursor_pos = self.editor.paste(self.cursor.pos, str) catch |err| {
-                    std.log.err("WidgetText.onCtrlKeyDown: can't paste clipboard data: {}", .{err});
-                    return true;
-                };
-                // move the cursor
-                self.setCursorPos(new_cursor_pos, true);
+                return true;
             },
             else => {},
         }
@@ -457,6 +518,30 @@ pub const WidgetText = struct {
                         self.moveCursorSpecial(CursorMove.EndOfLine, true);
                         self.newLine();
                         self.setInputMode(.Insert);
+                    },
+                    // copy & paste
+                    'v' => {
+                        self.startSelection(self.cursor.pos);
+                    },
+                    'y' => {
+                        if (self.selection.in_progress or self.selection.active) {
+                            self.stopSelection(false);
+
+                            if (self.buildSelectedText()) |selected_text| {
+                                var data = selected_text.data.toOwnedSlice();
+                                selected_text.deinit();
+                                _ = c.SDL_SetClipboardText(@ptrCast([*:0]const u8, data));
+                            } else |err| {
+                                std.log.err("WidgetText.onTextInput: can't get selected text: {}", .{err});
+                            }
+
+                            self.selection.active = false;
+                        }
+                    },
+                    'p' => {
+                        self.paste() catch |err| {
+                            std.log.err("WidgetText.onTextInput: can't paste: {}", .{err});
+                        };
                     },
                     // others
                     'd' => {
@@ -548,6 +633,43 @@ pub const WidgetText = struct {
         }
     }
 
+    // TODO(remy): unit test
+    pub fn onMouseMove(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+        // ignore out of the editor click
+        if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
+            return;
+        }
+
+        // ignore movements when not selecting text.
+        if (!self.selection.in_progress) {
+            return;
+        }
+
+        var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
+
+        if (cursor_pos.b < 0) {
+            cursor_pos.b = 0;
+        } else if (cursor_pos.b >= self.editor.buffer.lines.items.len) {
+            cursor_pos.b = self.editor.buffer.lines.items.len - 1;
+        }
+
+        var line = self.editor.buffer.getLine(cursor_pos.b) catch |err| {
+            std.log.err("WindowText.onMouseMove: can't get current line {d}: {}", .{ cursor_pos.b, err });
+            return;
+        };
+        var utf8size = line.utf8size() catch |err| {
+            std.log.err("WindowText.onMouseMove: can't get current line utf8size {d}: {}", .{ cursor_pos.b, err });
+            return;
+        };
+
+        if (cursor_pos.a > utf8size) {
+            cursor_pos.a = utf8size;
+        }
+
+        self.updateSelection(cursor_pos);
+        self.setCursorPos(cursor_pos, true);
+    }
+
     // TODO(remy): comment
     // TODO(remy): unit test
     pub fn onReturn(self: *WidgetText) void {
@@ -561,8 +683,14 @@ pub const WidgetText = struct {
     // TODO(remy): comment
     /// returns true if the event has been absorbed by the WidgetText.
     pub fn onEscape(self: *WidgetText) bool {
+        // stop selection mode
+        self.stopSelection(false);
+        self.selection.active = false;
+
+        // checks if we have to enter command mode
         switch (self.input_mode) {
             .Insert, .Replace => {
+                // enter command mod
                 self.input_mode = InputMode.Command;
                 return true;
             },
@@ -584,64 +712,63 @@ pub const WidgetText = struct {
         }
     }
 
-    pub fn onMouseMove(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+    // TODO(remy): unit test
+    pub fn onMouseStartSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
         if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
             return;
         }
 
-        var window_pos = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
-
-        if (self.selection.in_progress) {
-            if (window_pos.b < self.selection.initial.b or (window_pos.b == self.selection.initial.b and window_pos.a < self.selection.initial.a)) {
-                self.selection.start = window_pos;
-                self.selection.stop = self.selection.initial;
-            } else {
-                self.selection.start = self.selection.initial;
-                self.selection.stop = window_pos;
-            }
-        }
+        var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
+        self.startSelection(cursor_pos);
     }
 
-    pub fn onStartSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+    // TODO(remy): unit test
+    pub fn onMouseStopSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
         if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
             return;
         }
 
-        self.selection.start = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
-        self.selection.initial = self.selection.start;
-        self.selection.stop = self.selection.start;
-
-        self.selection.in_progress = true;
-        self.selection.active = false;
-    }
-
-    pub fn onStopSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
-        if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
-            return;
-        }
-
-        // in all cases, selection isn't in progress anwymore
-        self.selection.in_progress = false;
-
-        // selection has stopped where it has been initiated, consider this as a click.
-        if (self.selection.stop.a == self.selection.start.a and
-            self.selection.stop.b == self.selection.start.b)
-        {
-            self.setCursorPos(self.selection.initial, false);
-            // make sure the position is on text
-            self.validateCursorPosition(true);
-            // enter insert mode
-            self.setInputMode(.Insert);
-            // selection inactive
-            self.selection.active = false;
-            return;
-        }
-
-        self.selection.active = true;
+        self.stopSelection(true);
     }
 
     // Text edition methods
     // -------------------
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    /// buildSelectedText always returns a string ended with a \0.
+    pub fn buildSelectedText(self: WidgetText) !*U8Slice {
+        var rv = U8Slice.initEmpty(self.allocator);
+        errdefer rv.deinit();
+
+        if (!self.selection.active) {
+            return &rv;
+        }
+
+        var i: usize = self.selection.start.b;
+        while (i <= self.selection.stop.b) : (i += 1) {
+            var line = try self.editor.buffer.getLine(i);
+            if (i == self.selection.start.b and i != self.selection.stop.b) {
+                // selection starting somewhere in the first line
+                var start_pos = try line.utf8pos(self.selection.start.a);
+                try rv.appendConst(line.bytes()[start_pos..line.size()]);
+            } else if (i == self.selection.start.b and i == self.selection.stop.b) {
+                // selection starting somewhere in the first line and ending in the same
+                var start_pos = try line.utf8pos(self.selection.start.a);
+                var end_pos = try line.utf8pos(self.selection.stop.a);
+                try rv.appendConst(line.bytes()[start_pos..end_pos]);
+            } else if (i != self.selection.start.b and i == self.selection.stop.b) {
+                var end_pos = try line.utf8pos(self.selection.stop.a);
+                try rv.appendConst(line.bytes()[0..end_pos]);
+            } else {
+                try rv.appendConst(line.bytes());
+            }
+        }
+
+        try rv.data.append(0);
+
+        return &rv;
+    }
 
     // TODO(remy): comment
     // TODO(remy): unit test
@@ -732,6 +859,10 @@ pub const WidgetText = struct {
         }
 
         self.validateCursorPosition(scroll);
+
+        if (self.selection.in_progress) {
+            self.updateSelection(self.cursor.pos);
+        }
     }
 
     // TODO(remy): comment
@@ -871,9 +1002,12 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     fn setInputMode(self: *WidgetText, input_mode: InputMode) void {
-        // there is a edge case when entering insert mode while on the very last
-        // char of the document.
         if (input_mode == .Insert) {
+            // stop any selection
+            self.stopSelection(false);
+
+            // there is a edge case when entering insert mode while on the very last
+            // char of the document.
             if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
                 if (line.utf8size()) |utf8size| {
                     if (self.cursor.pos.a == utf8size) {}
