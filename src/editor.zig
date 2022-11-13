@@ -12,6 +12,7 @@ const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
+const Vec2utoi = @import("vec.zig").Vec2utoi;
 
 pub const EditorError = error{
     NothingToUndo,
@@ -114,16 +115,28 @@ pub const Editor = struct {
         }
     }
 
-    pub fn paste(self: *Editor, pos: Vec2u, txt: U8Slice) !void {
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn paste(self: *Editor, pos: Vec2u, txt: U8Slice) !Vec2u {
         var i: usize = 0;
-        var insert_pos: Vec2u = Vec2u{ .a = pos.a, .b = pos.b };
+        var insert_pos = pos;
         // TODO(remy): deal with \n
         while (i < txt.data.items.len) {
+            // new line
+            if (txt.data.items[i] == '\n') {
+                try self.newLine(insert_pos, false);
+                insert_pos.a = 0;
+                insert_pos.b += 1;
+                i += 1;
+                continue;
+            }
+            // normal character
             var to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
             try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add]);
-            insert_pos.a += to_add;
+            insert_pos.a += 1;
             i += to_add;
         }
+        return insert_pos;
     }
 
     // TODO(remy): comment

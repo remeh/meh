@@ -421,6 +421,7 @@ pub const App = struct {
         var input_state = c.SDL_GetKeyboardState(null);
         var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
         var shift: bool = input_state[c.SDL_SCANCODE_LSHIFT] == 1 or input_state[c.SDL_SCANCODE_RSHIFT] == 1;
+        var cmd: bool = input_state[c.SDL_SCANCODE_LGUI] == 1 or input_state[c.SDL_SCANCODE_RGUI] == 1;
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
@@ -442,7 +443,7 @@ pub const App = struct {
                     },
                     else => {
                         if (ctrl) {
-                            _ = self.currentWidgetText().onCtrlKeyDown(event.key.keysym.sym);
+                            _ = self.currentWidgetText().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd);
                         }
                     },
                 }

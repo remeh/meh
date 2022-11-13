@@ -330,7 +330,9 @@ pub const WidgetText = struct {
     // --------------
 
     /// onCtrlKeyDown is called when a key has been pressed while a ctrl key is held down.
-    pub fn onCtrlKeyDown(self: *WidgetText, keycode: i32) bool {
+    pub fn onCtrlKeyDown(self: *WidgetText, keycode: i32, ctrl: bool, cmd: bool) bool {
+        _ = ctrl;
+        _ = cmd;
         switch (keycode) {
             'd' => {
                 self.moveCursor(Vec2i{ .a = 0, .b = page_move }, true);
@@ -349,20 +351,12 @@ pub const WidgetText = struct {
                 };
                 defer str.deinit();
                 // paste in the editor
-                self.editor.paste(self.cursor.pos, str) catch |err| {
+                var new_cursor_pos = self.editor.paste(self.cursor.pos, str) catch |err| {
                     std.log.err("WidgetText.onCtrlKeyDown: can't paste clipboard data: {}", .{err});
                     return true;
                 };
                 // move the cursor
-                // TODO(remy): lines move
-                var x_move: usize = 0;
-                if (str.utf8size()) |size| {
-                    x_move = size;
-                } else |err| {
-                    std.log.err("WidgetText.onCtrlKeyDown: can't compute x move: {}", .{err});
-                }
-
-                self.moveCursor(Vec2i{ .a = @intCast(i64, x_move), .b = 0 }, true);
+                self.setCursorPos(new_cursor_pos, true);
             },
             else => {},
         }
