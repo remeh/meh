@@ -1017,6 +1017,21 @@ pub const WidgetText = struct {
         self.input_mode = input_mode;
     }
 
+    /// goToLine goes to the given line.
+    /// First line starts at 1.
+    pub fn goToLine(self: *WidgetText, line_number: usize, scroll: bool) void {
+        var pos = Vec2u{ .a = self.cursor.pos.a, .b = line_number };
+
+        if (pos.b > 0) {
+            pos.b -= 1;
+        } else {
+            pos.b = 0;
+        }
+
+        self.setCursorPos(pos, false);
+        self.validateCursorPosition(scroll);
+    }
+
     // TODO(remy): comment
     pub fn undo(self: *WidgetText) void {
         if (self.editor.undo()) |pos| {

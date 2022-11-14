@@ -41,7 +41,7 @@ pub const WidgetCommand = struct {
         if (std.mem.eql(u8, command, "w")) {
             var wt = app.currentWidgetText();
             wt.editor.buffer.writeOnDisk() catch |err| {
-                std.log.err("Command.interpret: can't execute {s}: {}", .{ self.buff, err });
+                std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ self.buff, err });
             };
         }
 
@@ -58,6 +58,17 @@ pub const WidgetCommand = struct {
                 };
                 std.log.debug("{d}", .{app.editors.items.len});
             } else |_| {}
+        }
+
+        // go to line
+        if (command.len > 1 and std.mem.eql(u8, command[0..1], ":")) {
+            // read the line number
+            if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
+                var wt = app.currentWidgetText();
+                wt.goToLine(line_number, true);
+            } else |err| {
+                std.log.warn("WidgetCommand.interpret: can't read line number: {}", .{err});
+            }
         }
 
         // debug
