@@ -1048,7 +1048,7 @@ test "widget_text moveCursor" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetText.initWithBuffer(allocator, app, buffer);
+    var widget = WidgetText.initWithBuffer(allocator, app, buffer, Vec2u{. a = 50, .b = 100});
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     // top of the file, moving up shouldn't do anything
@@ -1096,7 +1096,7 @@ test "widget_text moveCursorSpecial" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetText.initWithBuffer(allocator, app, buffer);
+    var widget = WidgetText.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     widget.moveCursorSpecial(CursorMove.EndOfLine, true);
@@ -1122,6 +1122,6 @@ test "widget_text init deinit" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
-    var widget = WidgetText.initWithBuffer(allocator, app, buffer);
+    var widget = WidgetText.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
     widget.deinit();
 }
