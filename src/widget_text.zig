@@ -113,12 +113,18 @@ pub const WidgetTextViewport = struct {
     columns: Vec2u,
 };
 
+pub const SelectionState = enum {
+    Inactive,
+    KeyboardSelection,
+    MouseSelection,
+    Active,
+};
+
 pub const WidgetTextSelection = struct {
     initial: Vec2u,
     start: Vec2u,
     stop: Vec2u,
-    active: bool,
-    in_progress: bool,
+    state: SelectionState,
 };
 
 // TODO(remy): comment
@@ -153,8 +159,7 @@ pub const WidgetText = struct {
                 .start = Vec2u{ .a = 0, .b = 0 },
                 .initial = Vec2u{ .a = 0, .b = 0 },
                 .stop = Vec2u{ .a = 0, .b = 0 },
-                .active = false,
-                .in_progress = false,
+                .state = .Inactive,
             },
         };
     }
@@ -269,7 +274,7 @@ pub const WidgetText = struct {
     }
 
     fn renderSelection(self: WidgetText, draw_list: *c.ImDrawList, editor_drawing_offset: Vec2f) void {
-        if (!self.selection.active and !self.selection.in_progress) {
+        if (self.selection.state == .Inactive) {
             return;
         }
 
@@ -382,20 +387,19 @@ pub const WidgetText = struct {
         }
     }
 
-    fn startSelection(self: *WidgetText, cursor_pos: Vec2u) void {
+    fn startSelection(self: *WidgetText, cursor_pos: Vec2u, state: SelectionState) void {
         self.setInputMode(.Command);
 
         self.selection.start = cursor_pos;
         self.selection.initial = self.selection.start;
         self.selection.stop = self.selection.start;
 
-        self.selection.in_progress = true;
-        self.selection.active = false;
+        self.selection.state = state;
     }
 
     // TODO(remy): unit test
     fn updateSelection(self: *WidgetText, cursor_pos: Vec2u) void {
-        if (self.selection.in_progress) {
+        if (self.selection.state == .MouseSelection or self.selection.state == .KeyboardSelection) {
             if (cursor_pos.b < self.selection.initial.b or (cursor_pos.b == self.selection.initial.b and cursor_pos.a < self.selection.initial.a)) {
                 self.selection.start = cursor_pos;
                 self.selection.stop = self.selection.initial;
@@ -407,29 +411,27 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    fn stopSelection(self: *WidgetText, active: bool) void {
-        if (!self.selection.in_progress) {
+    fn stopSelection(self: *WidgetText, next_state: SelectionState) void {
+        if (self.selection.state == .Inactive) {
             return;
         }
 
-        // in all cases, selection isn't in progress anwymore
-        self.selection.in_progress = false;
-
         // selection has stopped where it has been initiated, consider this as a click.
-        if (self.selection.stop.a == self.selection.start.a and
+        if (self.selection.state == .MouseSelection and
+            self.selection.stop.a == self.selection.start.a and
             self.selection.stop.b == self.selection.start.b)
         {
             self.setCursorPos(self.selection.initial, false);
             // make sure the position is on text
             self.validateCursorPosition(true);
+            // selection inactive
+            self.selection.state = .Inactive;
             // enter insert mode
             self.setInputMode(.Insert);
-            // selection inactive
-            self.selection.active = false;
             return;
         }
 
-        self.selection.active = active;
+        self.selection.state = next_state;
     }
 
     // TODO(remy): unit test
@@ -521,10 +523,10 @@ pub const WidgetText = struct {
                     },
                     // copy & paste
                     'v' => {
-                        self.startSelection(self.cursor.pos);
+                        self.startSelection(self.cursor.pos, .KeyboardSelection);
                     },
                     'y' => {
-                        if (self.selection.in_progress or self.selection.active) {
+                        if (self.selection.state == .KeyboardSelection or self.selection.state == .Active) {
                             if (self.buildSelectedText()) |selected_text| {
                                 if (selected_text.size() > 0) {
                                     _ = c.SDL_SetClipboardText(@ptrCast([*:0]const u8, selected_text.data.items));
@@ -533,7 +535,7 @@ pub const WidgetText = struct {
                             } else |err| {
                                 std.log.err("WidgetText.onTextInput: can't get selected text: {}", .{err});
                             }
-                            self.stopSelection(false);
+                            self.stopSelection(.Inactive);
                         }
                     },
                     'p' => {
@@ -639,7 +641,7 @@ pub const WidgetText = struct {
         }
 
         // ignore movements when not selecting text.
-        if (!self.selection.in_progress) {
+        if (self.selection.state != .MouseSelection) {
             return;
         }
 
@@ -682,8 +684,7 @@ pub const WidgetText = struct {
     /// returns true if the event has been absorbed by the WidgetText.
     pub fn onEscape(self: *WidgetText) bool {
         // stop selection mode
-        self.stopSelection(false);
-        self.selection.active = false;
+        self.stopSelection(.Inactive);
 
         // checks if we have to enter command mode
         switch (self.input_mode) {
@@ -717,7 +718,7 @@ pub const WidgetText = struct {
         }
 
         var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
-        self.startSelection(cursor_pos);
+        self.startSelection(cursor_pos, .MouseSelection);
     }
 
     // TODO(remy): unit test
@@ -726,7 +727,8 @@ pub const WidgetText = struct {
             return;
         }
 
-        self.stopSelection(true);
+        // do not completely stop the selection, the user may want to finish it using the keyboard.
+        self.stopSelection(.KeyboardSelection);
     }
 
     // Text edition methods
@@ -739,7 +741,7 @@ pub const WidgetText = struct {
         var rv = U8Slice.initEmpty(self.allocator);
         errdefer rv.deinit();
 
-        if (!self.selection.active and !self.selection.in_progress) {
+        if (self.selection.state == .Inactive) {
             return rv;
         }
 
@@ -858,7 +860,7 @@ pub const WidgetText = struct {
 
         self.validateCursorPosition(scroll);
 
-        if (self.selection.in_progress) {
+        if (self.selection.state == .KeyboardSelection) {
             self.updateSelection(self.cursor.pos);
         }
     }
@@ -1002,7 +1004,7 @@ pub const WidgetText = struct {
     fn setInputMode(self: *WidgetText, input_mode: InputMode) void {
         if (input_mode == .Insert) {
             // stop any selection
-            self.stopSelection(false);
+            self.stopSelection(.Inactive);
 
             // there is a edge case when entering insert mode while on the very last
             // char of the document.
