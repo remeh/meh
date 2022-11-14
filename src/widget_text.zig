@@ -525,17 +525,15 @@ pub const WidgetText = struct {
                     },
                     'y' => {
                         if (self.selection.in_progress or self.selection.active) {
-                            self.stopSelection(false);
-
                             if (self.buildSelectedText()) |selected_text| {
-                                var data = selected_text.data.toOwnedSlice();
+                                if (selected_text.size() > 0) {
+                                    _ = c.SDL_SetClipboardText(@ptrCast([*:0]const u8, selected_text.data.items));
+                                }
                                 selected_text.deinit();
-                                _ = c.SDL_SetClipboardText(@ptrCast([*:0]const u8, data));
                             } else |err| {
                                 std.log.err("WidgetText.onTextInput: can't get selected text: {}", .{err});
                             }
-
-                            self.selection.active = false;
+                            self.stopSelection(false);
                         }
                     },
                     'p' => {
@@ -736,13 +734,13 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    /// buildSelectedText always returns a string ended with a \0.
-    pub fn buildSelectedText(self: WidgetText) !*U8Slice {
+    /// buildSelectedText always returns a string ending with a \0.
+    pub fn buildSelectedText(self: WidgetText) !U8Slice {
         var rv = U8Slice.initEmpty(self.allocator);
         errdefer rv.deinit();
 
-        if (!self.selection.active) {
-            return &rv;
+        if (!self.selection.active and !self.selection.in_progress) {
+            return rv;
         }
 
         var i: usize = self.selection.start.b;
@@ -764,10 +762,10 @@ pub const WidgetText = struct {
                 try rv.appendConst(line.bytes());
             }
         }
-
         try rv.data.append(0);
+        std.log.debug("rv: {s}", .{rv.bytes()});
 
-        return &rv;
+        return rv;
     }
 
     // TODO(remy): comment
