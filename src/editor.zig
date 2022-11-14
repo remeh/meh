@@ -16,6 +16,7 @@ const Vec2utoi = @import("vec.zig").Vec2utoi;
 
 pub const EditorError = error{
     NothingToUndo,
+    NoSearchResult,
 };
 
 // TODO(remy): comment
@@ -129,30 +130,6 @@ pub const Editor = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    pub fn paste(self: *Editor, pos: Vec2u, txt: U8Slice) !Vec2u {
-        var i: usize = 0;
-        var insert_pos = pos;
-        // TODO(remy): deal with \n
-        while (i < txt.data.items.len) {
-            // new line
-            if (txt.data.items[i] == '\n') {
-                try self.newLine(insert_pos, false);
-                insert_pos.a = 0;
-                insert_pos.b += 1;
-                i += 1;
-                continue;
-            }
-            // normal character
-            var to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
-            try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add]);
-            insert_pos.a += 1;
-            i += to_add;
-        }
-        return insert_pos;
-    }
-
-    // TODO(remy): comment
-    // TODO(remy): unit test
     /// `txt` must be in utf8.
     pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8) !void {
         var line = try self.buffer.getLine(@intCast(u64, pos.b));
@@ -191,6 +168,81 @@ pub const Editor = struct {
             var utf8_pos = Vec2u{ .a = remove_pos, .b = pos.b };
             self.historyAppend(ChangeType.DeleteUtf8Char, removed, utf8_pos);
         }
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn paste(self: *Editor, pos: Vec2u, txt: U8Slice) !Vec2u {
+        var i: usize = 0;
+        var insert_pos = pos;
+        // TODO(remy): deal with \n
+        while (i < txt.data.items.len) {
+            // new line
+            if (txt.data.items[i] == '\n') {
+                try self.newLine(insert_pos, false);
+                insert_pos.a = 0;
+                insert_pos.b += 1;
+                i += 1;
+                continue;
+            }
+            // normal character
+            var to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
+            try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add]);
+            insert_pos.a += 1;
+            i += to_add;
+        }
+        return insert_pos;
+    }
+
+    /// search looks for the given utf8 text starting from the given position
+    /// Use `before` to look before the given position instead of after.
+    /// TODO(remy): unit test
+    pub fn search(self: Editor, txt: U8Slice, starting_pos: Vec2u, before: bool) !Vec2u {
+        var i: usize = starting_pos.b;
+
+        if (starting_pos.b > self.buffer.lines.items.len) {
+            return EditorError.NoSearchResult;
+        }
+
+        while (i < self.buffer.lines.items.len) {
+            if (self.buffer.getLine(i)) |line| {
+                // check only the rest of the line if current line is the one the cursor is on
+                // otherwise, it's a "new" line to check, scan it completely
+                var utf8pos: usize = 0;
+                if (i == starting_pos.b) {
+                    if (line.utf8pos(starting_pos.a)) |pos| {
+                        utf8pos = pos;
+                        // if possible, we even want to move one char to the right,
+                        // to look for the next possible values.
+                        if (line.utf8size()) |utf8size| {
+                            if (utf8pos < utf8size - 1) {
+                                utf8pos += 1;
+                            }
+                        } else |_| {}
+                    } else |_| {}
+                }
+
+                // search, if anything is found, return the result
+                if (std.mem.indexOfPos(u8, line.bytes(), utf8pos, txt.bytes())) |result| {
+                    return Vec2u{ .a = result, .b = i };
+                }
+            } else |err| {
+                std.log.err("Editor.search: can't getLine: {}", .{err});
+                return EditorError.NoSearchResult;
+            }
+
+            if (before) {
+                if (i == 0) {
+                    return EditorError.NoSearchResult;
+                } else {
+                    i -= 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+
+        return EditorError.NoSearchResult;
     }
 };
 

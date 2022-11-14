@@ -3,6 +3,7 @@ const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
+const U8Slice = @import("u8slice.zig").U8Slice;
 const char_space = @import("widget_text.zig").char_space;
 
 const WidgetCommandError = error{
@@ -27,17 +28,21 @@ pub const WidgetCommand = struct {
     // Methods
     // -------
 
-    pub fn interpret(self: *WidgetCommand, app: *App) void {
+    pub fn interpret(self: *WidgetCommand, app: *App) !void {
         var command = self.getArg(0) catch {
             return;
         };
 
         // quit
+        // ----
+
         if (std.mem.eql(u8, command, "q") or std.mem.eql(u8, command, "q!")) {
             app.quit();
         }
 
         // write
+        // -----
+
         if (std.mem.eql(u8, command, "w")) {
             var wt = app.currentWidgetText();
             wt.editor.save() catch |err| {
@@ -46,6 +51,8 @@ pub const WidgetCommand = struct {
         }
 
         // open file
+        // ---------
+
         if (std.mem.eql(u8, command, "o")) {
             if (self.countArgs() < 2) {
                 // TODO(remy): report errors in the app instead of in console
@@ -60,6 +67,8 @@ pub const WidgetCommand = struct {
         }
 
         // go to line
+        // ----------
+
         if (command.len > 1 and std.mem.eql(u8, command[0..1], ":")) {
             // read the line number
             if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
@@ -70,7 +79,31 @@ pub const WidgetCommand = struct {
             }
         }
 
+        // search
+        // ------
+
+        if (command.len > 1 and std.mem.eql(u8, command[0..1], "/")) {
+            var str = try U8Slice.initFromSlice(app.allocator, command[1..command.len]);
+            defer str.deinit();
+
+            const args_count = self.countArgs();
+            if (args_count > 1) {
+                var i: usize = 1; // ignore the first one since it's the command
+                while (i < args_count) : (i += 1) {
+                    var arg = try self.getArg(i);
+                    try str.appendConst(" ");
+                    try str.appendConst(arg);
+                }
+            }
+
+            std.log.debug("WidgetCommand.interpret: search for {s}", .{str.bytes()});
+            var wt = app.currentWidgetText();
+            wt.search(str);
+        }
+
         // debug
+        // -----
+
         if (std.mem.eql(u8, command, "debug")) {
             var widget_text = app.currentWidgetText();
             std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text.editor.buffer.filepath.bytes(), widget_text.editor.buffer.lines.items.len });

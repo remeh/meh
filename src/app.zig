@@ -267,7 +267,9 @@ pub const App = struct {
             c.igSetKeyboardFocusHere(1);
             if (c.igInputText("##command", &self.command.buff, @sizeOf(@TypeOf(self.command.buff)), c.ImGuiInputTextFlags_EnterReturnsTrue | c.ImGuiInputTextFlags_CallbackAlways, WidgetCommand.callback, null)) {
                 // interpret the command
-                self.command.interpret(self);
+                self.command.interpret(self) catch |err| {
+                    std.log.err("app: can't interpret command: {}", .{err});
+                };
                 // command interpreted, close the prompt
                 self.focused_widget = FocusedWidget.Editor;
             }

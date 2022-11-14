@@ -321,7 +321,7 @@ pub const WidgetText = struct {
         return;
     }
 
-    // TODO(remy): comment
+    /// scrollToCursor scrolls to the cursor if it is not visible.
     // TODO(remy): unit test
     fn scrollToCursor(self: *WidgetText) void {
         // the cursor is above
@@ -387,6 +387,15 @@ pub const WidgetText = struct {
         }
     }
 
+    pub fn search(self: *WidgetText, txt: U8Slice) void {
+        if (self.editor.search(txt, self.cursor.pos, false)) |new_cursor_pos| {
+            self.setCursorPos(new_cursor_pos, true);
+        } else |err| {
+            std.log.warn("WidgetCommand.interpret: can't search for '{s}' in document '{s}': {}", .{ txt.bytes(), self.editor.buffer.filepath.bytes(), err });
+        }
+    }
+
+    // TODO(remy): unit test
     fn startSelection(self: *WidgetText, cursor_pos: Vec2u, state: SelectionState) void {
         self.setInputMode(.Command);
 
@@ -717,8 +726,13 @@ pub const WidgetText = struct {
             return;
         }
 
+        // move the mouse on the click
         var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
-        self.startSelection(cursor_pos, .MouseSelection);
+        self.setCursorPos(cursor_pos, false);
+        self.validateCursorPosition(true);
+
+        // use the position (which may have been corrected) as the selection start position
+        self.startSelection(self.cursor.pos, .MouseSelection);
     }
 
     // TODO(remy): unit test
@@ -1048,7 +1062,7 @@ test "widget_text moveCursor" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetText.initWithBuffer(allocator, app, buffer, Vec2u{. a = 50, .b = 100});
+    var widget = WidgetText.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     // top of the file, moving up shouldn't do anything
