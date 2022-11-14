@@ -260,7 +260,10 @@ pub const App = struct {
             _ = c.igBegin("CommandWindow", 1, c.ImGuiWindowFlags_NoDecoration | c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove);
             c.igSetKeyboardFocusHere(1);
             if (c.igInputText("##command", &self.command.buff, @sizeOf(@TypeOf(self.command.buff)), c.ImGuiInputTextFlags_EnterReturnsTrue | c.ImGuiInputTextFlags_CallbackAlways, WidgetCommand.callback, null)) {
+                // interpret the command
                 self.command.interpret(self);
+                // command interpreted, close the prompt
+                self.focused_widget = FocusedWidget.Editor;
             }
             c.igEnd();
         }
@@ -362,43 +365,84 @@ pub const App = struct {
     pub fn mainloop(self: *App) !void {
         c.SDL_StartTextInput(); // TODO(remy): do this only if current focus is the widget_text
         var event: c.SDL_Event = undefined;
+
         self.is_running = true;
+
+        const max_frameskip = 30;
+        const max_update_per_second = 60;
+        const delta_to_skip: i64 = 1000 / max_update_per_second;
+
+        var to_refresh = true;
+        var start_tick = std.time.milliTimestamp();
+        var next_tick = std.time.milliTimestamp();
+        var loop_count: usize = 0;
+
         while (self.is_running) {
-            var to_refresh = false;
-            while (c.SDL_PollEvent(&event) > 0) {
-                to_refresh = c.ImGui_ImplSDL2_ProcessEvent(&event) or to_refresh;
+            to_refresh = false;
+            loop_count = 0;
+            start_tick = std.time.milliTimestamp();
 
-                if (event.type == c.SDL_QUIT) {
-                    self.quit();
-                    break;
+            // events handling
+            // ---------------
+            while (std.time.milliTimestamp() > next_tick and loop_count < max_frameskip) {
+                while (c.SDL_PollEvent(&event) > 0) {
+                    to_refresh = c.ImGui_ImplSDL2_ProcessEvent(&event) or to_refresh;
+
+                    if (to_refresh) {
+                        self.render();
+                        to_refresh = false;
+                    }
+
+                    if (event.type == c.SDL_QUIT) {
+                        self.quit();
+                        break;
+                    }
+
+                    // events to handle independently of the currently focused widget
+                    switch (event.type) {
+                        c.SDL_WINDOWEVENT => {
+                            if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
+                                self.onWindowResized(event.window.data1, event.window.data2);
+                            }
+                            to_refresh = true;
+                        },
+                        else => {},
+                    }
+
+                    // events to handle differently per focused widget
+                    switch (self.focused_widget) {
+                        .Command => {
+                            self.commandEvents(event);
+                            to_refresh = true;
+                        },
+                        .Editor => {
+                            self.editorEvents(event);
+                            to_refresh = true;
+                        },
+                    }
                 }
 
-                // events to handle independently of the currently focused widget
-                switch (event.type) {
-                    c.SDL_WINDOWEVENT => {
-                        if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
-                            self.onWindowResized(event.window.data1, event.window.data2);
-                        }
-                        to_refresh = true;
-                    },
-                    else => {},
-                }
-
-                // events to handle differently per focused widget
-                switch (self.focused_widget) {
-                    .Command => {
-                        self.commandEvents(event);
-                        to_refresh = true;
-                    },
-                    .Editor => {
-                        self.editorEvents(event);
-                        to_refresh = true;
-                    },
-                }
+                // mainloop
+                next_tick += delta_to_skip;
+                loop_count += 1;
             }
 
-            self.render();
-            to_refresh = false;
+            // rendering
+            // ---------
+
+            if (to_refresh) {
+                self.render();
+            }
+
+            // see how long we can afford to sleep to still try to achieve 60fps
+            var delta = std.time.milliTimestamp() - start_tick;
+            if (delta < delta_to_skip) {
+                delta -= 3;
+                if (delta < 0) {
+                    delta = 0;
+                }
+                std.time.sleep(@intCast(u64, (delta_to_skip - delta)) * std.time.ns_per_ms);
+            }
         }
     }
 

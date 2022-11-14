@@ -1028,7 +1028,7 @@ pub const WidgetText = struct {
             pos.b = 0;
         }
 
-        self.setCursorPos(pos, false);
+        self.setCursorPos(pos, false); // no need to scroll here, we'll do it next function call
         self.validateCursorPosition(scroll);
     }
 
