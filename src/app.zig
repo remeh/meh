@@ -374,7 +374,7 @@ pub const App = struct {
 
         self.is_running = true;
 
-        const max_frameskip = 30;
+        const max_frameskip = 10;
         const max_update_per_second = 60;
         const delta_to_skip: i64 = 1000 / max_update_per_second;
 
@@ -384,7 +384,7 @@ pub const App = struct {
         var loop_count: usize = 0;
 
         while (self.is_running) {
-            to_refresh = false;
+            to_refresh = true;
             loop_count = 0;
             start_tick = std.time.milliTimestamp();
 
@@ -393,11 +393,6 @@ pub const App = struct {
             while (std.time.milliTimestamp() > next_tick and loop_count < max_frameskip) {
                 while (c.SDL_PollEvent(&event) > 0) {
                     to_refresh = c.ImGui_ImplSDL2_ProcessEvent(&event) or to_refresh;
-
-                    if (to_refresh) {
-                        self.render();
-                        to_refresh = false;
-                    }
 
                     if (event.type == c.SDL_QUIT) {
                         self.quit();
@@ -440,7 +435,7 @@ pub const App = struct {
                 self.render();
             }
 
-            // see how long we can afford to sleep to still try to achieve 60fps
+            // see how long we can afford to sleep to still achieve 60fps
             var delta = std.time.milliTimestamp() - start_tick;
             if (delta < delta_to_skip) {
                 delta -= 3;
