@@ -103,6 +103,7 @@ pub const Buffer = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
+    // FIXME(remy): implement should probably be in another file fs.zig
     pub fn writeOnDisk(self: *Buffer) !void {
         if (self.filepath.size() == 0) {
             return BufferError.NoFilepath;

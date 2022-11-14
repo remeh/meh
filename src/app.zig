@@ -240,7 +240,13 @@ pub const App = struct {
                 filename = std.mem.zeroes([8192]u8);
                 var widget = &self.editors.items[i];
                 std.mem.copy(u8, &filename, widget.editor.buffer.filepath.bytes()); // TODO(remy): add random after ## (or full path?)
-                if (c.igBeginTabItem(@ptrCast([*c]const u8, &filename), &open, c.ImGuiTabItemFlags_UnsavedDocument)) {
+
+                var flags: i32 = 0;
+                if (widget.editor.has_changes_compared_to_disk) {
+                    flags |= c.ImGuiTabItemFlags_UnsavedDocument;
+                }
+
+                if (c.igBeginTabItem(@ptrCast([*c]const u8, &filename), &open, flags)) {
                     self.current_widget_text_tab = i;
                     widget.render(self.oneCharSize(), self.window_size, self.editor_drawing_offset);
 

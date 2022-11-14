@@ -40,7 +40,7 @@ pub const WidgetCommand = struct {
         // write
         if (std.mem.eql(u8, command, "w")) {
             var wt = app.currentWidgetText();
-            wt.editor.buffer.writeOnDisk() catch |err| {
+            wt.editor.save() catch |err| {
                 std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ self.buff, err });
             };
         }
@@ -56,7 +56,6 @@ pub const WidgetCommand = struct {
                 app.openFile(f) catch |err| {
                     std.log.err("WidgetCommand.interpret: can't open file: {}", .{err});
                 };
-                std.log.debug("{d}", .{app.editors.items.len});
             } else |_| {}
         }
 

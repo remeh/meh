@@ -22,6 +22,7 @@ pub const EditorError = error{
 pub const Editor = struct {
     allocator: std.mem.Allocator,
     buffer: Buffer,
+    has_changes_compared_to_disk: bool,
     history: std.ArrayList(Change),
 
     // Constructors
@@ -31,6 +32,7 @@ pub const Editor = struct {
         return Editor{
             .allocator = allocator,
             .buffer = buffer,
+            .has_changes_compared_to_disk = false,
             .history = std.ArrayList(Change).init(allocator),
         };
     }
@@ -57,6 +59,7 @@ pub const Editor = struct {
             std.log.err("can't append to the history: {any}", .{err});
             data.deinit();
         };
+        self.has_changes_compared_to_disk = true;
     }
 
     /// undo un-does the last change and all previous changes of the same type.
@@ -74,7 +77,15 @@ pub const Editor = struct {
             try History.undo(self, change);
             pos = change.pos;
         }
+        self.has_changes_compared_to_disk = true;
         return pos;
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn save(self: *Editor) !void {
+        try self.buffer.writeOnDisk();
+        self.has_changes_compared_to_disk = false;
     }
 
     // Text edition
@@ -98,11 +109,12 @@ pub const Editor = struct {
     /// `above` is a special behavior where the new line is created above the current line.
     pub fn newLine(self: *Editor, pos: Vec2u, above: bool) !void {
         if (above) {
-            // TODO(remy): history entry
             var new_line = U8Slice.initEmpty(self.allocator);
             self.buffer.lines.insert(pos.b, new_line) catch |err| {
                 std.log.err("can't insert a new line: {}", .{err});
             };
+            // TODO(remy): history entry
+            self.has_changes_compared_to_disk = true;
         } else {
             var line = try self.buffer.getLine(pos.b);
             var rest = line.data.items[try line.utf8pos(pos.a)..line.size()];
