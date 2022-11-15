@@ -371,82 +371,80 @@ pub const App = struct {
 
     /// mainloop of the application.
     pub fn mainloop(self: *App) !void {
-        c.SDL_StartTextInput(); // TODO(remy): do this only if current focus is the widget_text
         var event: c.SDL_Event = undefined;
-
         self.is_running = true;
+        var to_render = true;
+        var imgui_render = false;
+        c.SDL_StartTextInput(); // TODO(remy): do this only if current focus is the widget_text
 
-        const max_frameskip = 10;
-        const max_update_per_second = 60;
-        const delta_to_skip: i64 = 1000 / max_update_per_second;
-
-        var to_refresh = true;
-        var start_tick = std.time.milliTimestamp();
-        var next_tick = std.time.milliTimestamp();
-        var loop_count: usize = 0;
+        const frame_per_second = 60;
+        const max_ms_skip = 1000 / frame_per_second;
+        var start = std.time.milliTimestamp();
+        var focused_widget = self.focused_widget;
 
         while (self.is_running) {
-            to_refresh = true;
-            loop_count = 0;
-            start_tick = std.time.milliTimestamp();
+            start = std.time.milliTimestamp();
+            imgui_render = false;
 
             // events handling
             // ---------------
-            while (std.time.milliTimestamp() > next_tick and loop_count < max_frameskip) {
-                while (c.SDL_PollEvent(&event) > 0) {
-                    to_refresh = c.ImGui_ImplSDL2_ProcessEvent(&event) or to_refresh;
-
-                    if (event.type == c.SDL_QUIT) {
-                        self.quit();
-                        break;
-                    }
-
-                    // events to handle independently of the currently focused widget
-                    switch (event.type) {
-                        c.SDL_WINDOWEVENT => {
-                            if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
-                                self.onWindowResized(event.window.data1, event.window.data2);
-                            }
-                            to_refresh = true;
-                        },
-                        else => {},
-                    }
-
-                    // events to handle differently per focused widget
-                    switch (self.focused_widget) {
-                        .Command => {
-                            self.commandEvents(event);
-                            to_refresh = true;
-                        },
-                        .Editor => {
-                            self.editorEvents(event);
-                            to_refresh = true;
-                        },
-                    }
+            while (c.SDL_PollEvent(&event) > 0) {
+                if (event.type == c.SDL_QUIT) {
+                    self.quit();
+                    break;
                 }
 
-                // mainloop
-                next_tick += delta_to_skip;
-                loop_count += 1;
+                // events to handle independently of the currently focused widget
+                switch (event.type) {
+                    c.SDL_WINDOWEVENT => {
+                        if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
+                            self.onWindowResized(event.window.data1, event.window.data2);
+                            to_render = true;
+                        }
+                    },
+                    else => {},
+                }
+
+                // events to handle differently per focused widget
+                focused_widget = self.focused_widget;
+                switch (self.focused_widget) {
+                    .Command => {
+                        self.commandEvents(event);
+                        to_render = true;
+                    },
+                    .Editor => {
+                        self.editorEvents(event);
+                        to_render = true;
+                    },
+                }
+
+                // the focus widget changed, trigger an immedate repaint
+                if (self.focused_widget != focused_widget) {
+                    self.render();
+                    to_render = false;
+                    focused_widget = self.focused_widget;
+                }
+
+                to_render = c.ImGui_ImplSDL2_ProcessEvent(&event) or to_render;
             }
 
             // rendering
             // ---------
 
-            if (to_refresh) {
+            if (to_render) {
+                std.log.debug("render", .{});
                 self.render();
-            }
-
-            // see how long we can afford to sleep to still achieve 60fps
-            var delta = std.time.milliTimestamp() - start_tick;
-            if (delta < delta_to_skip) {
-                delta -= 3;
-                if (delta < 0) {
-                    delta = 0;
+                to_render = false;
+            } else {
+                var max_sleep_ms = max_ms_skip - (std.time.milliTimestamp() - start);
+                if (max_sleep_ms < 0) {
+                    max_sleep_ms = 0;
                 }
-                std.time.sleep(@intCast(u64, (delta_to_skip - delta)) * std.time.ns_per_ms);
+                std.time.sleep(@intCast(u64, max_sleep_ms * std.time.ns_per_ms));
             }
         }
+
+        c.SDL_StopTextInput();
     }
 
     fn commandEvents(self: *App, event: c.SDL_Event) void {
