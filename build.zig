@@ -12,10 +12,6 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-    // const imgui_sdl = b.addSharedLibrary("imgui_sdl", "lib/imgui_impl_sdl.cpp", .unversioned);
-    // imgui_sdl.addIncludePath("include/");
-    // imgui_sdl.install();
-
     const meh = b.addExecutable("meh", "src/main.zig");
     prepare(meh, target, mode);
     meh.install();
@@ -38,22 +34,17 @@ pub fn build(b: *std.build.Builder) void {
 fn prepare(step: *std.build.LibExeObjStep, target: std.zig.CrossTarget, mode: std.builtin.Mode) void {
     step.setTarget(target);
     step.setBuildMode(mode);
-    // meh.use_stage1 = true;
+    // step.use_stage1 = true;
 
-    // find "cimgui.h"
-    step.addIncludePath("include/");
     if (builtin.os.tag == .macos) {
         // find "SDL2/SDL2.h"
         step.addIncludePath("/opt/homebrew/include");
         // find libSDL2.dylib
         step.addLibraryPath("/opt/homebrew/lib");
     }
-    // find local libcimgui.dylib
-    step.addLibraryPath("lib/");
     // linked libraries
     step.linkSystemLibrary("SDL2");
-    // step.linkSystemLibrary("GL");
-    step.linkSystemLibrary("cimgui");
+    step.linkSystemLibrary("SDL2_ttf");
     switch (builtin.os.tag) {
         .linux => step.linkLibC(),
         .macos => {

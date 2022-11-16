@@ -70,39 +70,31 @@ pub const Cursor = struct {
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
-    pub fn render(self: Cursor, draw_list: *c.ImDrawList, input_mode: InputMode, viewport: WidgetTextViewport, editor_drawing_offset: Vec2f, font_size: Vec2f) void {
+    pub fn render(self: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, viewport: WidgetTextViewport, drawing_offset: Vec2u, font_size: Vec2u) void {
         // TODO(remy): columns
         var col_offset_in_buffer = viewport.columns.a;
         var line_offset_in_buffer = viewport.lines.a;
 
+        _ = c.SDL_SetRenderDrawColor(sdl_renderer, 255, 255, 255, 255);
+
         switch (input_mode) {
             .Insert => {
-                var x1 = @intToFloat(f32, self.pos.a - col_offset_in_buffer) * font_size.a;
-                var x2 = x1 + 2;
-                var y1 = @intToFloat(f32, self.pos.b - line_offset_in_buffer) * font_size.b;
-                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
-                c.ImDrawList_AddRectFilled(
-                    draw_list,
-                    ImVec2(editor_drawing_offset.a + x1, editor_drawing_offset.b + y1),
-                    ImVec2(editor_drawing_offset.a + x2, editor_drawing_offset.b + y2),
-                    0xFFFFFFFF,
-                    1.0,
-                    0,
-                );
+                var rect = c.SDL_Rect{
+                    .x = @intCast(c_int, drawing_offset.a + (self.pos.a - col_offset_in_buffer) * font_size.a),
+                    .y = @intCast(c_int, drawing_offset.b + (self.pos.b - line_offset_in_buffer) * font_size.b),
+                    .w = @intCast(c_int, 2),
+                    .h = @intCast(c_int, font_size.b),
+                };
+                _ = c.SDL_RenderFillRect(sdl_renderer, &rect);
             },
             else => {
-                var x1 = @intToFloat(f32, self.pos.a - col_offset_in_buffer) * font_size.a;
-                var x2 = @intToFloat(f32, self.pos.a - col_offset_in_buffer + 1) * font_size.a;
-                var y1 = @intToFloat(f32, self.pos.b - line_offset_in_buffer) * font_size.b;
-                var y2 = @intToFloat(f32, self.pos.b + 1 - line_offset_in_buffer) * (font_size.b);
-                c.ImDrawList_AddRectFilled(
-                    draw_list,
-                    ImVec2(editor_drawing_offset.a + x1, editor_drawing_offset.b + y1),
-                    ImVec2(editor_drawing_offset.a + x2, editor_drawing_offset.b + y2),
-                    0xFFFFFFFF,
-                    1.0,
-                    0,
-                );
+                var rect = c.SDL_Rect{
+                    .x = @intCast(c_int, drawing_offset.a + (self.pos.a - col_offset_in_buffer) * font_size.a),
+                    .y = @intCast(c_int, drawing_offset.b + (self.pos.b - line_offset_in_buffer) * font_size.b),
+                    .w = @intCast(c_int, font_size.a),
+                    .h = @intCast(c_int, font_size.b),
+                };
+                _ = c.SDL_RenderFillRect(sdl_renderer, &rect);
             },
         }
     }
@@ -137,7 +129,7 @@ pub const WidgetText = struct {
     // TODO(remy): comment
     viewport: WidgetTextViewport,
     selection: WidgetTextSelection,
-    one_char_size: Vec2f, // refreshed before every frame
+    one_char_size: Vec2u, // refreshed before every frame
 
     // Constructors
     // ------------
@@ -150,7 +142,7 @@ pub const WidgetText = struct {
             .cursor = Cursor.init(),
             .editor = Editor.init(allocator, buffer),
             .input_mode = InputMode.Insert,
-            .one_char_size = Vec2f{ .a = 0, .b = 0 },
+            .one_char_size = Vec2u{ .a = 16, .b = 8 },
             .viewport = WidgetTextViewport{
                 .columns = Vec2u{ .a = 0, .b = cols_and_lines.a },
                 .lines = Vec2u{ .a = 0, .b = cols_and_lines.b },
@@ -173,37 +165,36 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
-    pub fn render(self: *WidgetText, one_char_size: Vec2f, window_size: Vec2i, editor_drawing_offset: Vec2f) void {
-        var draw_list = c.igGetWindowDrawList();
+    pub fn render(self: *WidgetText, one_char_size: Vec2u, window_size: Vec2u, editor_drawing_offset: Vec2u) void {
         self.one_char_size = one_char_size;
-        self.renderSelection(draw_list, editor_drawing_offset);
-        self.renderLines(draw_list, editor_drawing_offset);
-        self.renderLineNumbers(draw_list, window_size, editor_drawing_offset);
-        self.renderCursor(draw_list, editor_drawing_offset);
+        self.renderLines(editor_drawing_offset);
+        self.renderLineNumbers(window_size, editor_drawing_offset);
+        self.renderSelection(editor_drawing_offset);
+        self.renderCursor(editor_drawing_offset);
     }
 
-    fn renderCursor(self: WidgetText, draw_list: *c.ImDrawList, editor_drawing_offset: Vec2f) void {
+    fn renderCursor(self: WidgetText, editor_drawing_offset: Vec2u) void {
         // render the cursor only if it is visible
         if (self.isCursorVisible()) {
-            self.cursor.render(draw_list, self.input_mode, self.viewport, editor_drawing_offset, Vec2f{ .a = self.one_char_size.a, .b = self.one_char_size.b });
+            self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, editor_drawing_offset, Vec2u{ .a = self.one_char_size.a, .b = self.one_char_size.b });
         }
     }
 
-    fn renderLineNumbers(self: WidgetText, draw_list: *c.ImDrawList, window_size: Vec2i, editor_drawing_offset: Vec2f) void {
+    fn renderLineNumbers(self: WidgetText, window_size: Vec2u, editor_drawing_offset: Vec2u) void {
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
 
         var i: usize = self.viewport.lines.a;
-        var y_offset: f32 = editor_drawing_offset.b;
+        var y_offset: usize = editor_drawing_offset.b;
 
-        c.ImDrawList_AddRectFilled(
-            draw_list,
-            ImVec2(0, editor_drawing_offset.b),
-            ImVec2(editor_drawing_offset.a - 10, @intToFloat(f32, window_size.b)),
-            0xFF1A1A1A,
-            1.0,
-            0,
-        );
+        _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 20, 20, 20, 255);
+        var rect = c.SDL_Rect{
+            .x = @intCast(c_int, 0),
+            .y = @intCast(c_int, editor_drawing_offset.b),
+            .w = @intCast(c_int, editor_drawing_offset.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
+            .h = @intCast(c_int, window_size.b),
+        };
+        _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
 
         while (i < self.viewport.lines.b and i < self.editor.buffer.lines.items.len) : (i += 1) {
             _ = std.fmt.bufPrintZ(cbuff, "{d}", .{i + 1}) catch |err| {
@@ -211,39 +202,29 @@ pub const WidgetText = struct {
                 return;
             };
 
-            var text_color: c_uint = 0xFF5A5A5A;
+            var text_color: c_int = 90;
 
             if (i == self.cursor.pos.b) {
-                c.ImDrawList_AddRectFilled(
-                    draw_list,
-                    ImVec2(0, y_offset),
-                    ImVec2(editor_drawing_offset.a - 10, y_offset + self.one_char_size.b),
-                    0xFF777777,
-                    0.0,
-                    0,
-                );
-                text_color = 0xFF000000;
+                _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 120, 120, 120, 255);
+                rect = c.SDL_Rect{
+                    .x = @intCast(c_int, 0),
+                    .y = @intCast(c_int, y_offset),
+                    .w = @intCast(c_int, editor_drawing_offset.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
+                    .h = @intCast(c_int, self.one_char_size.b),
+                };
+                _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
+                text_color = 0;
             }
 
-            c.ImDrawList_AddText_Vec2(
-                draw_list,
-                ImVec2(10, y_offset),
-                text_color,
-                cbuff,
-                0,
-            );
-
+            self.app.current_font.drawText(Vec2u{ .a = 10, .b = y_offset }, cbuff);
             y_offset += self.one_char_size.b;
         }
     }
 
-    fn renderLines(self: WidgetText, draw_list: *c.ImDrawList, editor_drawing_offset: Vec2f) void {
+    fn renderLines(self: WidgetText, editor_drawing_offset: Vec2u) void {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
-        var y_offset: f32 = 0;
-
-        var carray: [8192]u8 = std.mem.zeroes([8192]u8);
-        var cbuff = &carray;
+        var y_offset: usize = 0;
 
         while (i < self.viewport.lines.b) : (i += 1) {
             j = self.viewport.columns.a;
@@ -252,34 +233,27 @@ pub const WidgetText = struct {
 
                 // empty line
                 if (buff.len == 0 or (buff.len == 1 and buff.*[0] == '\n') or buff.len < self.viewport.columns.a) {
-                    c.ImDrawList_AddText_Vec2(draw_list, ImVec2(editor_drawing_offset.a, editor_drawing_offset.b + y_offset), 0xFFC0C0C0, "", 0);
                     y_offset += self.one_char_size.b;
                     continue;
                 }
 
-                // grab only what's visible in the viewport in the temporary buffer
-                while (j < self.viewport.columns.b and j < buff.len) : (j += 1) {
-                    cbuff[j - self.viewport.columns.a] = buff.*[j];
-                }
-                cbuff[j - self.viewport.columns.a] = 0;
+                var data = line.bytes()[self.viewport.columns.a..@min(self.viewport.columns.b, line.size())];
+                self.app.current_font.drawText(Vec2u{ .a = editor_drawing_offset.a, .b = editor_drawing_offset.b + y_offset }, data);
 
-                c.ImDrawList_AddText_Vec2(draw_list, ImVec2(editor_drawing_offset.a, editor_drawing_offset.b + y_offset), 0xFFC0C0C0, @ptrCast([*:0]const u8, cbuff), 0);
                 y_offset += self.one_char_size.b;
-
-                // std.log.debug("self.buffer.data.items[{d}..{d}] (len: {d}) data: {s}", .{ @intCast(usize, pos.a), @intCast(usize, pos.b), self.buffer.data.items.len, @ptrCast([*:0]const u8, buff) });
             } else |_| {
                 // TODO(remy): do something with the error
             }
         }
     }
 
-    fn renderSelection(self: WidgetText, draw_list: *c.ImDrawList, editor_drawing_offset: Vec2f) void {
+    fn renderSelection(self: WidgetText, editor_drawing_offset: Vec2u) void {
         if (self.selection.state == .Inactive) {
             return;
         }
 
         var i: usize = self.viewport.lines.a;
-        var y_offset: f32 = 0;
+        var y_offset: usize = 0;
 
         while (i < self.viewport.lines.b) : (i += 1) {
             if (self.editor.buffer.getLine(i)) |line| {
@@ -288,28 +262,30 @@ pub const WidgetText = struct {
                     return;
                 };
 
-                var viewport_x_offset = @intToFloat(f32, self.viewport.columns.a) * self.one_char_size.a;
+                var viewport_x_offset = self.viewport.columns.a * self.one_char_size.a;
 
                 if (i >= self.selection.start.b and i <= self.selection.stop.b) {
                     var start_x = editor_drawing_offset.a;
                     // start of the line or not?
                     if (self.selection.start.b == i) {
-                        start_x += @intToFloat(f32, self.selection.start.a) * self.one_char_size.a - viewport_x_offset;
+                        start_x += self.selection.start.a * self.one_char_size.a - viewport_x_offset;
                     }
                     // end of the line or not?
-                    var end_x = editor_drawing_offset.a + (@intToFloat(f32, utf8size - 1)) * self.one_char_size.a - viewport_x_offset;
+                    var end_x = editor_drawing_offset.a + (utf8size - 1) * self.one_char_size.a - viewport_x_offset;
                     if (self.selection.stop.b == i) {
-                        end_x = editor_drawing_offset.a + @intToFloat(f32, self.selection.stop.a) * self.one_char_size.a - viewport_x_offset;
+                        end_x = editor_drawing_offset.a + self.selection.stop.a * self.one_char_size.a - viewport_x_offset;
                     }
-                    // at least a part of this line is selected
-                    c.ImDrawList_AddRectFilled(
-                        draw_list,
-                        ImVec2(start_x, editor_drawing_offset.b + y_offset),
-                        ImVec2(end_x, editor_drawing_offset.b + y_offset + self.one_char_size.b),
-                        0x66AFAFAF,
-                        0.0,
-                        0,
-                    );
+
+                    var width: i64 = @intCast(i64, end_x) - @intCast(i64, start_x);
+
+                    _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 175, 175, 175, 100);
+                    var rect = c.SDL_Rect{
+                        .x = @intCast(c_int, start_x),
+                        .y = @intCast(c_int, editor_drawing_offset.b + y_offset),
+                        .w = @intCast(c_int, width),
+                        .h = @intCast(c_int, self.one_char_size.b),
+                    };
+                    _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
                 }
                 y_offset += self.one_char_size.b;
             } else |err| {
@@ -362,17 +338,17 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    fn cursorPosFromWindowPos(self: WidgetText, click_window_pos: Vec2u, editor_drawing_offset: Vec2f) Vec2u {
+    fn cursorPosFromWindowPos(self: WidgetText, click_window_pos: Vec2u, editor_drawing_offset: Vec2u) Vec2u {
         var rv = Vec2u{ .a = 0, .b = 0 };
 
         // remove the offset
         var in_editor = Vec2u{
-            .a = click_window_pos.a - @floatToInt(usize, editor_drawing_offset.a),
-            .b = click_window_pos.b - @floatToInt(usize, editor_drawing_offset.b),
+            .a = click_window_pos.a - editor_drawing_offset.a,
+            .b = click_window_pos.b - editor_drawing_offset.b,
         };
 
-        rv.a = in_editor.a / @floatToInt(usize, self.one_char_size.a);
-        rv.b = in_editor.b / @floatToInt(usize, self.one_char_size.b);
+        rv.a = in_editor.a / self.one_char_size.a;
+        rv.b = in_editor.b / self.one_char_size.b;
 
         rv.a += self.viewport.columns.a;
         rv.b += self.viewport.lines.a;
@@ -643,9 +619,9 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseMove(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
+    pub fn onMouseMove(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
         // ignore out of the editor click
-        if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
+        if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
             return;
         }
 
@@ -721,8 +697,8 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseStartSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
-        if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
+    pub fn onMouseStartSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
+        if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
             return;
         }
 
@@ -736,8 +712,8 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseStopSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2f) void {
-        if (mouse_window_pos.a < @floatToInt(usize, editor_drawing_offset.a) or mouse_window_pos.b < @floatToInt(usize, editor_drawing_offset.b)) {
+    pub fn onMouseStopSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
+        if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
             return;
         }
 

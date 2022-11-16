@@ -53,6 +53,14 @@ pub const U8Slice = struct {
     // Methods
     // -------
 
+    /// copy creates a new U8Slice copying the data of the current one.
+    /// The returned U8Slice is owned by the caller.
+    pub fn copy(self: U8Slice) !U8Slice {
+        var rv = initEmpty(self.allocator);
+        try rv.appendConst(self.bytes());
+        return rv;
+    }
+
     /// size returns the size in bytes of the U8Slice.
     pub fn size(self: U8Slice) usize {
         return self.data.items.len;

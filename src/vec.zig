@@ -3,6 +3,7 @@ const c = @import("clib.zig").c;
 pub const Vec2i = struct { a: i64, b: i64 };
 pub const Vec2f = struct { a: f32, b: f32 };
 pub const Vec2u = struct { a: usize, b: usize };
+pub const Rect2u = struct { a: usize, b: usize, c: usize, d: usize };
 
 /// Vec2itou turns a Vec2i into a Vec2u.
 /// Uses with care since the conversion may corrupt the data.
