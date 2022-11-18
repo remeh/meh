@@ -18,8 +18,6 @@ const Vec2utoi = @import("vec.zig").Vec2utoi;
 // TODO(remy): comment
 pub const char_offset_before_move = 5;
 // TODO(remy): comment
-pub const page_move = 8;
-// TODO(remy): comment
 pub const tab_spaces = 4;
 pub const char_space = ' ';
 pub const string_space = " ";
@@ -440,12 +438,18 @@ pub const WidgetText = struct {
     pub fn onCtrlKeyDown(self: *WidgetText, keycode: i32, ctrl: bool, cmd: bool) bool {
         _ = ctrl;
         _ = cmd;
+
+        var move = @divTrunc(@intCast(i64, self.viewport.lines.b) - @intCast(i64, self.viewport.lines.a), 2);
+        if (move < 0) {
+            move = 8;
+        }
+
         switch (keycode) {
             'd' => {
-                self.moveCursor(Vec2i{ .a = 0, .b = page_move }, true);
+                self.moveCursor(Vec2i{ .a = 0, .b = move }, true);
             },
             'u' => {
-                self.moveCursor(Vec2i{ .a = 0, .b = -page_move }, true);
+                self.moveCursor(Vec2i{ .a = 0, .b = -move }, true);
             },
             'v' => {
                 self.paste() catch |err| {
@@ -606,15 +610,20 @@ pub const WidgetText = struct {
     // FIXME(remy): this should move the viewport but not moving the
     // the cursor.
     pub fn onMouseWheel(self: *WidgetText, move: Vec2i, visible_cols_and_lines: Vec2u) void {
+        var scroll_move = @divTrunc(@intCast(i64, self.viewport.lines.b) - @intCast(i64, self.viewport.lines.a), 4);
+        if (scroll_move < 0) {
+            scroll_move = 4;
+        }
+
         if (move.b < 0) {
-            self.moveViewport(Vec2i{ .a = 0, .b = page_move }, visible_cols_and_lines);
+            self.moveViewport(Vec2i{ .a = 0, .b = scroll_move }, visible_cols_and_lines);
         } else if (move.b > 0) {
-            self.moveViewport(Vec2i{ .a = 0, .b = -page_move }, visible_cols_and_lines);
+            self.moveViewport(Vec2i{ .a = 0, .b = -scroll_move }, visible_cols_and_lines);
         }
         if (move.a < 0) {
-            self.moveViewport(Vec2i{ .a = -(page_move / 2), .b = 0 }, visible_cols_and_lines);
+            self.moveViewport(Vec2i{ .a = -scroll_move, .b = 0 }, visible_cols_and_lines);
         } else if (move.a > 0) {
-            self.moveViewport(Vec2i{ .a = (page_move / 2), .b = 0 }, visible_cols_and_lines);
+            self.moveViewport(Vec2i{ .a = scroll_move, .b = 0 }, visible_cols_and_lines);
         }
     }
 
