@@ -40,16 +40,13 @@ pub const App = struct {
     // gl_context: c.SDL_GLContext,
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
-    /// first_render is used to computes and validates a few things (window size, font sizes)
-    /// once the first frame has been rendered.
-    first_render: bool,
 
     editor_drawing_offset: Vec2u,
 
-    /// window_size is refreshed right before a frame rendering,
-    /// it means this value can be used as the source of truth of
-    /// the current windows size.
-    window_size: Vec2u,
+    // TODO(remy): comment
+    window_pixel_size: Vec2u,
+    // TODO(remy): comment
+    window_scaled_size: Vec2u,
     /// window_scaling contains the scale between the actual GL rendered
     /// surface and the window size.
     window_scaling: f32,
@@ -83,16 +80,6 @@ pub const App = struct {
             std.log.err("sdl: can't c.TTF_Init()", .{});
         }
 
-        // OpenGL init
-
-        // _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_FLAGS, c.SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
-        // _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE);
-        // _ = c.SDL_GL_SetAttribute(c.SDL_GL_DOUBLEBUFFER, 1);
-        // _ = c.SDL_GL_SetAttribute(c.SDL_GL_DEPTH_SIZE, 24);
-        // _ = c.SDL_GL_SetAttribute(c.SDL_GL_STENCIL_SIZE, 8);
-        // _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        // _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 2);
-
         // create the SDL Window
 
         var window_size = Vec2u{ .a = 800, .b = 800 };
@@ -109,11 +96,6 @@ pub const App = struct {
             std.log.err("App.init: can't create SDL window.", .{});
             return AppError.CantInit;
         }
-
-        // create the OpenGL context and SDL renderer
-        // var gl_context = c.SDL_GL_CreateContext(sdl_window);
-        // _ = c.SDL_GL_MakeCurrent(sdl_window, gl_context);
-        // _ = c.SDL_GL_SetSwapInterval(1);
 
         var sdl_renderer: ?*c.SDL_Renderer = c.SDL_CreateRenderer(sdl_window, -1, c.SDL_RENDERER_ACCELERATED);
         if (sdl_renderer == null) {
@@ -141,18 +123,17 @@ pub const App = struct {
             .editors = std.ArrayList(WidgetText).init(allocator),
             .command = WidgetCommand.init(),
             .current_widget_text_tab = 0,
-            // .gl_context = gl_context,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
             .sdl_window = sdl_window.?,
-            .first_render = true,
             .font_lowdpi = font_lowdpi,
             .font_lowdpibigfont = font_lowdpibigfont,
             .font_hidpi = font_hidpi,
             .current_font = font_lowdpi,
             .font_mode = FontMode.LowDPI,
             .focused_widget = FocusedWidget.Editor,
-            .window_size = window_size,
+            .window_pixel_size = window_size,
+            .window_scaled_size = window_size,
             .window_scaling = 1.0,
         };
     }
@@ -170,9 +151,6 @@ pub const App = struct {
 
         c.SDL_DestroyRenderer(self.sdl_renderer);
         self.sdl_renderer = undefined;
-
-        // c.SDL_GL_DeleteContext(self.gl_context);
-        // self.gl_context = undefined;
 
         c.SDL_DestroyWindow(self.sdl_window);
         self.sdl_window = undefined;
@@ -201,29 +179,17 @@ pub const App = struct {
     }
 
     fn render(self: *App) void {
-        var display_index: c_int = c.SDL_GetWindowDisplayIndex(self.sdl_window);
-        var desktop_resolution: c.SDL_DisplayMode = undefined;
-        _ = c.SDL_GetDesktopDisplayMode(display_index, &desktop_resolution); // get the resolution
+        // grab screen information every render pass
+        // -----------------------------------------
 
-        // detect if we've changed the monitor the window is on
-        var gl_w: c_int = 0;
-        var gl_h: c_int = 0;
-        c.SDL_GL_GetDrawableSize(self.sdl_window, &gl_w, &gl_h);
-        if ((gl_w > self.window_size.a and gl_h > self.window_size.b and self.font_mode != FontMode.HiDPI)) {
-            self.setFontMode(FontMode.HiDPI);
-            self.window_scaling = @intToFloat(f32, self.window_size.a) / @intToFloat(f32, gl_w);
-        } else if (gl_w == self.window_size.a and gl_h == self.window_size.b and desktop_resolution.h < 2000 and self.font_mode != FontMode.LowDPI) {
-            self.setFontMode(FontMode.LowDPI);
-            self.window_scaling = 1.0;
-        } else if (desktop_resolution.h > 2000 and self.font_mode != FontMode.LowDPIBigFont) {
-            self.setFontMode(FontMode.LowDPIBigFont);
-            self.window_scaling = 1.0;
-        }
+        self.refreshWindowPixelSize();
+        self.refreshWindowScaledSize();
+        self.refreshDPIMode();
 
         // render list
         // -----------
 
-        // clean up
+        // clean up between passes
 
         _ = c.SDL_SetRenderDrawColor(self.sdl_renderer, 30, 30, 30, 255);
         _ = c.SDL_RenderClear(self.sdl_renderer);
@@ -231,64 +197,83 @@ pub const App = struct {
         // editor window
 
         var widget = &self.editors.items[0]; // FIXME(remy):
-        widget.render(self.oneCharSize(), self.window_size, self.editor_drawing_offset);
+        widget.render(self.oneCharSize(), self.window_pixel_size, self.editor_drawing_offset);
 
-        // command input
-
-        // TODO(remy):
+        // command input TODO
 
         // rendering
-        // c.SDL_GL_SwapWindow(self.sdl_window);
-
         _ = c.SDL_RenderPresent(self.sdl_renderer);
-
-        // FIXME(remy): added this to see if that's fixing the bug on gnome3
-        if (self.first_render) {
-            var w: c_int = undefined;
-            var h: c_int = undefined;
-            c.SDL_GetWindowSize(self.sdl_window, &w, &h);
-            self.window_size.a = @intCast(usize, w);
-            self.window_size.b = @intCast(usize, h);
-            self.onWindowResized(self.window_size.a, self.window_size.b);
-            self.first_render = false;
-        }
     }
 
     fn setFontMode(self: *App, font_mode: FontMode) void {
         switch (font_mode) {
             .LowDPI => {
-                self.editor_drawing_offset.a = 7 * 8; // 7 chars of width 8
                 self.current_font = self.font_lowdpi;
+                self.editor_drawing_offset.a = 7 * 8; // 7 chars of width 8
+                self.editor_drawing_offset.b = 27;
             },
             .LowDPIBigFont => {
-                self.editor_drawing_offset.a = 7 * 10; // 7 chars of width 10
                 self.current_font = self.font_lowdpibigfont;
+                self.editor_drawing_offset.a = 7 * 10; // 7 chars of width 10
+                self.editor_drawing_offset.b = 27;
             },
             .HiDPI => {
-                self.editor_drawing_offset.a = 7 * 8; // 7 chars of width 8
                 self.current_font = self.font_hidpi;
+                self.editor_drawing_offset.a = @floatToInt(usize, (7 * (8 * self.window_scaling))); // 7 chars of width 8
+                self.editor_drawing_offset.b = @floatToInt(usize, 27 * self.window_scaling);
             },
         }
         self.font_mode = font_mode;
     }
 
-    /// visibleColumnsAndLinesInWindow returns how many lines can be drawn on the window
-    /// depending on the size of the window.
-    pub fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
-        // If no frame has been rendered, we can't compute the oneCharSize(),
-        // meanwhile, return some values.
-        if (self.first_render) {
-            return Vec2u{ .a = 100, .b = 50 };
+    /// refreshWindowPixelSize refreshes the window pixel size.
+    fn refreshWindowPixelSize(self: *App) void {
+        var gl_w: c_int = 0;
+        var gl_h: c_int = 0;
+        c.SDL_GL_GetDrawableSize(self.sdl_window, &gl_w, &gl_h);
+        self.window_pixel_size.a = @intCast(usize, gl_w);
+        self.window_pixel_size.b = @intCast(usize, gl_h);
+    }
+
+    /// refreshWindowScaledSize refreshes the window size (scaled).
+    fn refreshWindowScaledSize(self: *App) void {
+        var w: c_int = 0;
+        var h: c_int = 0;
+        c.SDL_GetWindowSize(self.sdl_window, &w, &h);
+        self.window_scaled_size.a = @intCast(usize, w);
+        self.window_scaled_size.b = @intCast(usize, h);
+    }
+
+    /// refreshDPIMode refreshes the DPI mode using the stored window pixel size
+    /// and stored window scaled size.
+    fn refreshDPIMode(self: *App) void {
+        var display_index: c_int = c.SDL_GetWindowDisplayIndex(self.sdl_window);
+        var desktop_resolution: c.SDL_DisplayMode = undefined;
+        _ = c.SDL_GetDesktopDisplayMode(display_index, &desktop_resolution); // get the resolution
+
+        if ((self.window_pixel_size.a > self.window_scaled_size.a and self.window_pixel_size.b > self.window_scaled_size.b and self.font_mode != FontMode.HiDPI)) {
+            // hidpi
+            self.window_scaling = @intToFloat(f32, self.window_pixel_size.a) / @intToFloat(f32, self.window_scaled_size.a);
+            self.setFontMode(FontMode.HiDPI);
+        } else if (self.window_scaled_size.a == self.window_pixel_size.a and self.window_scaled_size.b == self.window_pixel_size.b) {
+            // lowdpi
+            self.window_scaling = 1.0;
+            if (desktop_resolution.h < 2000 and self.font_mode != FontMode.LowDPI) {
+                self.setFontMode(FontMode.LowDPI);
+            } else if (desktop_resolution.h > 2000 and self.font_mode != FontMode.LowDPIBigFont) {
+                self.setFontMode(FontMode.LowDPIBigFont);
+            }
         }
+    }
 
+    /// visibleColumnsAndLinesInWindow returns how many lines can be drawn on the window
+    /// depending on the scaled size of the window.
+    pub fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
         var one_char_size = self.oneCharSize();
-        var columns = (self.window_size.a - self.editor_drawing_offset.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a) * self.window_scaling);
-        var lines = (self.window_size.b - self.editor_drawing_offset.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b) * self.window_scaling);
+        var columns = (self.window_pixel_size.a - self.editor_drawing_offset.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a));
+        var lines = (self.window_pixel_size.b - self.editor_drawing_offset.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b));
 
-        return Vec2u{
-            .a = columns,
-            .b = lines,
-        };
+        return Vec2u{ .a = columns, .b = lines };
     }
 
     /// oneCharSize returns the bounding box of one text char.
@@ -307,11 +292,9 @@ pub const App = struct {
     }
 
     /// onWindowResized is called when the windows has just been resized.
-    fn onWindowResized(self: *App, w: usize, h: usize) void {
-        self.window_size.a = w;
-        self.window_size.b = h;
-
-        std.log.debug("onWindowResized: {d}x{d}", .{ w, h });
+    fn onWindowResized(self: *App) void {
+        self.refreshWindowPixelSize();
+        self.refreshWindowScaledSize();
 
         // change visible lines of every WidgetText
         var visible_count = self.visibleColumnsAndLinesInWindow();
@@ -339,6 +322,11 @@ pub const App = struct {
         var start = std.time.milliTimestamp();
         var focused_widget = self.focused_widget;
 
+        // immediately trigger a first render pass for responsiveness
+        self.onWindowResized();
+        self.render();
+
+        // mainloop
         while (self.is_running) {
             start = std.time.milliTimestamp();
 
@@ -354,7 +342,7 @@ pub const App = struct {
                 switch (event.type) {
                     c.SDL_WINDOWEVENT => {
                         if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
-                            self.onWindowResized(@intCast(usize, event.window.data1), @intCast(usize, event.window.data2));
+                            self.onWindowResized();
                         }
                     },
                     else => {},
@@ -470,12 +458,12 @@ pub const App = struct {
         if (x < 0) {
             rv.a = 0;
         } else {
-            rv.a = @floatToInt(usize, @intToFloat(f32, x) / self.window_scaling);
+            rv.a = @floatToInt(usize, @intToFloat(f32, x) * self.window_scaling);
         }
         if (y < 0) {
             rv.b = 0;
         } else {
-            rv.b = @floatToInt(usize, @intToFloat(f32, y) / self.window_scaling);
+            rv.b = @floatToInt(usize, @intToFloat(f32, y) * self.window_scaling);
         }
         return rv;
     }

@@ -163,10 +163,11 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
-    pub fn render(self: *WidgetText, one_char_size: Vec2u, window_size: Vec2u, editor_drawing_offset: Vec2u) void {
+    /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally.
+    pub fn render(self: *WidgetText, one_char_size: Vec2u, window_pixel_size: Vec2u, editor_drawing_offset: Vec2u) void {
         self.one_char_size = one_char_size;
         self.renderLines(editor_drawing_offset);
-        self.renderLineNumbers(window_size, editor_drawing_offset);
+        self.renderLineNumbers(window_pixel_size, editor_drawing_offset);
         self.renderSelection(editor_drawing_offset);
         self.renderCursor(editor_drawing_offset);
     }
@@ -178,7 +179,7 @@ pub const WidgetText = struct {
         }
     }
 
-    fn renderLineNumbers(self: WidgetText, window_size: Vec2u, editor_drawing_offset: Vec2u) void {
+    fn renderLineNumbers(self: WidgetText, window_pixel_size: Vec2u, editor_drawing_offset: Vec2u) void {
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
 
@@ -190,7 +191,7 @@ pub const WidgetText = struct {
             .x = @intCast(c_int, 0),
             .y = @intCast(c_int, editor_drawing_offset.b),
             .w = @intCast(c_int, editor_drawing_offset.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
-            .h = @intCast(c_int, window_size.b),
+            .h = @intCast(c_int, window_pixel_size.b),
         };
         _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
 
