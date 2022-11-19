@@ -7,7 +7,7 @@ const Buffer = @import("buffer.zig").Buffer;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Font = @import("font.zig").Font;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
-const WidgetText = @import("widget_text.zig").WidgetText;
+const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
@@ -36,7 +36,7 @@ pub const FontMode = enum {
 pub const App = struct {
     allocator: std.mem.Allocator,
     command: WidgetCommand,
-    editors: std.ArrayList(WidgetText),
+    editors: std.ArrayList(WidgetTextEdit),
     // gl_context: c.SDL_GLContext,
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
@@ -63,7 +63,7 @@ pub const App = struct {
     is_running: bool,
 
     // TODO(remy): comment
-    current_widget_text_tab: usize,
+    current_widget_text_edit_tab: usize,
     focused_widget: FocusedWidget,
 
     // Constructors
@@ -120,9 +120,9 @@ pub const App = struct {
         return App{
             .allocator = allocator,
             .editor_drawing_offset = Vec2u{ .a = 64, .b = 27 },
-            .editors = std.ArrayList(WidgetText).init(allocator),
+            .editors = std.ArrayList(WidgetTextEdit).init(allocator),
             .command = WidgetCommand.init(),
-            .current_widget_text_tab = 0,
+            .current_widget_text_edit_tab = 0,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
             .sdl_window = sdl_window.?,
@@ -168,14 +168,14 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         var buffer = try Buffer.initFromFile(self.allocator, filepath);
-        var editor = WidgetText.initWithBuffer(self.allocator, self, buffer, self.visibleColumnsAndLinesInWindow());
+        var editor = WidgetTextEdit.initWithBuffer(self.allocator, self, buffer, self.visibleColumnsAndLinesInWindow());
         try self.editors.append(editor);
     }
 
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
-    pub fn currentWidgetText(self: App) *WidgetText {
-        return &self.editors.items[self.current_widget_text_tab];
+    pub fn currentWidgetTextEdit(self: App) *WidgetTextEdit {
+        return &self.editors.items[self.current_widget_text_edit_tab];
     }
 
     fn render(self: *App) void {
@@ -277,7 +277,7 @@ pub const App = struct {
     }
 
     /// oneCharSize returns the bounding box of one text char.
-    pub fn oneCharSize(self: App) Vec2u {
+    fn oneCharSize(self: App) Vec2u {
         return Vec2u{
             .a = self.current_font.font_size / 2,
             .b = self.current_font.font_size,
@@ -296,7 +296,7 @@ pub const App = struct {
         self.refreshWindowPixelSize();
         self.refreshWindowScaledSize();
 
-        // change visible lines of every WidgetText
+        // change visible lines of every WidgetTextEdit
         var visible_count = self.visibleColumnsAndLinesInWindow();
         for (self.editors.items) |editor, i| {
             self.editors.items[i].viewport.lines = Vec2u{
@@ -315,7 +315,7 @@ pub const App = struct {
         var event: c.SDL_Event = undefined;
         self.is_running = true;
         var to_render = true;
-        c.SDL_StartTextInput(); // TODO(remy): do this only if current focus is the widget_text
+        c.SDL_StartTextInput(); // TODO(remy): do this only if current focus is the widget_text_edit
 
         const frame_per_second = 60;
         const max_ms_skip = 1000 / frame_per_second;
@@ -410,42 +410,42 @@ pub const App = struct {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
                     c.SDLK_RETURN => {
-                        self.currentWidgetText().onReturn();
+                        self.currentWidgetTextEdit().onReturn();
                     },
-                    c.SDLK_ESCAPE => _ = self.currentWidgetText().onEscape(),
+                    c.SDLK_ESCAPE => _ = self.currentWidgetTextEdit().onEscape(),
                     c.SDLK_COLON => {
-                        if (self.currentWidgetText().input_mode == .Command) {
+                        if (self.currentWidgetTextEdit().input_mode == .Command) {
                             self.focused_widget = FocusedWidget.Command;
                         }
                         // TODO(remy):    self.command.buff[0] = ':';
                     },
                     c.SDLK_BACKSPACE => {
-                        self.currentWidgetText().onBackspace();
+                        self.currentWidgetTextEdit().onBackspace();
                     },
                     c.SDLK_TAB => {
-                        self.currentWidgetText().onTab(shift); // TODO(remy): support shift-tab
+                        self.currentWidgetTextEdit().onTab(shift); // TODO(remy): support shift-tab
                     },
                     else => {
                         if (ctrl) {
-                            _ = self.currentWidgetText().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd);
+                            _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd);
                         }
                     },
                 }
             },
             c.SDL_TEXTINPUT => {
-                _ = self.currentWidgetText().onTextInput(readTextFromSDLInput(&event.text.text));
+                _ = self.currentWidgetTextEdit().onTextInput(readTextFromSDLInput(&event.text.text));
             },
             c.SDL_MOUSEWHEEL => {
-                _ = self.currentWidgetText().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y }, self.visibleColumnsAndLinesInWindow());
+                _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y }, self.visibleColumnsAndLinesInWindow());
             },
             c.SDL_MOUSEMOTION => {
-                self.currentWidgetText().onMouseMove(self.sdlMousePosToVec2u(event.motion.x, event.motion.y), self.editor_drawing_offset);
+                self.currentWidgetTextEdit().onMouseMove(self.sdlMousePosToVec2u(event.motion.x, event.motion.y), self.editor_drawing_offset);
             },
             c.SDL_MOUSEBUTTONDOWN => {
-                self.currentWidgetText().onMouseStartSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.editor_drawing_offset);
+                self.currentWidgetTextEdit().onMouseStartSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.editor_drawing_offset);
             },
             c.SDL_MOUSEBUTTONUP => {
-                self.currentWidgetText().onMouseStopSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.editor_drawing_offset);
+                self.currentWidgetTextEdit().onMouseStopSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.editor_drawing_offset);
             },
             else => {},
         }

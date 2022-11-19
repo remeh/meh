@@ -64,11 +64,11 @@ pub const Cursor = struct {
     // Methods
     // -------
 
-    /// `render` renders the cursor in the `WidgetText`.
+    /// `render` renders the cursor in the `WidgetTextEdit`.
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
-    pub fn render(self: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, viewport: WidgetTextViewport, drawing_offset: Vec2u, font_size: Vec2u) void {
+    pub fn render(self: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, viewport: WidgetTextEditViewport, drawing_offset: Vec2u, font_size: Vec2u) void {
         // TODO(remy): columns
         var col_offset_in_buffer = viewport.columns.a;
         var line_offset_in_buffer = viewport.lines.a;
@@ -98,7 +98,7 @@ pub const Cursor = struct {
     }
 };
 
-pub const WidgetTextViewport = struct {
+pub const WidgetTextEditViewport = struct {
     lines: Vec2u,
     columns: Vec2u,
 };
@@ -110,7 +110,7 @@ pub const SelectionState = enum {
     Active,
 };
 
-pub const WidgetTextSelection = struct {
+pub const WidgetTextEditSelection = struct {
     initial: Vec2u,
     start: Vec2u,
     stop: Vec2u,
@@ -118,34 +118,34 @@ pub const WidgetTextSelection = struct {
 };
 
 // TODO(remy): comment
-pub const WidgetText = struct {
+pub const WidgetTextEdit = struct {
     allocator: std.mem.Allocator,
     app: *App,
     cursor: Cursor, // TODO(remy): replace me with a custom (containing cursor mode)
     editor: Editor,
     input_mode: InputMode,
     // TODO(remy): comment
-    viewport: WidgetTextViewport,
-    selection: WidgetTextSelection,
+    viewport: WidgetTextEditViewport,
+    selection: WidgetTextEditSelection,
     one_char_size: Vec2u, // refreshed before every frame
 
     // Constructors
     // ------------
 
     // TODO(remy): comment
-    pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer, cols_and_lines: Vec2u) WidgetText {
-        return WidgetText{
+    pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer, cols_and_lines: Vec2u) WidgetTextEdit {
+        return WidgetTextEdit{
             .allocator = allocator,
             .app = app,
             .cursor = Cursor.init(),
             .editor = Editor.init(allocator, buffer),
             .input_mode = InputMode.Insert,
             .one_char_size = Vec2u{ .a = 16, .b = 8 },
-            .viewport = WidgetTextViewport{
+            .viewport = WidgetTextEditViewport{
                 .columns = Vec2u{ .a = 0, .b = cols_and_lines.a },
                 .lines = Vec2u{ .a = 0, .b = cols_and_lines.b },
             },
-            .selection = WidgetTextSelection{
+            .selection = WidgetTextEditSelection{
                 .start = Vec2u{ .a = 0, .b = 0 },
                 .initial = Vec2u{ .a = 0, .b = 0 },
                 .stop = Vec2u{ .a = 0, .b = 0 },
@@ -154,7 +154,7 @@ pub const WidgetText = struct {
         };
     }
 
-    pub fn deinit(self: *WidgetText) void {
+    pub fn deinit(self: *WidgetTextEdit) void {
         self.editor.deinit();
     }
 
@@ -164,7 +164,7 @@ pub const WidgetText = struct {
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally.
-    pub fn render(self: *WidgetText, one_char_size: Vec2u, window_pixel_size: Vec2u, editor_drawing_offset: Vec2u) void {
+    pub fn render(self: *WidgetTextEdit, one_char_size: Vec2u, window_pixel_size: Vec2u, editor_drawing_offset: Vec2u) void {
         self.one_char_size = one_char_size;
         self.renderLines(editor_drawing_offset);
         self.renderLineNumbers(window_pixel_size, editor_drawing_offset);
@@ -172,14 +172,14 @@ pub const WidgetText = struct {
         self.renderCursor(editor_drawing_offset);
     }
 
-    fn renderCursor(self: WidgetText, editor_drawing_offset: Vec2u) void {
+    fn renderCursor(self: WidgetTextEdit, editor_drawing_offset: Vec2u) void {
         // render the cursor only if it is visible
         if (self.isCursorVisible()) {
             self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, editor_drawing_offset, Vec2u{ .a = self.one_char_size.a, .b = self.one_char_size.b });
         }
     }
 
-    fn renderLineNumbers(self: WidgetText, window_pixel_size: Vec2u, editor_drawing_offset: Vec2u) void {
+    fn renderLineNumbers(self: WidgetTextEdit, window_pixel_size: Vec2u, editor_drawing_offset: Vec2u) void {
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
 
@@ -197,7 +197,7 @@ pub const WidgetText = struct {
 
         while (i < self.viewport.lines.b and i < self.editor.buffer.lines.items.len) : (i += 1) {
             _ = std.fmt.bufPrintZ(cbuff, "{d}", .{i + 1}) catch |err| {
-                std.log.err("WidgetText.renderLineNumbers: can't render line number {}: {}", .{ i, err });
+                std.log.err("WidgetTextEdit.renderLineNumbers: can't render line number {}: {}", .{ i, err });
                 return;
             };
 
@@ -220,7 +220,7 @@ pub const WidgetText = struct {
         }
     }
 
-    fn renderLines(self: WidgetText, editor_drawing_offset: Vec2u) void {
+    fn renderLines(self: WidgetTextEdit, editor_drawing_offset: Vec2u) void {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
         var y_offset: usize = 0;
@@ -246,7 +246,7 @@ pub const WidgetText = struct {
         }
     }
 
-    fn renderSelection(self: WidgetText, editor_drawing_offset: Vec2u) void {
+    fn renderSelection(self: WidgetTextEdit, editor_drawing_offset: Vec2u) void {
         if (self.selection.state == .Inactive) {
             return;
         }
@@ -257,7 +257,7 @@ pub const WidgetText = struct {
         while (i < self.viewport.lines.b) : (i += 1) {
             if (self.editor.buffer.getLine(i)) |line| {
                 var utf8size = line.utf8size() catch |err| {
-                    std.log.err("WidgetText.renderSelection: can't get utf8size of line {d}: {}", .{ i, err });
+                    std.log.err("WidgetTextEdit.renderSelection: can't get utf8size of line {d}: {}", .{ i, err });
                     return;
                 };
 
@@ -288,7 +288,7 @@ pub const WidgetText = struct {
                 }
                 y_offset += self.one_char_size.b;
             } else |err| {
-                std.log.err("WidgetText.renderSelection: can't get line {d}: {}", .{ i, err });
+                std.log.err("WidgetTextEdit.renderSelection: can't get line {d}: {}", .{ i, err });
                 return;
             }
         }
@@ -298,7 +298,7 @@ pub const WidgetText = struct {
 
     /// scrollToCursor scrolls to the cursor if it is not visible.
     // TODO(remy): unit test
-    fn scrollToCursor(self: *WidgetText) void {
+    fn scrollToCursor(self: *WidgetTextEdit) void {
         // the cursor is above
         if (self.cursor.pos.b < self.viewport.lines.a) {
             var count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
@@ -330,14 +330,14 @@ pub const WidgetText = struct {
 
     /// `isCursorVisible` returns true if the cursor is visible in the window.
     /// TODO(remy): test
-    fn isCursorVisible(self: WidgetText) bool {
+    fn isCursorVisible(self: WidgetTextEdit) bool {
         return (self.cursor.pos.b >= self.viewport.lines.a and self.cursor.pos.b <= self.viewport.lines.b and
             self.cursor.pos.a >= self.viewport.columns.a and self.cursor.pos.a <= self.viewport.columns.b);
     }
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    fn cursorPosFromWindowPos(self: WidgetText, click_window_pos: Vec2u, editor_drawing_offset: Vec2u) Vec2u {
+    fn cursorPosFromWindowPos(self: WidgetTextEdit, click_window_pos: Vec2u, editor_drawing_offset: Vec2u) Vec2u {
         var rv = Vec2u{ .a = 0, .b = 0 };
 
         // remove the offset
@@ -355,14 +355,14 @@ pub const WidgetText = struct {
         return rv;
     }
 
-    fn setCursorPos(self: *WidgetText, pos: Vec2u, scroll: bool) void {
+    fn setCursorPos(self: *WidgetTextEdit, pos: Vec2u, scroll: bool) void {
         self.cursor.pos = pos;
         if (scroll) {
             self.scrollToCursor();
         }
     }
 
-    pub fn search(self: *WidgetText, txt: U8Slice) void {
+    pub fn search(self: *WidgetTextEdit, txt: U8Slice) void {
         if (self.editor.search(txt, self.cursor.pos, false)) |new_cursor_pos| {
             self.setCursorPos(new_cursor_pos, true);
         } else |err| {
@@ -371,7 +371,7 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    fn startSelection(self: *WidgetText, cursor_pos: Vec2u, state: SelectionState) void {
+    fn startSelection(self: *WidgetTextEdit, cursor_pos: Vec2u, state: SelectionState) void {
         self.setInputMode(.Command);
 
         self.selection.start = cursor_pos;
@@ -382,7 +382,7 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    fn updateSelection(self: *WidgetText, cursor_pos: Vec2u) void {
+    fn updateSelection(self: *WidgetTextEdit, cursor_pos: Vec2u) void {
         if (self.selection.state == .MouseSelection or self.selection.state == .KeyboardSelection) {
             if (cursor_pos.b < self.selection.initial.b or (cursor_pos.b == self.selection.initial.b and cursor_pos.a < self.selection.initial.a)) {
                 self.selection.start = cursor_pos;
@@ -395,7 +395,7 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    fn stopSelection(self: *WidgetText, next_state: SelectionState) void {
+    fn stopSelection(self: *WidgetTextEdit, next_state: SelectionState) void {
         if (self.selection.state == .Inactive) {
             return;
         }
@@ -419,7 +419,7 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    pub fn paste(self: *WidgetText) !void {
+    pub fn paste(self: *WidgetTextEdit) !void {
         // read data from the clipboard
         var data = c.SDL_GetClipboardText();
         defer c.SDL_free(data);
@@ -436,7 +436,7 @@ pub const WidgetText = struct {
     // --------------
 
     /// onCtrlKeyDown is called when a key has been pressed while a ctrl key is held down.
-    pub fn onCtrlKeyDown(self: *WidgetText, keycode: i32, ctrl: bool, cmd: bool) bool {
+    pub fn onCtrlKeyDown(self: *WidgetTextEdit, keycode: i32, ctrl: bool, cmd: bool) bool {
         _ = ctrl;
         _ = cmd;
 
@@ -454,7 +454,7 @@ pub const WidgetText = struct {
             },
             'v' => {
                 self.paste() catch |err| {
-                    std.log.err("WidgetText.onCtrlKeyDown: can't paste: {}", .{err});
+                    std.log.err("WidgetTextEdit.onCtrlKeyDown: can't paste: {}", .{err});
                 };
                 return true;
             },
@@ -465,14 +465,14 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    pub fn onTextInput(self: *WidgetText, txt: []const u8) bool {
+    pub fn onTextInput(self: *WidgetTextEdit, txt: []const u8) bool {
         switch (self.input_mode) {
             .Insert => {
                 // TODO(remy): selection support
                 if (self.editor.insertUtf8Text(self.cursor.pos, txt)) {
                     self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
                 } else |err| {
-                    std.log.err("WidgetText.onTextInput: can't insert utf8 text: {}", .{err});
+                    std.log.err("WidgetTextEdit.onTextInput: can't insert utf8 text: {}", .{err});
                 }
             },
             else => {
@@ -523,14 +523,14 @@ pub const WidgetText = struct {
                                 }
                                 selected_text.deinit();
                             } else |err| {
-                                std.log.err("WidgetText.onTextInput: can't get selected text: {}", .{err});
+                                std.log.err("WidgetTextEdit.onTextInput: can't get selected text: {}", .{err});
                             }
                             self.stopSelection(.Inactive);
                         }
                     },
                     'p' => {
                         self.paste() catch |err| {
-                            std.log.err("WidgetText.onTextInput: can't paste: {}", .{err});
+                            std.log.err("WidgetTextEdit.onTextInput: can't paste: {}", .{err});
                         };
                     },
                     // others
@@ -541,7 +541,7 @@ pub const WidgetText = struct {
                             }
                             self.validateCursorPosition(true);
                         } else |err| {
-                            std.log.err("WidgetText.onTextInput: can't delete line: {}", .{err});
+                            std.log.err("WidgetTextEdit.onTextInput: can't delete line: {}", .{err});
                         }
                     },
                     // TODO(remy): selection support
@@ -557,10 +557,10 @@ pub const WidgetText = struct {
                                 return true;
                             }
                         } else |err| {
-                            std.log.err("WidgetText.onTextInput: can't get line while executing 'x' input: {}", .{err});
+                            std.log.err("WidgetTextEdit.onTextInput: can't get line while executing 'x' input: {}", .{err});
                         }
                         self.editor.deleteUtf8Char(self.cursor.pos, false) catch |err| {
-                            std.log.err("WidgetText.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
+                            std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
                         };
                     },
                     'u' => {
@@ -576,7 +576,7 @@ pub const WidgetText = struct {
 
     // TODO(remy): support untabbing selection
     // TODO(remy): automatically respect previous indent on empty lines
-    pub fn onTab(self: *WidgetText, shift: bool) void {
+    pub fn onTab(self: *WidgetTextEdit, shift: bool) void {
         switch (self.input_mode) {
             .Insert => {
                 var i: usize = 0;
@@ -610,7 +610,7 @@ pub const WidgetText = struct {
 
     // FIXME(remy): this should move the viewport but not moving the
     // the cursor.
-    pub fn onMouseWheel(self: *WidgetText, move: Vec2i, visible_cols_and_lines: Vec2u) void {
+    pub fn onMouseWheel(self: *WidgetTextEdit, move: Vec2i, visible_cols_and_lines: Vec2u) void {
         var scroll_move = @divTrunc(@intCast(i64, self.viewport.lines.b) - @intCast(i64, self.viewport.lines.a), 4);
         if (scroll_move < 0) {
             scroll_move = 4;
@@ -629,7 +629,7 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseMove(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
+    pub fn onMouseMove(self: *WidgetTextEdit, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
         // ignore out of the editor click
         if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
             return;
@@ -667,7 +667,7 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    pub fn onReturn(self: *WidgetText) void {
+    pub fn onReturn(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
             .Insert => self.newLine(),
             else => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
@@ -676,8 +676,8 @@ pub const WidgetText = struct {
 
     // TODO(remy):
     // TODO(remy): comment
-    /// returns true if the event has been absorbed by the WidgetText.
-    pub fn onEscape(self: *WidgetText) bool {
+    /// returns true if the event has been absorbed by the WidgetTextEdit.
+    pub fn onEscape(self: *WidgetTextEdit) bool {
         // stop selection mode
         self.stopSelection(.Inactive);
 
@@ -694,11 +694,11 @@ pub const WidgetText = struct {
 
     // TODO(remy):
     // TODO(remy): comment
-    pub fn onBackspace(self: *WidgetText) void {
+    pub fn onBackspace(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
             .Insert => {
                 self.editor.deleteUtf8Char(self.cursor.pos, true) catch |err| {
-                    std.log.err("WidgetText.onBackspace: {}", .{err});
+                    std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
                 };
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
             },
@@ -707,7 +707,7 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseStartSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
+    pub fn onMouseStartSelection(self: *WidgetTextEdit, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
         if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
             return;
         }
@@ -722,7 +722,7 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseStopSelection(self: *WidgetText, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
+    pub fn onMouseStopSelection(self: *WidgetTextEdit, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
         if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
             return;
         }
@@ -737,7 +737,7 @@ pub const WidgetText = struct {
     // TODO(remy): comment
     // TODO(remy): unit test
     /// buildSelectedText always returns a string ending with a \0.
-    pub fn buildSelectedText(self: WidgetText) !U8Slice {
+    pub fn buildSelectedText(self: WidgetTextEdit) !U8Slice {
         var rv = U8Slice.initEmpty(self.allocator);
         errdefer rv.deinit();
 
@@ -773,7 +773,7 @@ pub const WidgetText = struct {
     // TODO(remy): comment
     // TODO(remy): unit test
     // TODO(remy): implement smooth movement
-    pub fn moveViewport(self: *WidgetText, move: Vec2i, visible_cols_and_lines: Vec2u) void {
+    pub fn moveViewport(self: *WidgetTextEdit, move: Vec2i, visible_cols_and_lines: Vec2u) void {
         var cols_a: i64 = 0;
         var cols_b: i64 = 0;
         var lines_a: i64 = 0;
@@ -824,7 +824,7 @@ pub const WidgetText = struct {
     // TODO(remy): unit test
     /// If you want to make sure the cursor is on a valid position, consider
     /// using `validateCursorPosition`.
-    pub fn moveCursor(self: *WidgetText, move: Vec2i, scroll: bool) void {
+    pub fn moveCursor(self: *WidgetTextEdit, move: Vec2i, scroll: bool) void {
         var cursor_pos = Vec2utoi(self.cursor.pos);
         var line: *U8Slice = undefined;
         var utf8size: usize = 0;
@@ -833,14 +833,14 @@ pub const WidgetText = struct {
             line = l;
         } else |err| {
             // still, report the error
-            std.log.err("WidgetText.moveCursor: can't get line {d}: {}", .{ cursor_pos.b, err });
+            std.log.err("WidgetTextEdit.moveCursor: can't get line {d}: {}", .{ cursor_pos.b, err });
             return;
         }
 
         if (line.utf8size()) |size| {
             utf8size = size;
         } else |err| {
-            std.log.err("WidgetText.moveCursor: can't get line {d} utf8size: {}", .{ cursor_pos.b, err });
+            std.log.err("WidgetTextEdit.moveCursor: can't get line {d} utf8size: {}", .{ cursor_pos.b, err });
             return;
         }
 
@@ -867,7 +867,7 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    pub fn validateCursorPosition(self: *WidgetText, scroll: bool) void {
+    pub fn validateCursorPosition(self: *WidgetTextEdit, scroll: bool) void {
         if (self.cursor.pos.b >= self.editor.buffer.lines.items.len and self.editor.buffer.lines.items.len > 0) {
             self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
         }
@@ -887,7 +887,7 @@ pub const WidgetText = struct {
                 }
             }
         } else |err| {
-            std.log.err("WidgetText.moveCursor: can't get utf8size of the line {d}: {}", .{ self.cursor.pos.b, err });
+            std.log.err("WidgetTextEdit.moveCursor: can't get utf8size of the line {d}: {}", .{ self.cursor.pos.b, err });
         }
 
         if (scroll) {
@@ -897,7 +897,7 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    pub fn moveCursorSpecial(self: *WidgetText, move: CursorMove, scroll: bool) void {
+    pub fn moveCursorSpecial(self: *WidgetTextEdit, move: CursorMove, scroll: bool) void {
         var scrolled = false;
         switch (move) {
             .EndOfLine => {
@@ -909,10 +909,10 @@ pub const WidgetText = struct {
                             self.cursor.pos.a = utf8size;
                         }
                     } else |err| {
-                        std.log.err("WidgetText.moveCursorSpecial.EndOfLine: can't get utf8size of the line: {}", .{err});
+                        std.log.err("WidgetTextEdit.moveCursorSpecial.EndOfLine: can't get utf8size of the line: {}", .{err});
                     }
                 } else |err| {
-                    std.log.err("WidgetText.moveCursorSpecial.EndOfLine: {}", .{err});
+                    std.log.err("WidgetTextEdit.moveCursorSpecial.EndOfLine: {}", .{err});
                 }
             },
             .StartOfLine => {
@@ -986,9 +986,9 @@ pub const WidgetText = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    pub fn newLine(self: *WidgetText) void {
+    pub fn newLine(self: *WidgetTextEdit) void {
         self.editor.newLine(self.cursor.pos, false) catch |err| {
-            std.log.err("WidgetText.newLine: {}", .{err});
+            std.log.err("WidgetTextEdit.newLine: {}", .{err});
             return;
         };
         self.moveCursorSpecial(CursorMove.NextLine, true);
@@ -1001,7 +1001,7 @@ pub const WidgetText = struct {
     // ------
 
     // TODO(remy): comment
-    fn setInputMode(self: *WidgetText, input_mode: InputMode) void {
+    fn setInputMode(self: *WidgetTextEdit, input_mode: InputMode) void {
         if (input_mode == .Insert) {
             // stop any selection
             self.stopSelection(.Inactive);
@@ -1019,7 +1019,7 @@ pub const WidgetText = struct {
 
     /// goToLine goes to the given line.
     /// First line starts at 1.
-    pub fn goToLine(self: *WidgetText, line_number: usize, scroll: bool) void {
+    pub fn goToLine(self: *WidgetTextEdit, line_number: usize, scroll: bool) void {
         var pos = Vec2u{ .a = self.cursor.pos.a, .b = line_number };
 
         if (pos.b > 0) {
@@ -1033,22 +1033,22 @@ pub const WidgetText = struct {
     }
 
     // TODO(remy): comment
-    pub fn undo(self: *WidgetText) void {
+    pub fn undo(self: *WidgetTextEdit) void {
         if (self.editor.undo()) |pos| {
             self.setCursorPos(pos, true);
         } else |err| {
             if (err != EditorError.NothingToUndo) {
-                std.log.err("WidgetText.undo: can't undo: {}", .{err});
+                std.log.err("WidgetTextEdit.undo: can't undo: {}", .{err});
             }
         }
     }
 };
 
-test "widget_text moveCursor" {
+test "widget_text_edit moveCursor" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetText.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
+    var widget = WidgetTextEdit.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     // top of the file, moving up shouldn't do anything
@@ -1092,11 +1092,11 @@ test "widget_text moveCursor" {
     widget.deinit();
 }
 
-test "widget_text moveCursorSpecial" {
+test "widget_text_edit moveCursorSpecial" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetText.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
+    var widget = WidgetTextEdit.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     widget.moveCursorSpecial(CursorMove.EndOfLine, true);
@@ -1118,10 +1118,10 @@ test "widget_text moveCursorSpecial" {
     widget.deinit();
 }
 
-test "widget_text init deinit" {
+test "widget_text_edit init deinit" {
     const allocator = std.testing.allocator;
     var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
-    var widget = WidgetText.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
+    var widget = WidgetTextEdit.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
     widget.deinit();
 }

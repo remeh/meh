@@ -4,7 +4,7 @@ const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
 const U8Slice = @import("u8slice.zig").U8Slice;
-const char_space = @import("widget_text.zig").char_space;
+const char_space = @import("widget_text_edit.zig").char_space;
 
 const WidgetCommandError = error{
     ArgsOutOfBounds,
@@ -44,7 +44,7 @@ pub const WidgetCommand = struct {
         // -----
 
         if (std.mem.eql(u8, command, "w")) {
-            var wt = app.currentWidgetText();
+            var wt = app.currentWidgetTextEdit();
             wt.editor.save() catch |err| {
                 std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ self.buff, err });
             };
@@ -72,7 +72,7 @@ pub const WidgetCommand = struct {
         if (command.len > 1 and std.mem.eql(u8, command[0..1], ":")) {
             // read the line number
             if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
-                var wt = app.currentWidgetText();
+                var wt = app.currentWidgetTextEdit();
                 wt.goToLine(line_number, true);
             } else |err| {
                 std.log.warn("WidgetCommand.interpret: can't read line number: {}", .{err});
@@ -97,7 +97,7 @@ pub const WidgetCommand = struct {
             }
 
             std.log.debug("WidgetCommand.interpret: search for {s}", .{str.bytes()});
-            var wt = app.currentWidgetText();
+            var wt = app.currentWidgetTextEdit();
             wt.search(str);
         }
 
@@ -105,15 +105,14 @@ pub const WidgetCommand = struct {
         // -----
 
         if (std.mem.eql(u8, command, "debug")) {
-            var widget_text = app.currentWidgetText();
-            std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text.editor.buffer.filepath.bytes(), widget_text.editor.buffer.lines.items.len });
+            var widget_text_edit = app.currentWidgetTextEdit();
+            std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text_edit.editor.buffer.filepath.bytes(), widget_text_edit.editor.buffer.lines.items.len });
             std.log.debug("Window size: {}", .{app.window_size});
-            std.log.debug("One char size: {}", .{app.oneCharSize()});
-            std.log.debug("Viewport: {}", .{widget_text.viewport});
-            std.log.debug("History entries count: {d}", .{widget_text.editor.history.items.len});
-            std.log.debug("History entries:\n{}", .{widget_text.editor.history});
-            std.log.debug("Cursor position: {}", .{widget_text.cursor.pos});
-            if (widget_text.editor.buffer.getLine(widget_text.cursor.pos.b)) |line| {
+            std.log.debug("Viewport: {}", .{widget_text_edit.viewport});
+            std.log.debug("History entries count: {d}", .{widget_text_edit.editor.history.items.len});
+            std.log.debug("History entries:\n{}", .{widget_text_edit.editor.history});
+            std.log.debug("Cursor position: {}", .{widget_text_edit.cursor.pos});
+            if (widget_text_edit.editor.buffer.getLine(widget_text_edit.cursor.pos.b)) |line| {
                 if (line != undefined) {
                     std.log.debug("Line size: {d}, utf8 size: {any}", .{ line.size(), line.utf8size() });
                     std.log.debug("Line content:\n{s}", .{line.bytes()});
