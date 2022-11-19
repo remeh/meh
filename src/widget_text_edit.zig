@@ -164,33 +164,33 @@ pub const WidgetTextEdit = struct {
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally.
-    pub fn render(self: *WidgetTextEdit, one_char_size: Vec2u, window_pixel_size: Vec2u, editor_drawing_offset: Vec2u) void {
+    pub fn render(self: *WidgetTextEdit, one_char_size: Vec2u, draw_pos: Vec2u, window_pixel_size: Vec2u) void {
         self.one_char_size = one_char_size;
-        self.renderLines(editor_drawing_offset);
-        self.renderLineNumbers(window_pixel_size, editor_drawing_offset);
-        self.renderSelection(editor_drawing_offset);
-        self.renderCursor(editor_drawing_offset);
+        self.renderLines(draw_pos);
+        self.renderLineNumbers(window_pixel_size, draw_pos);
+        self.renderSelection(draw_pos);
+        self.renderCursor(draw_pos);
     }
 
-    fn renderCursor(self: WidgetTextEdit, editor_drawing_offset: Vec2u) void {
+    fn renderCursor(self: WidgetTextEdit, draw_pos: Vec2u) void {
         // render the cursor only if it is visible
         if (self.isCursorVisible()) {
-            self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, editor_drawing_offset, Vec2u{ .a = self.one_char_size.a, .b = self.one_char_size.b });
+            self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, draw_pos, Vec2u{ .a = self.one_char_size.a, .b = self.one_char_size.b });
         }
     }
 
-    fn renderLineNumbers(self: WidgetTextEdit, window_pixel_size: Vec2u, editor_drawing_offset: Vec2u) void {
+    fn renderLineNumbers(self: WidgetTextEdit, window_pixel_size: Vec2u, draw_pos: Vec2u) void {
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
 
         var i: usize = self.viewport.lines.a;
-        var y_offset: usize = editor_drawing_offset.b;
+        var y_offset: usize = draw_pos.b;
 
         _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 20, 20, 20, 255);
         var rect = c.SDL_Rect{
             .x = @intCast(c_int, 0),
-            .y = @intCast(c_int, editor_drawing_offset.b),
-            .w = @intCast(c_int, editor_drawing_offset.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
+            .y = @intCast(c_int, draw_pos.b),
+            .w = @intCast(c_int, draw_pos.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
             .h = @intCast(c_int, window_pixel_size.b),
         };
         _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
@@ -208,7 +208,7 @@ pub const WidgetTextEdit = struct {
                 rect = c.SDL_Rect{
                     .x = @intCast(c_int, 0),
                     .y = @intCast(c_int, y_offset),
-                    .w = @intCast(c_int, editor_drawing_offset.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
+                    .w = @intCast(c_int, draw_pos.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
                     .h = @intCast(c_int, self.one_char_size.b),
                 };
                 _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
@@ -220,7 +220,7 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    fn renderLines(self: WidgetTextEdit, editor_drawing_offset: Vec2u) void {
+    fn renderLines(self: WidgetTextEdit, draw_pos: Vec2u) void {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
         var y_offset: usize = 0;
@@ -237,7 +237,7 @@ pub const WidgetTextEdit = struct {
                 }
 
                 var data = line.bytes()[self.viewport.columns.a..@min(self.viewport.columns.b, line.size())];
-                self.app.current_font.drawText(Vec2u{ .a = editor_drawing_offset.a, .b = editor_drawing_offset.b + y_offset }, data);
+                self.app.current_font.drawText(Vec2u{ .a = draw_pos.a, .b = draw_pos.b + y_offset }, data);
 
                 y_offset += self.one_char_size.b;
             } else |_| {
@@ -246,7 +246,7 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    fn renderSelection(self: WidgetTextEdit, editor_drawing_offset: Vec2u) void {
+    fn renderSelection(self: WidgetTextEdit, draw_pos: Vec2u) void {
         if (self.selection.state == .Inactive) {
             return;
         }
@@ -264,15 +264,15 @@ pub const WidgetTextEdit = struct {
                 var viewport_x_offset = self.viewport.columns.a * self.one_char_size.a;
 
                 if (i >= self.selection.start.b and i <= self.selection.stop.b) {
-                    var start_x = editor_drawing_offset.a;
+                    var start_x = draw_pos.a;
                     // start of the line or not?
                     if (self.selection.start.b == i) {
                         start_x += self.selection.start.a * self.one_char_size.a - viewport_x_offset;
                     }
                     // end of the line or not?
-                    var end_x = editor_drawing_offset.a + (utf8size - 1) * self.one_char_size.a - viewport_x_offset;
+                    var end_x = draw_pos.a + (utf8size - 1) * self.one_char_size.a - viewport_x_offset;
                     if (self.selection.stop.b == i) {
-                        end_x = editor_drawing_offset.a + self.selection.stop.a * self.one_char_size.a - viewport_x_offset;
+                        end_x = draw_pos.a + self.selection.stop.a * self.one_char_size.a - viewport_x_offset;
                     }
 
                     var width: i64 = @intCast(i64, end_x) - @intCast(i64, start_x);
@@ -280,7 +280,7 @@ pub const WidgetTextEdit = struct {
                     _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 175, 175, 175, 100);
                     var rect = c.SDL_Rect{
                         .x = @intCast(c_int, start_x),
-                        .y = @intCast(c_int, editor_drawing_offset.b + y_offset),
+                        .y = @intCast(c_int, draw_pos.b + y_offset),
                         .w = @intCast(c_int, width),
                         .h = @intCast(c_int, self.one_char_size.b),
                     };
@@ -337,13 +337,13 @@ pub const WidgetTextEdit = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    fn cursorPosFromWindowPos(self: WidgetTextEdit, click_window_pos: Vec2u, editor_drawing_offset: Vec2u) Vec2u {
+    fn cursorPosFromWindowPos(self: WidgetTextEdit, click_window_pos: Vec2u, draw_pos: Vec2u) Vec2u {
         var rv = Vec2u{ .a = 0, .b = 0 };
 
         // remove the offset
         var in_editor = Vec2u{
-            .a = click_window_pos.a - editor_drawing_offset.a,
-            .b = click_window_pos.b - editor_drawing_offset.b,
+            .a = click_window_pos.a - draw_pos.a,
+            .b = click_window_pos.b - draw_pos.b,
         };
 
         rv.a = in_editor.a / self.one_char_size.a;
@@ -629,9 +629,9 @@ pub const WidgetTextEdit = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseMove(self: *WidgetTextEdit, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
+    pub fn onMouseMove(self: *WidgetTextEdit, mouse_window_pos: Vec2u, draw_pos: Vec2u) void {
         // ignore out of the editor click
-        if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
+        if (mouse_window_pos.a < draw_pos.a or mouse_window_pos.b < draw_pos.b) {
             return;
         }
 
@@ -640,7 +640,7 @@ pub const WidgetTextEdit = struct {
             return;
         }
 
-        var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
+        var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, draw_pos);
 
         if (cursor_pos.b < 0) {
             cursor_pos.b = 0;
@@ -707,13 +707,13 @@ pub const WidgetTextEdit = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseStartSelection(self: *WidgetTextEdit, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
-        if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
+    pub fn onMouseStartSelection(self: *WidgetTextEdit, mouse_window_pos: Vec2u, draw_pos: Vec2u) void {
+        if (mouse_window_pos.a < draw_pos.a or mouse_window_pos.b < draw_pos.b) {
             return;
         }
 
         // move the mouse on the click
-        var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, editor_drawing_offset);
+        var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, draw_pos);
         self.setCursorPos(cursor_pos, false);
         self.validateCursorPosition(true);
 
@@ -722,8 +722,8 @@ pub const WidgetTextEdit = struct {
     }
 
     // TODO(remy): unit test
-    pub fn onMouseStopSelection(self: *WidgetTextEdit, mouse_window_pos: Vec2u, editor_drawing_offset: Vec2u) void {
-        if (mouse_window_pos.a < editor_drawing_offset.a or mouse_window_pos.b < editor_drawing_offset.b) {
+    pub fn onMouseStopSelection(self: *WidgetTextEdit, mouse_window_pos: Vec2u, draw_pos: Vec2u) void {
+        if (mouse_window_pos.a < draw_pos.a or mouse_window_pos.b < draw_pos.b) {
             return;
         }
 

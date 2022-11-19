@@ -40,12 +40,12 @@ pub const FontMode = enum {
 pub const App = struct {
     allocator: std.mem.Allocator,
     command: WidgetCommand,
-    editors: std.ArrayList(WidgetTextEdit),
+    textedits: std.ArrayList(WidgetTextEdit),
     // gl_context: c.SDL_GLContext,
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
 
-    editor_drawing_offset: Vec2u,
+    widget_text_edit_pos: Vec2u,
 
     // TODO(remy): comment
     window_pixel_size: Vec2u,
@@ -123,19 +123,38 @@ pub const App = struct {
         var font_hidpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 32);
 
         // return the created app
-        return App{ .allocator = allocator, .editor_drawing_offset = Vec2u{ .a = 64, .b = 27 }, .editors = std.ArrayList(WidgetTextEdit).init(allocator), .command = WidgetCommand.init(), .current_widget_text_edit_tab = 0, .sdl_renderer = sdl_renderer.?, .is_running = true, .sdl_window = sdl_window.?, .font_lowdpi = font_lowdpi, .font_lowdpibigfont = font_lowdpibigfont, .font_hidpi = font_hidpi, .current_font = font_lowdpi, .font_mode = FontMode.LowDPI, .focused_widget = FocusedWidget.Editor, .window_pixel_size = window_size, .window_scaled_size = window_size, .window_scaling = 1.0, .test_label = try WidgetLabel.initFromSlice(
-            allocator,
-            Vec2u{ .a = 750, .b = 750 },
-            "oh boï",
-        ) };
+        return App{
+            .allocator = allocator,
+            .widget_text_edit_pos = Vec2u{ .a = 64, .b = 27 },
+            .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
+            .command = WidgetCommand.init(),
+            .current_widget_text_edit_tab = 0,
+            .sdl_renderer = sdl_renderer.?,
+            .is_running = true,
+            .sdl_window = sdl_window.?,
+            .font_lowdpi = font_lowdpi,
+            .font_lowdpibigfont = font_lowdpibigfont,
+            .font_hidpi = font_hidpi,
+            .current_font = font_lowdpi,
+            .font_mode = FontMode.LowDPI,
+            .focused_widget = FocusedWidget.Editor,
+            .window_pixel_size = window_size,
+            .window_scaled_size = window_size,
+            .window_scaling = 1.0,
+            .test_label = try WidgetLabel.initFromSlice(
+                allocator,
+                Vec2u{ .a = 750, .b = 750 },
+                "oh boï",
+            ),
+        };
     }
 
     pub fn deinit(self: *App) void {
         var i: usize = 0;
-        while (i < self.editors.items.len) : (i += 1) {
-            self.editors.items[i].deinit();
+        while (i < self.textedits.items.len) : (i += 1) {
+            self.textedits.items[i].deinit();
         }
-        self.editors.deinit();
+        self.textedits.deinit();
 
         self.font_lowdpi.deinit();
         self.font_lowdpibigfont.deinit();
@@ -163,13 +182,13 @@ pub const App = struct {
     pub fn openFile(self: *App, filepath: []const u8) !void {
         var buffer = try Buffer.initFromFile(self.allocator, filepath);
         var editor = WidgetTextEdit.initWithBuffer(self.allocator, self, buffer, self.visibleColumnsAndLinesInWindow());
-        try self.editors.append(editor);
+        try self.textedits.append(editor);
     }
 
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
     pub fn currentWidgetTextEdit(self: App) *WidgetTextEdit {
-        return &self.editors.items[self.current_widget_text_edit_tab];
+        return &self.textedits.items[self.current_widget_text_edit_tab];
     }
 
     fn render(self: *App) void {
@@ -191,8 +210,8 @@ pub const App = struct {
 
         // editor window
 
-        var widget = &self.editors.items[0]; // FIXME(remy):
-        widget.render(self.oneCharSize(), self.window_pixel_size, self.editor_drawing_offset);
+        var widget = &self.textedits.items[0]; // FIXME(remy):
+        widget.render(self.oneCharSize(), self.widget_text_edit_pos, self.window_pixel_size);
 
         // command input TODO
 
@@ -206,18 +225,21 @@ pub const App = struct {
         switch (font_mode) {
             .LowDPI => {
                 self.current_font = self.font_lowdpi;
-                self.editor_drawing_offset.a = 7 * 8; // 7 chars of width 8
-                self.editor_drawing_offset.b = 27;
+                // FIXME(remy): won't have t do this once the WidgetTextEdit correctly use widget pos + widget size + a scaler
+                self.widget_text_edit_pos.a = 7 * 8; // 7 chars of width 8
+                self.widget_text_edit_pos.b = 27;
             },
             .LowDPIBigFont => {
                 self.current_font = self.font_lowdpibigfont;
-                self.editor_drawing_offset.a = 7 * 10; // 7 chars of width 10
-                self.editor_drawing_offset.b = 27;
+                // FIXME(remy): won't have t do this once the WidgetTextEdit correctly use widget pos + widget size + a scaler
+                self.widget_text_edit_pos.a = 7 * 10; // 7 chars of width 10
+                self.widget_text_edit_pos.b = 27;
             },
             .HiDPI => {
                 self.current_font = self.font_hidpi;
-                self.editor_drawing_offset.a = @floatToInt(usize, (7 * (8 * self.window_scaling))); // 7 chars of width 8
-                self.editor_drawing_offset.b = @floatToInt(usize, 27 * self.window_scaling);
+                // FIXME(remy): won't have t do this once the WidgetTextEdit correctly use widget pos + widget size + a scaler
+                self.widget_text_edit_pos.a = @floatToInt(usize, (7 * (8 * self.window_scaling))); // 7 chars of width 8
+                self.widget_text_edit_pos.b = @floatToInt(usize, 27 * self.window_scaling);
             },
         }
         self.font_mode = font_mode;
@@ -265,10 +287,11 @@ pub const App = struct {
 
     /// visibleColumnsAndLinesInWindow returns how many lines can be drawn on the window
     /// depending on the scaled size of the window.
+    // FIXME(remy): should be part of the WidgetTextEdit instead
     pub fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
         var one_char_size = self.oneCharSize();
-        var columns = (self.window_pixel_size.a - self.editor_drawing_offset.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a));
-        var lines = (self.window_pixel_size.b - self.editor_drawing_offset.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b));
+        var columns = (self.window_pixel_size.a - self.widget_text_edit_pos.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a));
+        var lines = (self.window_pixel_size.b - self.widget_text_edit_pos.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b));
 
         return Vec2u{ .a = columns, .b = lines };
     }
@@ -294,13 +317,14 @@ pub const App = struct {
         self.refreshWindowScaledSize();
 
         // change visible lines of every WidgetTextEdit
+        // FIXME(remy): should call onWindowResized on all WidgetTextEdit instead
         var visible_count = self.visibleColumnsAndLinesInWindow();
-        for (self.editors.items) |editor, i| {
-            self.editors.items[i].viewport.lines = Vec2u{
+        for (self.textedits.items) |editor, i| {
+            self.textedits.items[i].viewport.lines = Vec2u{
                 .a = editor.viewport.lines.a,
                 .b = editor.viewport.lines.a + visible_count.b,
             };
-            self.editors.items[i].viewport.columns = Vec2u{
+            self.textedits.items[i].viewport.columns = Vec2u{
                 .a = editor.viewport.columns.a,
                 .b = editor.viewport.columns.a + visible_count.a,
             };
@@ -436,13 +460,13 @@ pub const App = struct {
                 _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y }, self.visibleColumnsAndLinesInWindow());
             },
             c.SDL_MOUSEMOTION => {
-                self.currentWidgetTextEdit().onMouseMove(self.sdlMousePosToVec2u(event.motion.x, event.motion.y), self.editor_drawing_offset);
+                self.currentWidgetTextEdit().onMouseMove(self.sdlMousePosToVec2u(event.motion.x, event.motion.y), self.widget_text_edit_pos);
             },
             c.SDL_MOUSEBUTTONDOWN => {
-                self.currentWidgetTextEdit().onMouseStartSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.editor_drawing_offset);
+                self.currentWidgetTextEdit().onMouseStartSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.widget_text_edit_pos);
             },
             c.SDL_MOUSEBUTTONUP => {
-                self.currentWidgetTextEdit().onMouseStopSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.editor_drawing_offset);
+                self.currentWidgetTextEdit().onMouseStopSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.widget_text_edit_pos);
             },
             else => {},
         }

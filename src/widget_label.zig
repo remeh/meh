@@ -38,7 +38,6 @@ pub const WidgetLabel = struct {
 
     pub fn render(self: WidgetLabel, scaler: Scaler, font: Font) void {
         var pos = scaler.Scale2u(self.position);
-        std.log.debug("pos: {}", .{pos});
         font.drawText(pos, self.text.bytes());
     }
 };
