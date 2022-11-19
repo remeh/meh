@@ -4,10 +4,14 @@ const c = @import("clib.zig").c;
 const debugRect = @import("clib.zig").debugRect;
 
 const Buffer = @import("buffer.zig").Buffer;
+
 const ImVec2 = @import("vec.zig").ImVec2;
 const Font = @import("font.zig").Font;
+const Scaler = @import("scaler.zig").Scaler;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
+const WidgetLabel = @import("widget_label.zig").WidgetLabel;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
+
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
@@ -66,6 +70,8 @@ pub const App = struct {
     current_widget_text_edit_tab: usize,
     focused_widget: FocusedWidget,
 
+    test_label: WidgetLabel,
+
     // Constructors
     // ------------
 
@@ -117,25 +123,11 @@ pub const App = struct {
         var font_hidpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 32);
 
         // return the created app
-        return App{
-            .allocator = allocator,
-            .editor_drawing_offset = Vec2u{ .a = 64, .b = 27 },
-            .editors = std.ArrayList(WidgetTextEdit).init(allocator),
-            .command = WidgetCommand.init(),
-            .current_widget_text_edit_tab = 0,
-            .sdl_renderer = sdl_renderer.?,
-            .is_running = true,
-            .sdl_window = sdl_window.?,
-            .font_lowdpi = font_lowdpi,
-            .font_lowdpibigfont = font_lowdpibigfont,
-            .font_hidpi = font_hidpi,
-            .current_font = font_lowdpi,
-            .font_mode = FontMode.LowDPI,
-            .focused_widget = FocusedWidget.Editor,
-            .window_pixel_size = window_size,
-            .window_scaled_size = window_size,
-            .window_scaling = 1.0,
-        };
+        return App{ .allocator = allocator, .editor_drawing_offset = Vec2u{ .a = 64, .b = 27 }, .editors = std.ArrayList(WidgetTextEdit).init(allocator), .command = WidgetCommand.init(), .current_widget_text_edit_tab = 0, .sdl_renderer = sdl_renderer.?, .is_running = true, .sdl_window = sdl_window.?, .font_lowdpi = font_lowdpi, .font_lowdpibigfont = font_lowdpibigfont, .font_hidpi = font_hidpi, .current_font = font_lowdpi, .font_mode = FontMode.LowDPI, .focused_widget = FocusedWidget.Editor, .window_pixel_size = window_size, .window_scaled_size = window_size, .window_scaling = 1.0, .test_label = try WidgetLabel.initFromSlice(
+            allocator,
+            Vec2u{ .a = 750, .b = 750 },
+            "oh boï",
+        ) };
     }
 
     pub fn deinit(self: *App) void {
@@ -148,6 +140,8 @@ pub const App = struct {
         self.font_lowdpi.deinit();
         self.font_lowdpibigfont.deinit();
         self.font_hidpi.deinit();
+
+        self.test_label.deinit();
 
         c.SDL_DestroyRenderer(self.sdl_renderer);
         self.sdl_renderer = undefined;
@@ -185,6 +179,7 @@ pub const App = struct {
         self.refreshWindowPixelSize();
         self.refreshWindowScaledSize();
         self.refreshDPIMode();
+        var scaler = Scaler{ .scale = self.window_scaling };
 
         // render list
         // -----------
@@ -200,6 +195,8 @@ pub const App = struct {
         widget.render(self.oneCharSize(), self.window_pixel_size, self.editor_drawing_offset);
 
         // command input TODO
+
+        self.test_label.render(scaler, self.current_font);
 
         // rendering
         _ = c.SDL_RenderPresent(self.sdl_renderer);
