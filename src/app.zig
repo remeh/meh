@@ -9,7 +9,6 @@ const ImVec2 = @import("vec.zig").ImVec2;
 const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
-const WidgetLabel = @import("widget_label.zig").WidgetLabel;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
 const Vec2f = @import("vec.zig").Vec2f;
@@ -70,8 +69,6 @@ pub const App = struct {
     current_widget_text_edit_tab: usize,
     focused_widget: FocusedWidget,
 
-    test_label: WidgetLabel,
-
     // Constructors
     // ------------
 
@@ -125,7 +122,7 @@ pub const App = struct {
         // return the created app
         return App{
             .allocator = allocator,
-            .widget_text_edit_pos = Vec2u{ .a = 64, .b = 27 },
+            .widget_text_edit_pos = Vec2u{ .a = 0, .b = 8 * 4 },
             .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
             .command = WidgetCommand.init(),
             .current_widget_text_edit_tab = 0,
@@ -141,11 +138,6 @@ pub const App = struct {
             .window_pixel_size = window_size,
             .window_scaled_size = window_size,
             .window_scaling = 1.0,
-            .test_label = try WidgetLabel.initFromSlice(
-                allocator,
-                Vec2u{ .a = 750, .b = 750 },
-                "oh boï",
-            ),
         };
     }
 
@@ -159,8 +151,6 @@ pub const App = struct {
         self.font_lowdpi.deinit();
         self.font_lowdpibigfont.deinit();
         self.font_hidpi.deinit();
-
-        self.test_label.deinit();
 
         c.SDL_DestroyRenderer(self.sdl_renderer);
         self.sdl_renderer = undefined;
@@ -210,12 +200,10 @@ pub const App = struct {
 
         // editor window
 
-        var widget = &self.textedits.items[0]; // FIXME(remy):
-        widget.render(self.oneCharSize(), self.widget_text_edit_pos, self.window_pixel_size);
+        var widget_text_edit = &self.textedits.items[0]; // FIXME(remy):
+        widget_text_edit.render(scaler, self.widget_text_edit_pos, Vec2u{ .a = 0, .b = self.window_scaled_size.b - 50 }, self.oneCharSize());
 
         // command input TODO
-
-        self.test_label.render(scaler, self.current_font);
 
         // rendering
         _ = c.SDL_RenderPresent(self.sdl_renderer);
@@ -225,21 +213,15 @@ pub const App = struct {
         switch (font_mode) {
             .LowDPI => {
                 self.current_font = self.font_lowdpi;
-                // FIXME(remy): won't have t do this once the WidgetTextEdit correctly use widget pos + widget size + a scaler
-                self.widget_text_edit_pos.a = 7 * 8; // 7 chars of width 8
-                self.widget_text_edit_pos.b = 27;
+                self.widget_text_edit_pos.b = 16 + 4;
             },
             .LowDPIBigFont => {
                 self.current_font = self.font_lowdpibigfont;
-                // FIXME(remy): won't have t do this once the WidgetTextEdit correctly use widget pos + widget size + a scaler
-                self.widget_text_edit_pos.a = 7 * 10; // 7 chars of width 10
-                self.widget_text_edit_pos.b = 27;
+                self.widget_text_edit_pos.b = 20 + 4;
             },
             .HiDPI => {
                 self.current_font = self.font_hidpi;
-                // FIXME(remy): won't have t do this once the WidgetTextEdit correctly use widget pos + widget size + a scaler
-                self.widget_text_edit_pos.a = @floatToInt(usize, (7 * (8 * self.window_scaling))); // 7 chars of width 8
-                self.widget_text_edit_pos.b = @floatToInt(usize, 27 * self.window_scaling);
+                self.widget_text_edit_pos.b = 16 + 4;
             },
         }
         self.font_mode = font_mode;
@@ -283,6 +265,8 @@ pub const App = struct {
                 self.setFontMode(FontMode.LowDPIBigFont);
             }
         }
+        // the viewport may have to be resized
+        self.onWindowResized();
     }
 
     /// visibleColumnsAndLinesInWindow returns how many lines can be drawn on the window
@@ -343,7 +327,8 @@ pub const App = struct {
         var start = std.time.milliTimestamp();
         var focused_widget = self.focused_widget;
 
-        // immediately trigger a first render pass for responsiveness
+        // immediately trigger a first render pass for responsiveness when the
+        // window appears.
         self.onWindowResized();
         self.render();
 

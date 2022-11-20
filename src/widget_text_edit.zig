@@ -7,6 +7,7 @@ const Buffer = @import("buffer.zig").Buffer;
 const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
 const ImVec2 = @import("vec.zig").ImVec2;
+const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
@@ -68,8 +69,7 @@ pub const Cursor = struct {
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
-    pub fn render(self: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, viewport: WidgetTextEditViewport, drawing_offset: Vec2u, font_size: Vec2u) void {
-        // TODO(remy): columns
+    pub fn render(self: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, viewport: WidgetTextEditViewport, draw_pos: Vec2u, font_size: Vec2u) void {
         var col_offset_in_buffer = viewport.columns.a;
         var line_offset_in_buffer = viewport.lines.a;
 
@@ -78,8 +78,8 @@ pub const Cursor = struct {
         switch (input_mode) {
             .Insert => {
                 var rect = c.SDL_Rect{
-                    .x = @intCast(c_int, drawing_offset.a + (self.pos.a - col_offset_in_buffer) * font_size.a),
-                    .y = @intCast(c_int, drawing_offset.b + (self.pos.b - line_offset_in_buffer) * font_size.b),
+                    .x = @intCast(c_int, draw_pos.a + (self.pos.a - col_offset_in_buffer) * font_size.a),
+                    .y = @intCast(c_int, draw_pos.b + (self.pos.b - line_offset_in_buffer) * font_size.b),
                     .w = @intCast(c_int, 2),
                     .h = @intCast(c_int, font_size.b),
                 };
@@ -87,8 +87,8 @@ pub const Cursor = struct {
             },
             else => {
                 var rect = c.SDL_Rect{
-                    .x = @intCast(c_int, drawing_offset.a + (self.pos.a - col_offset_in_buffer) * font_size.a),
-                    .y = @intCast(c_int, drawing_offset.b + (self.pos.b - line_offset_in_buffer) * font_size.b),
+                    .x = @intCast(c_int, draw_pos.a + (self.pos.a - col_offset_in_buffer) * font_size.a),
+                    .y = @intCast(c_int, draw_pos.b + (self.pos.b - line_offset_in_buffer) * font_size.b),
                     .w = @intCast(c_int, font_size.a),
                     .h = @intCast(c_int, font_size.b),
                 };
@@ -164,24 +164,34 @@ pub const WidgetTextEdit = struct {
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally.
-    pub fn render(self: *WidgetTextEdit, one_char_size: Vec2u, draw_pos: Vec2u, window_pixel_size: Vec2u) void {
+    pub fn render(self: *WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
         self.one_char_size = one_char_size;
-        self.renderLines(draw_pos);
-        self.renderLineNumbers(window_pixel_size, draw_pos);
-        self.renderSelection(draw_pos);
-        self.renderCursor(draw_pos);
+        var sdraw_pos = scaler.Scale2u(draw_pos);
+        var swidget_size = scaler.Scale2u(widget_size);
+
+        // rendering line numbers create a left offset
+        var left_offset = self.renderLineNumbers(scaler, sdraw_pos, swidget_size, one_char_size);
+        sdraw_pos.a += left_offset;
+
+        // so does rendering lines (which adds a small blank)
+        left_offset = self.renderLines(scaler, sdraw_pos, swidget_size);
+        sdraw_pos.a += left_offset;
+
+        self.renderSelection(sdraw_pos);
+        self.renderCursor(sdraw_pos, one_char_size);
     }
 
-    fn renderCursor(self: WidgetTextEdit, draw_pos: Vec2u) void {
+    fn renderCursor(self: WidgetTextEdit, draw_pos: Vec2u, one_char_size: Vec2u) void {
         // render the cursor only if it is visible
         if (self.isCursorVisible()) {
-            self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, draw_pos, Vec2u{ .a = self.one_char_size.a, .b = self.one_char_size.b });
+            self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, draw_pos, one_char_size);
         }
     }
 
-    // FIXME(remy): should return how wide it had to draw itself, to use this later on while drawing the
-    // corpus, the selection and the cursor.
-    fn renderLineNumbers(self: WidgetTextEdit, window_pixel_size: Vec2u, draw_pos: Vec2u) void {
+    /// Returns x offset introduced by drawing the lines numbers
+    fn renderLineNumbers(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
+        var text_pos_x = scaler.Scaleu(10);
+
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
 
@@ -196,15 +206,16 @@ pub const WidgetTextEdit = struct {
             max_digits += 1;
             line_count /= 10;
         }
+        var width = (max_digits + 2) * one_char_size.a;
 
         // render the background
 
         _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 20, 20, 20, 255);
         var rect = c.SDL_Rect{
-            .x = @intCast(c_int, 0),
+            .x = @intCast(c_int, draw_pos.a),
             .y = @intCast(c_int, draw_pos.b),
-            .w = @intCast(c_int, draw_pos.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
-            .h = @intCast(c_int, window_pixel_size.b),
+            .w = @intCast(c_int, draw_pos.a + width),
+            .h = @intCast(c_int, draw_pos.b + widget_size.b),
         };
         _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
 
@@ -213,7 +224,7 @@ pub const WidgetTextEdit = struct {
         while (i < self.viewport.lines.b and i < self.editor.buffer.lines.items.len) : (i += 1) {
             _ = std.fmt.bufPrintZ(cbuff, "{d}", .{i + 1}) catch |err| {
                 std.log.err("WidgetTextEdit.renderLineNumbers: can't render line number {}: {}", .{ i, err });
-                return;
+                return 0;
             };
 
             var text_color: c_int = 90;
@@ -221,24 +232,27 @@ pub const WidgetTextEdit = struct {
             if (i == self.cursor.pos.b) {
                 _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 120, 120, 120, 255);
                 rect = c.SDL_Rect{
-                    .x = @intCast(c_int, 0),
+                    .x = @intCast(c_int, draw_pos.a),
                     .y = @intCast(c_int, y_offset),
-                    .w = @intCast(c_int, draw_pos.a - 10), // FIXME(remy): this minus 10 isn't correct for all fonts
+                    .w = @intCast(c_int, draw_pos.a + width),
                     .h = @intCast(c_int, self.one_char_size.b),
                 };
                 _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
                 text_color = 0;
             }
 
-            self.app.current_font.drawText(Vec2u{ .a = 10, .b = y_offset }, cbuff);
+            self.app.current_font.drawText(Vec2u{ .a = text_pos_x, .b = y_offset }, cbuff);
             y_offset += self.one_char_size.b;
         }
+
+        return width;
     }
 
-    fn renderLines(self: WidgetTextEdit, draw_pos: Vec2u) void {
+    fn renderLines(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, _: Vec2u) usize {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
         var y_offset: usize = 0;
+        var left_blank_offset = scaler.Scaleu(5);
 
         while (i < self.viewport.lines.b) : (i += 1) {
             j = self.viewport.columns.a;
@@ -252,13 +266,15 @@ pub const WidgetTextEdit = struct {
                 }
 
                 var data = line.bytes()[self.viewport.columns.a..@min(self.viewport.columns.b, line.size())];
-                self.app.current_font.drawText(Vec2u{ .a = draw_pos.a, .b = draw_pos.b + y_offset }, data);
+                self.app.current_font.drawText(Vec2u{ .a = draw_pos.a + left_blank_offset, .b = draw_pos.b + y_offset }, data);
 
                 y_offset += self.one_char_size.b;
             } else |_| {
                 // TODO(remy): do something with the error
             }
         }
+
+        return left_blank_offset;
     }
 
     fn renderSelection(self: WidgetTextEdit, draw_pos: Vec2u) void {

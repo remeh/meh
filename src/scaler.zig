@@ -4,6 +4,10 @@ const Vec2u = @import("vec.zig").Vec2u;
 pub const Scaler = struct {
     scale: f32,
 
+    pub fn Scaleu(self: Scaler, in: usize) usize {
+        return @floatToInt(usize, @intToFloat(f32, in) * self.scale);
+    }
+
     pub fn Scale2u(self: Scaler, in: Vec2u) Vec2u {
         return Vec2u{
             .a = @floatToInt(usize, @intToFloat(f32, in.a) * self.scale),
