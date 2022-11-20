@@ -2,9 +2,9 @@ const std = @import("std");
 const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
-const U8Slice = @import("u8slice.zig").U8Slice;
 const Rect2u = @import("vec.zig").Rect2u;
 const Vec2u = @import("vec.zig").Vec2u;
+const U8Slice = @import("u8slice.zig").U8Slice;
 
 pub const FontError = error{
     CantLoadFont,
@@ -171,6 +171,7 @@ pub const Font = struct {
     pub fn drawText(self: Font, position: Vec2u, text: []const u8) void {
         var i: usize = 0;
         var x_offset: usize = 0;
+
         while (i < text.len) {
             if (text[i] == 0 or text[i] == '\n') {
                 break;

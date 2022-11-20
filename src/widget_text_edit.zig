@@ -4,6 +4,7 @@ const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
+const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
 const ImVec2 = @import("vec.zig").ImVec2;
@@ -69,32 +70,42 @@ pub const Cursor = struct {
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
-    pub fn render(self: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, viewport: WidgetTextEditViewport, draw_pos: Vec2u, font_size: Vec2u) void {
+    pub fn render(self: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, viewport: WidgetTextEditViewport, scaler: Scaler, draw_pos: Vec2u, font_size: Vec2u) void {
         var col_offset_in_buffer = viewport.columns.a;
         var line_offset_in_buffer = viewport.lines.a;
 
-        _ = c.SDL_SetRenderDrawColor(sdl_renderer, 255, 255, 255, 255);
-
         switch (input_mode) {
             .Insert => {
-                var rect = c.SDL_Rect{
-                    .x = @intCast(c_int, draw_pos.a + (self.pos.a - col_offset_in_buffer) * font_size.a),
-                    .y = @intCast(c_int, draw_pos.b + (self.pos.b - line_offset_in_buffer) * font_size.b),
-                    .w = @intCast(c_int, 2),
-                    .h = @intCast(c_int, font_size.b),
-                };
-                _ = c.SDL_RenderFillRect(sdl_renderer, &rect);
+                Draw.fill_rect(
+                    sdl_renderer,
+                    scaler,
+                    Vec2u{
+                        .a = draw_pos.a + (self.pos.a - col_offset_in_buffer) * font_size.a,
+                        .b = draw_pos.b + (self.pos.b - line_offset_in_buffer) * font_size.b,
+                    },
+                    Vec2u{ .a = 2, .b = font_size.b },
+                    c.SDL_Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
+                );
             },
             else => {
-                var rect = c.SDL_Rect{
-                    .x = @intCast(c_int, draw_pos.a + (self.pos.a - col_offset_in_buffer) * font_size.a),
-                    .y = @intCast(c_int, draw_pos.b + (self.pos.b - line_offset_in_buffer) * font_size.b),
-                    .w = @intCast(c_int, font_size.a),
-                    .h = @intCast(c_int, font_size.b),
-                };
-                _ = c.SDL_RenderFillRect(sdl_renderer, &rect);
+                Draw.fill_rect(
+                    sdl_renderer,
+                    scaler,
+                    Vec2u{
+                        .a = draw_pos.a + (self.pos.a - col_offset_in_buffer) * font_size.a,
+                        .b = draw_pos.b + (self.pos.b - line_offset_in_buffer) * font_size.b,
+                    },
+                    Vec2u{ .a = font_size.a, .b = font_size.b },
+                    c.SDL_Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
+                );
             },
         }
+    }
+
+    /// isVisible returns true if the cursor is visible in the given viewport.
+    pub fn isVisible(self: Cursor, viewport: WidgetTextEditViewport) bool {
+        return (self.pos.b >= viewport.lines.a and self.pos.b <= viewport.lines.b and
+            self.pos.a >= viewport.columns.a and self.pos.a <= viewport.columns.b);
     }
 };
 
@@ -127,13 +138,15 @@ pub const WidgetTextEdit = struct {
     // TODO(remy): comment
     viewport: WidgetTextEditViewport,
     selection: WidgetTextEditSelection,
+    selection_left_offset: usize, // when rendering the line number, it creates a left offset
+    visible_cols_and_lines: Vec2u,
     one_char_size: Vec2u, // refreshed before every frame
 
     // Constructors
     // ------------
 
     // TODO(remy): comment
-    pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer, cols_and_lines: Vec2u) WidgetTextEdit {
+    pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer) WidgetTextEdit {
         return WidgetTextEdit{
             .allocator = allocator,
             .app = app,
@@ -142,9 +155,11 @@ pub const WidgetTextEdit = struct {
             .input_mode = InputMode.Insert,
             .one_char_size = Vec2u{ .a = 16, .b = 8 },
             .viewport = WidgetTextEditViewport{
-                .columns = Vec2u{ .a = 0, .b = cols_and_lines.a },
-                .lines = Vec2u{ .a = 0, .b = cols_and_lines.b },
+                .columns = Vec2u{ .a = 0, .b = 1 },
+                .lines = Vec2u{ .a = 0, .b = 1 },
             },
+            .visible_cols_and_lines = Vec2u{ .a = 1, .b = 1 },
+            .selection_left_offset = 0,
             .selection = WidgetTextEditSelection{
                 .start = Vec2u{ .a = 0, .b = 0 },
                 .initial = Vec2u{ .a = 0, .b = 0 },
@@ -166,31 +181,37 @@ pub const WidgetTextEdit = struct {
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally.
     pub fn render(self: *WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
         self.one_char_size = one_char_size;
-        var sdraw_pos = scaler.Scale2u(draw_pos);
-        var swidget_size = scaler.Scale2u(widget_size);
+        self.visible_cols_and_lines = Vec2u{
+            .a = (widget_size.a - draw_pos.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
+            .b = (widget_size.b - draw_pos.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b)),
+        };
+        self.computeViewport();
+
+        var pos = draw_pos;
 
         // rendering line numbers create a left offset
-        var left_offset = self.renderLineNumbers(scaler, sdraw_pos, swidget_size, one_char_size);
-        sdraw_pos.a += left_offset;
+        var left_offset = self.renderLineNumbers(scaler, pos, widget_size, one_char_size);
+        pos.a += left_offset;
 
         // so does rendering lines (which adds a small blank)
-        left_offset = self.renderLines(scaler, sdraw_pos, swidget_size);
-        sdraw_pos.a += left_offset;
+        left_offset = self.renderLines(scaler, pos);
+        pos.a += left_offset;
 
-        self.renderSelection(sdraw_pos);
-        self.renderCursor(sdraw_pos, one_char_size);
+        self.selection_left_offset = pos.a;
+
+        self.renderSelection(scaler, pos);
+        self.renderCursor(scaler, pos, one_char_size);
     }
 
-    fn renderCursor(self: WidgetTextEdit, draw_pos: Vec2u, one_char_size: Vec2u) void {
-        // render the cursor only if it is visible
-        if (self.isCursorVisible()) {
-            self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, draw_pos, one_char_size);
+    fn renderCursor(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) void {
+        if (self.cursor.isVisible(self.viewport)) {
+            self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, scaler, draw_pos, one_char_size);
         }
     }
 
     /// Returns x offset introduced by drawing the lines numbers
     fn renderLineNumbers(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
-        var text_pos_x = scaler.Scaleu(10);
+        var text_pos_x: usize = 10;
 
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
@@ -210,14 +231,13 @@ pub const WidgetTextEdit = struct {
 
         // render the background
 
-        _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 20, 20, 20, 255);
-        var rect = c.SDL_Rect{
-            .x = @intCast(c_int, draw_pos.a),
-            .y = @intCast(c_int, draw_pos.b),
-            .w = @intCast(c_int, draw_pos.a + width),
-            .h = @intCast(c_int, draw_pos.b + widget_size.b),
-        };
-        _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
+        Draw.fill_rect(
+            self.app.sdl_renderer,
+            scaler,
+            Vec2u{ .a = draw_pos.a, .b = draw_pos.b },
+            Vec2u{ .a = draw_pos.a + width, .b = widget_size.b - draw_pos.b },
+            c.SDL_Color{ .r = 20, .g = 20, .b = 20, .a = 255 },
+        );
 
         // render the line numbers
 
@@ -227,32 +247,34 @@ pub const WidgetTextEdit = struct {
                 return 0;
             };
 
-            var text_color: c_int = 90;
-
             if (i == self.cursor.pos.b) {
-                _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 120, 120, 120, 255);
-                rect = c.SDL_Rect{
-                    .x = @intCast(c_int, draw_pos.a),
-                    .y = @intCast(c_int, y_offset),
-                    .w = @intCast(c_int, draw_pos.a + width),
-                    .h = @intCast(c_int, self.one_char_size.b),
-                };
-                _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
-                text_color = 0;
+                Draw.fill_rect(
+                    self.app.sdl_renderer,
+                    scaler,
+                    Vec2u{ .a = draw_pos.a, .b = y_offset },
+                    Vec2u{ .a = draw_pos.a + width, .b = self.one_char_size.b },
+                    c.SDL_Color{ .r = 120, .g = 120, .b = 120, .a = 255 },
+                );
             }
 
-            self.app.current_font.drawText(Vec2u{ .a = text_pos_x, .b = y_offset }, cbuff);
+            Draw.draw_text(
+                self.app.current_font,
+                scaler,
+                Vec2u{ .a = text_pos_x, .b = y_offset },
+                cbuff,
+            );
+
             y_offset += self.one_char_size.b;
         }
 
         return width;
     }
 
-    fn renderLines(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, _: Vec2u) usize {
+    fn renderLines(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u) usize {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
         var y_offset: usize = 0;
-        var left_blank_offset = scaler.Scaleu(5);
+        var left_blank_offset: usize = 5;
 
         while (i < self.viewport.lines.b) : (i += 1) {
             j = self.viewport.columns.a;
@@ -266,7 +288,12 @@ pub const WidgetTextEdit = struct {
                 }
 
                 var data = line.bytes()[self.viewport.columns.a..@min(self.viewport.columns.b, line.size())];
-                self.app.current_font.drawText(Vec2u{ .a = draw_pos.a + left_blank_offset, .b = draw_pos.b + y_offset }, data);
+                Draw.draw_text(
+                    self.app.current_font,
+                    scaler,
+                    Vec2u{ .a = draw_pos.a + left_blank_offset, .b = draw_pos.b + y_offset },
+                    data,
+                );
 
                 y_offset += self.one_char_size.b;
             } else |_| {
@@ -277,7 +304,7 @@ pub const WidgetTextEdit = struct {
         return left_blank_offset;
     }
 
-    fn renderSelection(self: WidgetTextEdit, draw_pos: Vec2u) void {
+    fn renderSelection(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u) void {
         if (self.selection.state == .Inactive) {
             return;
         }
@@ -306,16 +333,15 @@ pub const WidgetTextEdit = struct {
                         end_x = draw_pos.a + self.selection.stop.a * self.one_char_size.a - viewport_x_offset;
                     }
 
-                    var width: i64 = @intCast(i64, end_x) - @intCast(i64, start_x);
+                    var width: i64 = @max(@intCast(i64, end_x) - @intCast(i64, start_x), 0);
 
-                    _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 175, 175, 175, 100);
-                    var rect = c.SDL_Rect{
-                        .x = @intCast(c_int, start_x),
-                        .y = @intCast(c_int, draw_pos.b + y_offset),
-                        .w = @intCast(c_int, width),
-                        .h = @intCast(c_int, self.one_char_size.b),
-                    };
-                    _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
+                    Draw.fill_rect(
+                        self.app.sdl_renderer,
+                        scaler,
+                        Vec2u{ .a = start_x, .b = draw_pos.b + y_offset },
+                        Vec2u{ .a = @intCast(usize, width), .b = self.one_char_size.b },
+                        c.SDL_Color{ .r = 175, .g = 175, .b = 175, .a = 100 },
+                    );
                 }
                 y_offset += self.one_char_size.b;
             } else |err| {
@@ -325,6 +351,13 @@ pub const WidgetTextEdit = struct {
         }
 
         return;
+    }
+
+    /// computeViewport is dependant on visible_cols_and_lines, which is computed every
+    /// render (since it needs a pos and a size, provided to the widget on rendering).
+    fn computeViewport(self: *WidgetTextEdit) void {
+        self.viewport.columns.b = self.viewport.columns.a + self.visible_cols_and_lines.a;
+        self.viewport.lines.b = self.viewport.lines.a + self.visible_cols_and_lines.b;
     }
 
     /// scrollToCursor scrolls to the cursor if it is not visible.
@@ -359,13 +392,6 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    /// `isCursorVisible` returns true if the cursor is visible in the window.
-    /// TODO(remy): test
-    fn isCursorVisible(self: WidgetTextEdit) bool {
-        return (self.cursor.pos.b >= self.viewport.lines.a and self.cursor.pos.b <= self.viewport.lines.b and
-            self.cursor.pos.a >= self.viewport.columns.a and self.cursor.pos.a <= self.viewport.columns.b);
-    }
-
     // TODO(remy): comment
     // TODO(remy): unit test
     fn cursorPosFromWindowPos(self: WidgetTextEdit, click_window_pos: Vec2u, draw_pos: Vec2u) Vec2u {
@@ -373,7 +399,7 @@ pub const WidgetTextEdit = struct {
 
         // remove the offset
         var in_editor = Vec2u{
-            .a = click_window_pos.a - draw_pos.a,
+            .a = @intCast(usize, @max(@intCast(i64, click_window_pos.a - draw_pos.a) - @intCast(i64, self.selection_left_offset), 0)),
             .b = click_window_pos.b - draw_pos.b,
         };
 
@@ -641,21 +667,21 @@ pub const WidgetTextEdit = struct {
 
     // FIXME(remy): this should move the viewport but not moving the
     // the cursor.
-    pub fn onMouseWheel(self: *WidgetTextEdit, move: Vec2i, visible_cols_and_lines: Vec2u) void {
+    pub fn onMouseWheel(self: *WidgetTextEdit, move: Vec2i) void {
         var scroll_move = @divTrunc(@intCast(i64, self.viewport.lines.b) - @intCast(i64, self.viewport.lines.a), 4);
         if (scroll_move < 0) {
             scroll_move = 4;
         }
 
         if (move.b < 0) {
-            self.moveViewport(Vec2i{ .a = 0, .b = scroll_move }, visible_cols_and_lines);
+            self.moveViewport(Vec2i{ .a = 0, .b = scroll_move });
         } else if (move.b > 0) {
-            self.moveViewport(Vec2i{ .a = 0, .b = -scroll_move }, visible_cols_and_lines);
+            self.moveViewport(Vec2i{ .a = 0, .b = -scroll_move });
         }
         if (move.a < 0) {
-            self.moveViewport(Vec2i{ .a = -scroll_move, .b = 0 }, visible_cols_and_lines);
+            self.moveViewport(Vec2i{ .a = -scroll_move, .b = 0 });
         } else if (move.a > 0) {
-            self.moveViewport(Vec2i{ .a = scroll_move, .b = 0 }, visible_cols_and_lines);
+            self.moveViewport(Vec2i{ .a = scroll_move, .b = 0 });
         }
     }
 
@@ -804,11 +830,12 @@ pub const WidgetTextEdit = struct {
     // TODO(remy): comment
     // TODO(remy): unit test
     // TODO(remy): implement smooth movement
-    pub fn moveViewport(self: *WidgetTextEdit, move: Vec2i, visible_cols_and_lines: Vec2u) void {
+    pub fn moveViewport(self: *WidgetTextEdit, move: Vec2i) void {
         var cols_a: i64 = 0;
         var cols_b: i64 = 0;
         var lines_a: i64 = 0;
         var lines_b: i64 = 0;
+
         cols_a = @intCast(i64, self.viewport.columns.a) + move.a;
         cols_b = @intCast(i64, self.viewport.columns.b) + move.a;
 
@@ -819,7 +846,7 @@ pub const WidgetTextEdit = struct {
 
         if (lines_a < 0) {
             self.viewport.lines.a = 0;
-            self.viewport.lines.b = visible_cols_and_lines.b;
+            self.viewport.lines.b = self.visible_cols_and_lines.b;
         } else if (lines_a > self.editor.buffer.lines.items.len) {
             return;
         } else {
@@ -834,9 +861,9 @@ pub const WidgetTextEdit = struct {
 
         if (cols_a < 0) {
             self.viewport.columns.a = 0;
-            self.viewport.columns.b = visible_cols_and_lines.a;
+            self.viewport.columns.b = self.visible_cols_and_lines.a;
         } else if (cols_b > longest_visible_line) {
-            self.viewport.columns.a = @intCast(usize, @max(0, @intCast(i64, longest_visible_line) - @intCast(i64, visible_cols_and_lines.a)));
+            self.viewport.columns.a = @intCast(usize, @max(0, @intCast(i64, longest_visible_line) - @intCast(i64, self.visible_cols_and_lines.a)));
             self.viewport.columns.b = longest_visible_line;
         } else {
             self.viewport.columns.a = @intCast(usize, cols_a);
@@ -844,10 +871,10 @@ pub const WidgetTextEdit = struct {
         }
 
         if (self.viewport.columns.b > longest_visible_line) {
-            self.viewport.columns.a = @intCast(usize, @max(0, @intCast(i64, longest_visible_line) - @intCast(i64, visible_cols_and_lines.a)));
-            self.viewport.columns.b = @max(longest_visible_line, visible_cols_and_lines.a);
+            self.viewport.columns.a = @intCast(usize, @max(0, @intCast(i64, longest_visible_line) - @intCast(i64, self.visible_cols_and_lines.a)));
+            self.viewport.columns.b = @max(longest_visible_line, self.visible_cols_and_lines.a);
         } else {
-            self.viewport.columns.b = self.viewport.columns.a + visible_cols_and_lines.a;
+            self.viewport.columns.b = self.viewport.columns.a + self.visible_cols_and_lines.a;
         }
     }
 
@@ -890,7 +917,6 @@ pub const WidgetTextEdit = struct {
         }
 
         self.validateCursorPosition(scroll);
-
         if (self.selection.state == .KeyboardSelection) {
             self.updateSelection(self.cursor.pos);
         }

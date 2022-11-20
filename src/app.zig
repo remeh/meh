@@ -171,7 +171,7 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         var buffer = try Buffer.initFromFile(self.allocator, filepath);
-        var editor = WidgetTextEdit.initWithBuffer(self.allocator, self, buffer, self.visibleColumnsAndLinesInWindow());
+        var editor = WidgetTextEdit.initWithBuffer(self.allocator, self, buffer);
         try self.textedits.append(editor);
     }
 
@@ -189,6 +189,7 @@ pub const App = struct {
         self.refreshWindowScaledSize();
         self.refreshDPIMode();
         var scaler = Scaler{ .scale = self.window_scaling };
+        var one_char_size = self.oneCharSize();
 
         // render list
         // -----------
@@ -200,8 +201,13 @@ pub const App = struct {
 
         // editor window
 
-        var widget_text_edit = &self.textedits.items[0]; // FIXME(remy):
-        widget_text_edit.render(scaler, self.widget_text_edit_pos, Vec2u{ .a = 0, .b = self.window_scaled_size.b - 50 }, self.oneCharSize());
+        var widget_text_edit = &self.textedits.items[0];
+        widget_text_edit.render(
+            scaler,
+            self.widget_text_edit_pos,
+            Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b - 10 },
+            one_char_size,
+        );
 
         // command input TODO
 
@@ -269,22 +275,11 @@ pub const App = struct {
         self.onWindowResized();
     }
 
-    /// visibleColumnsAndLinesInWindow returns how many lines can be drawn on the window
-    /// depending on the scaled size of the window.
-    // FIXME(remy): should be part of the WidgetTextEdit instead
-    pub fn visibleColumnsAndLinesInWindow(self: App) Vec2u {
-        var one_char_size = self.oneCharSize();
-        var columns = (self.window_pixel_size.a - self.widget_text_edit_pos.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a));
-        var lines = (self.window_pixel_size.b - self.widget_text_edit_pos.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b));
-
-        return Vec2u{ .a = columns, .b = lines };
-    }
-
     /// oneCharSize returns the bounding box of one text char.
     fn oneCharSize(self: App) Vec2u {
         return Vec2u{
-            .a = self.current_font.font_size / 2,
-            .b = self.current_font.font_size,
+            .a = @floatToInt(usize, @intToFloat(f32, self.current_font.font_size / 2) / self.window_scaling),
+            .b = @floatToInt(usize, @intToFloat(f32, self.current_font.font_size) / self.window_scaling),
         };
     }
 
@@ -301,18 +296,17 @@ pub const App = struct {
         self.refreshWindowScaledSize();
 
         // change visible lines of every WidgetTextEdit
-        // FIXME(remy): should call onWindowResized on all WidgetTextEdit instead
-        var visible_count = self.visibleColumnsAndLinesInWindow();
-        for (self.textedits.items) |editor, i| {
-            self.textedits.items[i].viewport.lines = Vec2u{
-                .a = editor.viewport.lines.a,
-                .b = editor.viewport.lines.a + visible_count.b,
-            };
-            self.textedits.items[i].viewport.columns = Vec2u{
-                .a = editor.viewport.columns.a,
-                .b = editor.viewport.columns.a + visible_count.a,
-            };
-        }
+        // for (self.textedits.items) |textedit| {
+        // textedit.onWindowResized();
+        // self.textedits.items[i].viewport.lines = Vec2u{
+        //     .a = editor.viewport.lines.a,
+        //     .b = editor.viewport.lines.a + visible_count.b,
+        // };
+        // self.textedits.items[i].viewport.columns = Vec2u{
+        //     .a = editor.viewport.columns.a,
+        //     .b = editor.viewport.columns.a + visible_count.a,
+        // };
+        // }
     }
 
     /// mainloop of the application.
@@ -442,7 +436,7 @@ pub const App = struct {
                 _ = self.currentWidgetTextEdit().onTextInput(readTextFromSDLInput(&event.text.text));
             },
             c.SDL_MOUSEWHEEL => {
-                _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y }, self.visibleColumnsAndLinesInWindow());
+                _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
             },
             c.SDL_MOUSEMOTION => {
                 self.currentWidgetTextEdit().onMouseMove(self.sdlMousePosToVec2u(event.motion.x, event.motion.y), self.widget_text_edit_pos);
@@ -459,17 +453,17 @@ pub const App = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    fn sdlMousePosToVec2u(self: App, x: c_int, y: c_int) Vec2u {
+    fn sdlMousePosToVec2u(_: App, x: c_int, y: c_int) Vec2u {
         var rv = Vec2u{ .a = 0, .b = 0 };
         if (x < 0) {
             rv.a = 0;
         } else {
-            rv.a = @floatToInt(usize, @intToFloat(f32, x) * self.window_scaling);
+            rv.a = @intCast(usize, x);
         }
         if (y < 0) {
             rv.b = 0;
         } else {
-            rv.b = @floatToInt(usize, @intToFloat(f32, y) * self.window_scaling);
+            rv.b = @intCast(usize, y);
         }
         return rv;
     }
