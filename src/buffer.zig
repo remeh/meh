@@ -188,6 +188,11 @@ pub const Buffer = struct {
 
         return rv;
     }
+
+    /// linesCount returns how many lines is this buffer containing.
+    pub fn linesCount(self: Buffer) usize {
+        return self.lines.items.len;
+    }
 };
 
 test "init_empty" {

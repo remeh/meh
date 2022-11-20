@@ -179,12 +179,25 @@ pub const WidgetTextEdit = struct {
         }
     }
 
+    // FIXME(remy): should return how wide it had to draw itself, to use this later on while drawing the
+    // corpus, the selection and the cursor.
     fn renderLineNumbers(self: WidgetTextEdit, window_pixel_size: Vec2u, draw_pos: Vec2u) void {
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
 
         var i: usize = self.viewport.lines.a;
         var y_offset: usize = draw_pos.b;
+
+        // measure how wide we need this block to be
+
+        var max_digits: usize = 1;
+        var line_count = self.editor.linesCount();
+        while (line_count / 10 > 0) {
+            max_digits += 1;
+            line_count /= 10;
+        }
+
+        // render the background
 
         _ = c.SDL_SetRenderDrawColor(self.app.sdl_renderer, 20, 20, 20, 255);
         var rect = c.SDL_Rect{
@@ -194,6 +207,8 @@ pub const WidgetTextEdit = struct {
             .h = @intCast(c_int, window_pixel_size.b),
         };
         _ = c.SDL_RenderFillRect(self.app.sdl_renderer, &rect);
+
+        // render the line numbers
 
         while (i < self.viewport.lines.b and i < self.editor.buffer.lines.items.len) : (i += 1) {
             _ = std.fmt.bufPrintZ(cbuff, "{d}", .{i + 1}) catch |err| {

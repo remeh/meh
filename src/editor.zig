@@ -244,6 +244,14 @@ pub const Editor = struct {
 
         return EditorError.NoSearchResult;
     }
+
+    // Others
+    // ------
+
+    /// linesCount returns how many lines is this editor's buffer.
+    pub fn linesCount(self: Editor) usize {
+        return self.buffer.linesCount();
+    }
 };
 
 test "editor_new_line_and_undo" {
