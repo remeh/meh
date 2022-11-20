@@ -25,6 +25,7 @@ pub const Editor = struct {
     buffer: Buffer,
     has_changes_compared_to_disk: bool,
     history: std.ArrayList(Change),
+    history_enabled: bool,
 
     // Constructors
     // ------------
@@ -35,6 +36,7 @@ pub const Editor = struct {
             .buffer = buffer,
             .has_changes_compared_to_disk = false,
             .history = std.ArrayList(Change).init(allocator),
+            .history_enabled = true,
         };
     }
 
@@ -52,6 +54,9 @@ pub const Editor = struct {
     /// historyAppend appends a new entry in the history.
     /// If the append fails, the memory is deleted to avoid any leak.
     fn historyAppend(self: *Editor, change_type: ChangeType, data: U8Slice, pos: Vec2u) void {
+        if (!self.history_enabled) {
+            return;
+        }
         self.history.append(Change{
             .data = data,
             .pos = pos,
@@ -66,7 +71,7 @@ pub const Editor = struct {
     /// undo un-does the last change and all previous changes of the same type.
     /// returns the position at which should be the cursor.
     pub fn undo(self: *Editor) !Vec2u {
-        if (self.history.items.len == 0) {
+        if (self.history.items.len == 0 or !self.history_enabled) {
             return EditorError.NothingToUndo;
         }
         var change = self.history.pop();

@@ -22,6 +22,7 @@ pub const Draw = struct {
     }
 
     pub fn draw_text(font: Font, scaler: Scaler, position: Vec2u, text: []const u8) void {
+        _ = c.SDL_SetRenderDrawColor(font.sdl_renderer, 255, 255, 255, 255);
         var scaled_pos = scaler.Scale2u(position);
         font.drawText(scaled_pos, text);
     }

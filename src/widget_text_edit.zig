@@ -7,6 +7,7 @@ const Buffer = @import("buffer.zig").Buffer;
 const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
+const Font = @import("font.zig").Font;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
@@ -131,8 +132,8 @@ pub const WidgetTextEditSelection = struct {
 // TODO(remy): comment
 pub const WidgetTextEdit = struct {
     allocator: std.mem.Allocator,
-    app: *App,
     cursor: Cursor, // TODO(remy): replace me with a custom (containing cursor mode)
+    draw_line_numbers: bool,
     editor: Editor,
     input_mode: InputMode,
     // TODO(remy): comment
@@ -146,11 +147,11 @@ pub const WidgetTextEdit = struct {
     // ------------
 
     // TODO(remy): comment
-    pub fn initWithBuffer(allocator: std.mem.Allocator, app: *App, buffer: Buffer) WidgetTextEdit {
+    pub fn initWithBuffer(allocator: std.mem.Allocator, buffer: Buffer) WidgetTextEdit {
         return WidgetTextEdit{
             .allocator = allocator,
-            .app = app,
             .cursor = Cursor.init(),
+            .draw_line_numbers = true,
             .editor = Editor.init(allocator, buffer),
             .input_mode = InputMode.Insert,
             .one_char_size = Vec2u{ .a = 16, .b = 8 },
@@ -179,7 +180,7 @@ pub const WidgetTextEdit = struct {
     // TODO(remy): comment
     // TODO(remy): unit test (at least to validate that there is no leaks)
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally.
-    pub fn render(self: *WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
+    pub fn render(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
         self.one_char_size = one_char_size;
         self.visible_cols_and_lines = Vec2u{
             .a = (widget_size.a - draw_pos.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
@@ -190,27 +191,31 @@ pub const WidgetTextEdit = struct {
         var pos = draw_pos;
 
         // rendering line numbers create a left offset
-        var left_offset = self.renderLineNumbers(scaler, pos, widget_size, one_char_size);
-        pos.a += left_offset;
+        var left_offset: usize = 0;
+
+        if (self.draw_line_numbers) {
+            left_offset = self.renderLineNumbers(sdl_renderer, font, scaler, pos, widget_size, one_char_size);
+            pos.a += left_offset;
+        }
 
         // so does rendering lines (which adds a small blank)
-        left_offset = self.renderLines(scaler, pos);
+        left_offset = self.renderLines(font, scaler, pos);
         pos.a += left_offset;
 
         self.selection_left_offset = pos.a;
 
-        self.renderSelection(scaler, pos);
-        self.renderCursor(scaler, pos, one_char_size);
+        self.renderSelection(sdl_renderer, scaler, pos);
+        self.renderCursor(sdl_renderer, scaler, pos, one_char_size);
     }
 
-    fn renderCursor(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) void {
+    fn renderCursor(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) void {
         if (self.cursor.isVisible(self.viewport)) {
-            self.cursor.render(self.app.sdl_renderer, self.input_mode, self.viewport, scaler, draw_pos, one_char_size);
+            self.cursor.render(sdl_renderer, self.input_mode, self.viewport, scaler, draw_pos, one_char_size);
         }
     }
 
     /// Returns x offset introduced by drawing the lines numbers
-    fn renderLineNumbers(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
+    fn renderLineNumbers(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
         var text_pos_x: usize = 10;
 
         var carray: [128]u8 = std.mem.zeroes([128]u8);
@@ -232,7 +237,7 @@ pub const WidgetTextEdit = struct {
         // render the background
 
         Draw.fill_rect(
-            self.app.sdl_renderer,
+            sdl_renderer,
             scaler,
             Vec2u{ .a = draw_pos.a, .b = draw_pos.b },
             Vec2u{ .a = draw_pos.a + width, .b = widget_size.b - draw_pos.b },
@@ -249,7 +254,7 @@ pub const WidgetTextEdit = struct {
 
             if (i == self.cursor.pos.b) {
                 Draw.fill_rect(
-                    self.app.sdl_renderer,
+                    sdl_renderer,
                     scaler,
                     Vec2u{ .a = draw_pos.a, .b = y_offset },
                     Vec2u{ .a = draw_pos.a + width, .b = self.one_char_size.b },
@@ -258,7 +263,7 @@ pub const WidgetTextEdit = struct {
             }
 
             Draw.draw_text(
-                self.app.current_font,
+                font,
                 scaler,
                 Vec2u{ .a = text_pos_x, .b = y_offset },
                 cbuff,
@@ -270,7 +275,7 @@ pub const WidgetTextEdit = struct {
         return width;
     }
 
-    fn renderLines(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u) usize {
+    fn renderLines(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u) usize {
         var i: usize = self.viewport.lines.a;
         var j: usize = self.viewport.columns.a;
         var y_offset: usize = 0;
@@ -289,7 +294,7 @@ pub const WidgetTextEdit = struct {
 
                 var data = line.bytes()[self.viewport.columns.a..@min(self.viewport.columns.b, line.size())];
                 Draw.draw_text(
-                    self.app.current_font,
+                    font,
                     scaler,
                     Vec2u{ .a = draw_pos.a + left_blank_offset, .b = draw_pos.b + y_offset },
                     data,
@@ -304,7 +309,7 @@ pub const WidgetTextEdit = struct {
         return left_blank_offset;
     }
 
-    fn renderSelection(self: WidgetTextEdit, scaler: Scaler, draw_pos: Vec2u) void {
+    fn renderSelection(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u) void {
         if (self.selection.state == .Inactive) {
             return;
         }
@@ -336,7 +341,7 @@ pub const WidgetTextEdit = struct {
                     var width: i64 = @max(@intCast(i64, end_x) - @intCast(i64, start_x), 0);
 
                     Draw.fill_rect(
-                        self.app.sdl_renderer,
+                        sdl_renderer,
                         scaler,
                         Vec2u{ .a = start_x, .b = draw_pos.b + y_offset },
                         Vec2u{ .a = @intCast(usize, width), .b = self.one_char_size.b },
@@ -821,8 +826,8 @@ pub const WidgetTextEdit = struct {
                 try rv.appendConst(line.bytes());
             }
         }
+
         try rv.data.append(0);
-        std.log.debug("rv: {s}", .{rv.bytes()});
 
         return rv;
     }
@@ -1058,7 +1063,7 @@ pub const WidgetTextEdit = struct {
     // ------
 
     // TODO(remy): comment
-    fn setInputMode(self: *WidgetTextEdit, input_mode: InputMode) void {
+    pub fn setInputMode(self: *WidgetTextEdit, input_mode: InputMode) void {
         if (input_mode == .Insert) {
             // stop any selection
             self.stopSelection(.Inactive);

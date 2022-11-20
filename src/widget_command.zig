@@ -3,7 +3,15 @@ const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
+const Buffer = @import("buffer.zig").Buffer;
+const Draw = @import("draw.zig").Draw;
+const Editor = @import("editor.zig").Editor;
+const Font = @import("font.zig").Font;
+const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const Vec2u = @import("vec.zig").Vec2u;
+const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
+const Insert = @import("widget_text_edit.zig").Insert;
 const char_space = @import("widget_text_edit.zig").char_space;
 
 const WidgetCommandError = error{
@@ -12,21 +20,53 @@ const WidgetCommandError = error{
 
 // TODO(remy): comment
 pub const WidgetCommand = struct {
-    buff: [8192]u8,
+    allocator: std.mem.Allocator,
+    widget_text_edit: WidgetTextEdit,
 
     // Constructors
     // ------------
 
-    pub fn init() WidgetCommand {
+    pub fn init(allocator: std.mem.Allocator) !WidgetCommand {
         var rv = WidgetCommand{
-            .buff = std.mem.zeroes([8192]u8),
+            .allocator = allocator,
+            .widget_text_edit = WidgetTextEdit.initWithBuffer(allocator, try Buffer.initEmpty(allocator)),
         };
+        rv.widget_text_edit.draw_line_numbers = false;
+        rv.widget_text_edit.editor.history_enabled = false;
+        rv.widget_text_edit.viewport.lines.a = 0;
+        rv.widget_text_edit.viewport.columns.a = 0;
+        rv.widget_text_edit.setInputMode(.Insert);
         rv.reset();
         return rv;
     }
 
+    pub fn deinit(self: *WidgetCommand) void {
+        self.widget_text_edit.deinit();
+    }
+
     // Methods
     // -------
+
+    pub fn render(self: *WidgetCommand, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
+        self.widget_text_edit.viewport.lines.a = 0;
+        self.widget_text_edit.viewport.lines.b = 1;
+
+        Draw.fill_rect(
+            sdl_renderer,
+            scaler,
+            draw_pos,
+            widget_size,
+            c.SDL_Color{ .r = 20, .g = 20, .b = 20, .a = 255 },
+        );
+        self.widget_text_edit.render(
+            sdl_renderer,
+            font,
+            scaler,
+            draw_pos,
+            widget_size,
+            one_char_size,
+        );
+    }
 
     pub fn interpret(self: *WidgetCommand, app: *App) !void {
         var command = self.getArg(0) catch {
@@ -36,24 +76,26 @@ pub const WidgetCommand = struct {
         // quit
         // ----
 
-        if (std.mem.eql(u8, command, "q") or std.mem.eql(u8, command, "q!")) {
+        if (std.mem.eql(u8, command, ":q") or std.mem.eql(u8, command, ":q!")) {
             app.quit();
+            return;
         }
 
         // write
         // -----
 
-        if (std.mem.eql(u8, command, "w")) {
+        if (std.mem.eql(u8, command, ":w")) {
             var wt = app.currentWidgetTextEdit();
             wt.editor.save() catch |err| {
-                std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ self.buff, err });
+                std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ command, err });
             };
+            return;
         }
 
         // open file
         // ---------
 
-        if (std.mem.eql(u8, command, "o")) {
+        if (std.mem.eql(u8, command, ":o")) {
             if (self.countArgs() < 2) {
                 // TODO(remy): report errors in the app instead of in console
                 std.log.err("WidgetCommand.interpret: not enough arguments for 'o'", .{});
@@ -64,19 +106,7 @@ pub const WidgetCommand = struct {
                     std.log.err("WidgetCommand.interpret: can't open file: {}", .{err});
                 };
             } else |_| {}
-        }
-
-        // go to line
-        // ----------
-
-        if (command.len > 1 and std.mem.eql(u8, command[0..1], ":")) {
-            // read the line number
-            if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
-                var wt = app.currentWidgetTextEdit();
-                wt.goToLine(line_number, true);
-            } else |err| {
-                std.log.warn("WidgetCommand.interpret: can't read line number: {}", .{err});
-            }
+            return;
         }
 
         // search
@@ -99,15 +129,17 @@ pub const WidgetCommand = struct {
             std.log.debug("WidgetCommand.interpret: search for {s}", .{str.bytes()});
             var wt = app.currentWidgetTextEdit();
             wt.search(str);
+            return;
         }
 
         // debug
         // -----
 
-        if (std.mem.eql(u8, command, "debug")) {
+        if (std.mem.eql(u8, command, ":debug")) {
             var widget_text_edit = app.currentWidgetTextEdit();
             std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text_edit.editor.buffer.filepath.bytes(), widget_text_edit.editor.buffer.lines.items.len });
-            std.log.debug("Window size: {}", .{app.window_size});
+            std.log.debug("Window pixel size: {}", .{app.window_pixel_size});
+            std.log.debug("Window scaled size: {}", .{app.window_scaled_size});
             std.log.debug("Viewport: {}", .{widget_text_edit.viewport});
             std.log.debug("History entries count: {d}", .{widget_text_edit.editor.history.items.len});
             std.log.debug("History entries:\n{}", .{widget_text_edit.editor.history});
@@ -122,22 +154,34 @@ pub const WidgetCommand = struct {
             } else |err| {
                 std.log.debug("Line errored while using getLine: {}", .{err});
             }
+            return;
+        }
+
+        // go to line
+        // ----------
+
+        if (command.len > 1 and std.mem.eql(u8, command[0..1], ":")) {
+            // read the line number
+            if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
+                var wt = app.currentWidgetTextEdit();
+                wt.goToLine(line_number, true);
+            } else |err| {
+                std.log.warn("WidgetCommand.interpret: can't read line number: {}", .{err});
+            }
         }
 
         self.reset();
     }
 
     pub fn reset(self: *WidgetCommand) void {
-        self.buff = std.mem.zeroes([8192]u8);
+        self.widget_text_edit.editor.buffer.lines.items[0].deinit();
+        self.widget_text_edit.editor.buffer.lines.items[0] = U8Slice.initEmpty(self.allocator);
+        self.widget_text_edit.cursor.pos.a = 0;
+        self.widget_text_edit.cursor.pos.b = 0;
     }
 
     // Functions
     // ---------
-
-    pub fn callback(_: [*c]c.ImGuiInputTextCallbackData) callconv(.C) c_int {
-        // we don't use it for now, here for later usage.
-        return 0;
-    }
 
     /// countArgs returns how many arguments there currently is in the buff.
     /// The first one (the command) is part of this total.
@@ -145,11 +189,18 @@ pub const WidgetCommand = struct {
         var rv: usize = 1;
         var i: usize = 0;
         var was_space = false;
-        while (i < self.buff.len) : (i += 1) {
-            if (self.buff[i] == 0) {
+
+        var line = self.widget_text_edit.editor.buffer.getLine(0) catch |err| {
+            std.log.err("WidgetCommand.countArgs: can't get line 0: {}", .{err});
+            return 0;
+        };
+        var buff = line.bytes();
+
+        while (i < buff.len) : (i += 1) {
+            if (buff[i] == 0) {
                 return rv;
             }
-            if (self.buff[i] == char_space) {
+            if (buff[i] == char_space) {
                 was_space = true;
             } else {
                 if (was_space) {
@@ -168,16 +219,19 @@ pub const WidgetCommand = struct {
             return WidgetCommandError.ArgsOutOfBounds;
         }
 
+        var line = try self.widget_text_edit.editor.buffer.getLine(0);
+        var buff = line.bytes();
+
         // find the end
         var size: usize = 0;
-        while (size < self.buff.len) : (size += 1) {
-            if (self.buff[size] == 0) {
+        while (size < buff.len) : (size += 1) {
+            if (buff[size] == 0) {
                 break;
             }
         }
 
         var arg: ?[]const u8 = undefined;
-        var it = std.mem.split(u8, self.buff[0..size], " ");
+        var it = std.mem.split(u8, buff[0..size], " ");
         var i: usize = 0;
         arg = it.first();
         while (arg != null) {

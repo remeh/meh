@@ -38,7 +38,7 @@ pub const FontMode = enum {
 //                    for high resolutions (for the text to not look small).
 pub const App = struct {
     allocator: std.mem.Allocator,
-    command: WidgetCommand,
+    widget_command: WidgetCommand,
     textedits: std.ArrayList(WidgetTextEdit),
     // gl_context: c.SDL_GLContext,
     sdl_window: *c.SDL_Window,
@@ -124,7 +124,7 @@ pub const App = struct {
             .allocator = allocator,
             .widget_text_edit_pos = Vec2u{ .a = 0, .b = 8 * 4 },
             .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
-            .command = WidgetCommand.init(),
+            .widget_command = try WidgetCommand.init(allocator),
             .current_widget_text_edit_tab = 0,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
@@ -171,7 +171,7 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         var buffer = try Buffer.initFromFile(self.allocator, filepath);
-        var editor = WidgetTextEdit.initWithBuffer(self.allocator, self, buffer);
+        var editor = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
         try self.textedits.append(editor);
     }
 
@@ -203,12 +203,24 @@ pub const App = struct {
 
         var widget_text_edit = &self.textedits.items[0];
         widget_text_edit.render(
+            self.sdl_renderer,
+            self.current_font,
             scaler,
             self.widget_text_edit_pos,
             Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b - 10 },
             one_char_size,
         );
 
+        if (self.focused_widget == .Command) {
+            self.widget_command.render(
+                self.sdl_renderer,
+                self.current_font,
+                scaler,
+                Vec2u{ .a = 50, .b = 50 },
+                Vec2u{ .a = 500, .b = 80 },
+                one_char_size,
+            );
+        }
         // command input TODO
 
         // rendering
@@ -294,19 +306,6 @@ pub const App = struct {
     fn onWindowResized(self: *App) void {
         self.refreshWindowPixelSize();
         self.refreshWindowScaledSize();
-
-        // change visible lines of every WidgetTextEdit
-        // for (self.textedits.items) |textedit| {
-        // textedit.onWindowResized();
-        // self.textedits.items[i].viewport.lines = Vec2u{
-        //     .a = editor.viewport.lines.a,
-        //     .b = editor.viewport.lines.a + visible_count.b,
-        // };
-        // self.textedits.items[i].viewport.columns = Vec2u{
-        //     .a = editor.viewport.columns.a,
-        //     .b = editor.viewport.columns.a + visible_count.a,
-        // };
-        // }
     }
 
     /// mainloop of the application.
@@ -390,12 +389,23 @@ pub const App = struct {
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
+                    c.SDLK_RETURN => {
+                        self.widget_command.interpret(self) catch |err| {
+                            std.log.err("App.commandEvents: can't start interpert: {}", .{err});
+                            return;
+                        };
+                        self.focused_widget = FocusedWidget.Editor;
+                        self.widget_command.reset();
+                    },
                     c.SDLK_ESCAPE => {
                         self.focused_widget = FocusedWidget.Editor;
-                        self.command.reset();
+                        self.widget_command.reset();
                     },
                     else => {},
                 }
+            },
+            c.SDL_TEXTINPUT => {
+                _ = self.widget_command.widget_text_edit.onTextInput(readTextFromSDLInput(&event.text.text));
             },
             else => {},
         }
@@ -417,7 +427,6 @@ pub const App = struct {
                         if (self.currentWidgetTextEdit().input_mode == .Command) {
                             self.focused_widget = FocusedWidget.Command;
                         }
-                        // TODO(remy):    self.command.buff[0] = ':';
                     },
                     c.SDLK_BACKSPACE => {
                         self.currentWidgetTextEdit().onBackspace();

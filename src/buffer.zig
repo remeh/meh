@@ -24,14 +24,18 @@ pub const Buffer = struct {
     // ------------
 
     /// init_empty initializes an empty buffer.
+    /// Creates an initial first line.
     // TODO(remy): better comment
     pub fn initEmpty(allocator: std.mem.Allocator) !Buffer {
-        return Buffer{
+        var empty_line = U8Slice.initEmpty(allocator);
+        var buff = Buffer{
             .allocator = allocator,
             .in_ram_only = true,
             .filepath = U8Slice.initEmpty(allocator),
             .lines = std.ArrayList(U8Slice).init(allocator),
         };
+        try buff.lines.append(empty_line);
+        return buff;
     }
 
     /// initFromFile creates a buffer, reads data from the given filepath
@@ -105,6 +109,9 @@ pub const Buffer = struct {
     // TODO(remy): unit test
     // FIXME(remy): implement should probably be in another file fs.zig
     pub fn writeOnDisk(self: *Buffer) !void {
+        if (self.in_ram_only) {
+            return;
+        }
         if (self.filepath.size() == 0) {
             return BufferError.NoFilepath;
         }
