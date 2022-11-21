@@ -9,6 +9,7 @@ const Editor = @import("editor.zig").Editor;
 const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 const Insert = @import("widget_text_edit.zig").Insert;
@@ -44,25 +45,61 @@ pub const WidgetCommand = struct {
         self.widget_text_edit.deinit();
     }
 
+    // Events
+    // ------
+
+    // TODO(remy):
+    // TODO(remy): comment
+    pub fn onBackspace(self: *WidgetCommand) void {
+        self.widget_text_edit.editor.deleteUtf8Char(self.widget_text_edit.cursor.pos, true) catch |err| {
+            std.log.err("WidgetCommand.onBackspace: {}", .{err});
+        };
+        self.widget_text_edit.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+    }
+
     // Methods
     // -------
 
-    pub fn render(self: *WidgetCommand, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
+    pub fn render(
+        self: *WidgetCommand,
+        sdl_renderer: *c.SDL_Renderer,
+        font: Font,
+        scaler: Scaler,
+        window_scaled_size: Vec2u,
+        draw_pos: Vec2u,
+        widget_size: Vec2u,
+        one_char_size: Vec2u,
+    ) void {
         self.widget_text_edit.viewport.lines.a = 0;
         self.widget_text_edit.viewport.lines.b = 1;
 
+        // overlay
+        Draw.fill_rect(
+            sdl_renderer,
+            scaler,
+            Vec2u{ .a = 0, .b = 0 },
+            window_scaled_size,
+            c.SDL_Color{ .r = 20, .g = 20, .b = 20, .a = 130 },
+        );
+
+        // text edit background
         Draw.fill_rect(
             sdl_renderer,
             scaler,
             draw_pos,
             widget_size,
-            c.SDL_Color{ .r = 20, .g = 20, .b = 20, .a = 255 },
+            c.SDL_Color{ .r = 20, .g = 20, .b = 20, .a = 240 },
         );
+
+        // text edit
+        var pos = draw_pos;
+        pos.a += 15;
+        pos.b += 15;
         self.widget_text_edit.render(
             sdl_renderer,
             font,
             scaler,
-            draw_pos,
+            pos,
             widget_size,
             one_char_size,
         );
@@ -195,6 +232,7 @@ pub const WidgetCommand = struct {
             return 0;
         };
         var buff = line.bytes();
+        std.log.debug("{s}", .{buff});
 
         while (i < buff.len) : (i += 1) {
             if (buff[i] == 0) {
@@ -209,7 +247,7 @@ pub const WidgetCommand = struct {
                 was_space = false;
             }
         }
-        return 0;
+        return rv;
     }
 
     /// getArg returns the arg at the given position.

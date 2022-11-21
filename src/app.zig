@@ -40,7 +40,6 @@ pub const App = struct {
     allocator: std.mem.Allocator,
     widget_command: WidgetCommand,
     textedits: std.ArrayList(WidgetTextEdit),
-    // gl_context: c.SDL_GLContext,
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
 
@@ -216,8 +215,9 @@ pub const App = struct {
                 self.sdl_renderer,
                 self.current_font,
                 scaler,
-                Vec2u{ .a = 50, .b = 50 },
-                Vec2u{ .a = 500, .b = 80 },
+                self.window_scaled_size, // used for the overlay
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = 50 },
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = 50 },
                 one_char_size,
             );
         }
@@ -400,6 +400,9 @@ pub const App = struct {
                     c.SDLK_ESCAPE => {
                         self.focused_widget = FocusedWidget.Editor;
                         self.widget_command.reset();
+                    },
+                    c.SDLK_BACKSPACE => {
+                        self.widget_command.onBackspace();
                     },
                     else => {},
                 }

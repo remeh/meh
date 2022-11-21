@@ -183,8 +183,8 @@ pub const WidgetTextEdit = struct {
     pub fn render(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
         self.one_char_size = one_char_size;
         self.visible_cols_and_lines = Vec2u{
-            .a = (widget_size.a - draw_pos.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
-            .b = (widget_size.b - draw_pos.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b)),
+            .a = (widget_size.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
+            .b = (widget_size.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b)),
         };
         self.computeViewport();
 
