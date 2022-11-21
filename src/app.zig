@@ -58,6 +58,7 @@ pub const App = struct {
     font_lowdpi: Font,
     font_lowdpibigfont: Font,
     font_hidpi: Font,
+    font_custom: ?Font,
     current_font: Font,
     font_mode: FontMode,
 
@@ -128,6 +129,7 @@ pub const App = struct {
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
             .sdl_window = sdl_window.?,
+            .font_custom = undefined,
             .font_lowdpi = font_lowdpi,
             .font_lowdpibigfont = font_lowdpibigfont,
             .font_hidpi = font_hidpi,
@@ -178,6 +180,20 @@ pub const App = struct {
     // app if no file is opened.
     pub fn currentWidgetTextEdit(self: App) *WidgetTextEdit {
         return &self.textedits.items[self.current_widget_text_edit_tab];
+    }
+
+    pub fn increaseFont(self: *App) void {
+        var font = Font.init(self.allocator, self.sdl_renderer, "./res/UbuntuMono-Regular.ttf", self.current_font.font_size + 2) catch |err| {
+            std.log.err("App.increaseFont: can't load temporary font: {}", .{err});
+            return;
+        };
+
+        // if (self.font_custom) |custom| {
+        // custom.deinit();
+        // }
+
+        self.font_custom = font;
+        self.current_font = font;
     }
 
     fn render(self: *App) void {
@@ -433,6 +449,11 @@ pub const App = struct {
                     },
                     c.SDLK_BACKSPACE => {
                         self.currentWidgetTextEdit().onBackspace();
+                    },
+                    c.SDLK_EQUALS => {
+                        if ((ctrl or cmd) and shift) {
+                            self.increaseFont();
+                        }
                     },
                     c.SDLK_TAB => {
                         self.currentWidgetTextEdit().onTab(shift); // TODO(remy): support shift-tab
