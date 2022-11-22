@@ -16,14 +16,17 @@ const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec2utoi = @import("vec.zig").Vec2utoi;
 
+const char_space = @import("u8slice.zig").char_space;
+const char_tab = @import("u8slice.zig").char_tab;
+const char_linereturn = @import("u8slice.zig").char_linereturn;
+const string_space = @import("u8slice.zig").string_space;
+
 // TODO(remy): where should we define this?
 // TODO(remy): comment
 // TODO(remy): comment
 pub const char_offset_before_move = 5;
 // TODO(remy): comment
 pub const tab_spaces = 4;
-pub const char_space = ' ';
-pub const string_space = " ";
 
 pub const InputMode = enum {
     Command,
@@ -71,20 +74,24 @@ pub const Cursor = struct {
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
-    pub fn render(self: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, viewport: WidgetTextEditViewport, scaler: Scaler, draw_pos: Vec2u, font_size: Vec2u) void {
-        var col_offset_in_buffer = viewport.columns.a;
-        var line_offset_in_buffer = viewport.lines.a;
-
+    pub fn render(
+        _: Cursor,
+        sdl_renderer: *c.SDL_Renderer,
+        input_mode: InputMode,
+        scaler: Scaler,
+        draw_pos: Vec2u,
+        one_char_size: Vec2u,
+    ) void {
         switch (input_mode) {
             .Insert => {
                 Draw.fillRect(
                     sdl_renderer,
                     scaler,
                     Vec2u{
-                        .a = draw_pos.a + (self.pos.a - col_offset_in_buffer) * font_size.a,
-                        .b = draw_pos.b + (self.pos.b - line_offset_in_buffer) * font_size.b,
+                        .a = draw_pos.a,
+                        .b = draw_pos.b,
                     },
-                    Vec2u{ .a = 2, .b = font_size.b },
+                    Vec2u{ .a = 2, .b = one_char_size.b },
                     c.SDL_Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
                 );
             },
@@ -93,14 +100,97 @@ pub const Cursor = struct {
                     sdl_renderer,
                     scaler,
                     Vec2u{
-                        .a = draw_pos.a + (self.pos.a - col_offset_in_buffer) * font_size.a,
-                        .b = draw_pos.b + (self.pos.b - line_offset_in_buffer) * font_size.b,
+                        .a = draw_pos.a,
+                        .b = draw_pos.b,
                     },
-                    Vec2u{ .a = font_size.a, .b = font_size.b },
+                    Vec2u{ .a = one_char_size.a, .b = one_char_size.b },
                     c.SDL_Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
                 );
             },
         }
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    fn posFromWindowPos(_: Cursor, text_edit: *WidgetTextEdit, click_window_pos: Vec2u, draw_pos: Vec2u) Vec2u {
+        var rv = Vec2u{ .a = 0, .b = 0 };
+
+        // position in char in window
+        // --
+
+        var in_editor = Vec2u{
+            .a = @intCast(usize, @max(@intCast(i64, click_window_pos.a - draw_pos.a) - @intCast(i64, text_edit.line_numbers_offset), 0)) / text_edit.one_char_size.a,
+            .b = (click_window_pos.b - draw_pos.b) / text_edit.one_char_size.b,
+        };
+
+        // line
+        // --
+
+        rv.b = in_editor.b;
+        rv.b += text_edit.viewport.lines.a;
+
+        if (rv.b < 0) {
+            rv.b = 0;
+        } else if (rv.b >= text_edit.editor.buffer.lines.items.len) {
+            rv.b = text_edit.editor.buffer.lines.items.len - 1;
+            var last_line = text_edit.editor.buffer.getLine(text_edit.editor.buffer.lines.items.len - 1) catch |err| {
+                std.log.err("Cursor.posFromWindowPos: can't get last line {d}: {}", .{ rv.b, err });
+                return rv;
+            };
+            rv.a = last_line.size() - 1;
+            return rv;
+        }
+
+        // column
+        // --
+
+        rv.a = text_edit.viewport.columns.a;
+
+        var line = text_edit.editor.buffer.getLine(rv.b) catch |err| {
+            std.log.err("Cursor.posFromWindowPos: can't get current line {d}: {}", .{ rv.b, err });
+            return rv;
+        };
+
+        var utf8size = line.utf8size() catch |err| {
+            std.log.err("Cursor.posFromWindowPos: can't get current line utf8size {d}: {}", .{ rv.b, err });
+            return rv;
+        };
+
+        if (rv.a > utf8size) {
+            rv.a = utf8size;
+            return rv;
+        }
+
+        if (in_editor.a == 0) {
+            rv.a = text_edit.viewport.columns.a;
+            return rv;
+        }
+
+        var buff_idx: usize = 0;
+        var tabs_idx: usize = 0;
+        var move_done: usize = 0;
+        var bytes = line.bytes();
+
+        while (buff_idx < @min(bytes.len, text_edit.viewport.columns.b)) {
+            if (bytes[buff_idx] == char_tab and tabs_idx == 0) {
+                // it is a tab
+                tabs_idx = 4;
+            }
+            if (tabs_idx > 0) {
+                tabs_idx -= 1;
+            }
+            if (tabs_idx == 0) {
+                buff_idx += 1;
+            }
+
+            move_done += 1;
+            if (move_done >= text_edit.viewport.columns.a + in_editor.a) {
+                rv.a = buff_idx;
+                break;
+            }
+        }
+
+        return rv;
     }
 
     /// isVisible returns true if the cursor is visible in the given viewport.
@@ -139,7 +229,7 @@ pub const WidgetTextEdit = struct {
     // TODO(remy): comment
     viewport: WidgetTextEditViewport,
     selection: WidgetTextEditSelection,
-    selection_left_offset: usize, // when rendering the line number, it creates a left offset
+    line_numbers_offset: usize, // when rendering the line number, it creates a left offset
     visible_cols_and_lines: Vec2u,
     one_char_size: Vec2u, // refreshed before every frame
 
@@ -160,7 +250,7 @@ pub const WidgetTextEdit = struct {
                 .lines = Vec2u{ .a = 0, .b = 1 },
             },
             .visible_cols_and_lines = Vec2u{ .a = 1, .b = 1 },
-            .selection_left_offset = 0,
+            .line_numbers_offset = 0,
             .selection = WidgetTextEditSelection{
                 .start = Vec2u{ .a = 0, .b = 0 },
                 .initial = Vec2u{ .a = 0, .b = 0 },
@@ -184,13 +274,15 @@ pub const WidgetTextEdit = struct {
         self.one_char_size = one_char_size;
         self.visible_cols_and_lines = Vec2u{
             .a = (widget_size.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
-            .b = (widget_size.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b)),
+            .b = ((widget_size.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b))) - 1, // FIXME(remy): this -1 is based on nothing
         };
         self.computeViewport();
 
         var pos = draw_pos;
 
-        // rendering line numbers create a left offset
+        // render line numbers
+        // it creates a left offset
+
         var left_offset: usize = 0;
 
         if (self.draw_line_numbers) {
@@ -198,20 +290,13 @@ pub const WidgetTextEdit = struct {
             pos.a += left_offset;
         }
 
-        // so does rendering lines (which adds a small blank)
-        left_offset = self.renderLines(font, scaler, pos);
+        // render the lines
+        // it also adds a left offset (a small blank)
+
+        left_offset = self.renderLinesAndSelection(font, scaler, pos, one_char_size);
         pos.a += left_offset;
 
-        self.selection_left_offset = pos.a;
-
-        self.renderSelection(sdl_renderer, scaler, pos);
-        self.renderCursor(sdl_renderer, scaler, pos, one_char_size);
-    }
-
-    fn renderCursor(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) void {
-        if (self.cursor.isVisible(self.viewport)) {
-            self.cursor.render(sdl_renderer, self.input_mode, self.viewport, scaler, draw_pos, one_char_size);
-        }
+        self.line_numbers_offset = pos.a;
     }
 
     /// Returns x offset introduced by drawing the lines numbers
@@ -275,30 +360,102 @@ pub const WidgetTextEdit = struct {
         return width;
     }
 
-    fn renderLines(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u) usize {
+    fn renderLinesAndSelection(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) usize {
         var i: usize = self.viewport.lines.a;
-        var j: usize = self.viewport.columns.a;
         var y_offset: usize = 0;
         var left_blank_offset: usize = 5;
 
         while (i < self.viewport.lines.b) : (i += 1) {
-            j = self.viewport.columns.a;
             if (self.editor.buffer.getLine(i)) |line| {
-                var buff: *[]u8 = &line.data.items; // uses a pointer only to avoid a copy
+                // empty line, just jump a line
 
-                // empty line
-                if (buff.len == 0 or (buff.len == 1 and buff.*[0] == '\n') or buff.len < self.viewport.columns.a) {
+                if (line.size() == 0) {
                     y_offset += self.one_char_size.b;
                     continue;
                 }
 
-                var data = line.bytes()[self.viewport.columns.a..@min(self.viewport.columns.b, line.size())];
-                Draw.text(
-                    font,
-                    scaler,
-                    Vec2u{ .a = draw_pos.a + left_blank_offset, .b = draw_pos.b + y_offset },
-                    data,
-                );
+                // we always have to render every line from the start: since they may contain a \t
+                // we will have to take care of the fact that a \t use multiple spaces.
+
+                var buff_idx: usize = 0;
+                var tab_idx: usize = 0;
+                var move_done: usize = 0;
+                var offset: usize = 0; // offset in char, relative to the left of the widget (i.e. right of the line numbers if any)
+                var bytes = line.bytes();
+
+                while (buff_idx < @min(self.viewport.columns.b, line.size())) {
+                    if (bytes[buff_idx] == char_tab and tab_idx == 0) {
+                        tab_idx = tab_spaces;
+                    }
+
+                    // render the glyph only if not rendering a tab and we "moved" enough
+                    // to be in the viewport
+                    if (move_done >= self.viewport.columns.a) {
+
+                        // if we're not currently rendering a tab
+                        // we have to draw a glyph
+
+                        if (tab_idx == 0) {
+                            Draw.glyph(
+                                font,
+                                scaler,
+                                Vec2u{
+                                    .a = draw_pos.a + (offset * one_char_size.a) + left_blank_offset,
+                                    .b = draw_pos.b + y_offset,
+                                },
+                                bytes[buff_idx .. buff_idx + 1],
+                            );
+                        }
+
+                        // draw the selection rectangle if necessary
+
+                        if (self.isSelected(Vec2u{ .a = buff_idx, .b = i })) {
+                            Draw.fillRect(
+                                font.sdl_renderer,
+                                scaler,
+                                Vec2u{
+                                    .a = draw_pos.a + (offset * one_char_size.a) + left_blank_offset,
+                                    .b = draw_pos.b + y_offset,
+                                },
+                                one_char_size,
+                                c.SDL_Color{ .r = 175, .g = 175, .b = 175, .a = 100 },
+                            );
+                        }
+
+                        // draw the cursor if necessary
+
+                        if (self.cursor.pos.a == buff_idx and (tab_idx == 4 or tab_idx == 0) and self.cursor.pos.b == i) {
+                            self.cursor.render(
+                                font.sdl_renderer,
+                                self.input_mode,
+                                scaler,
+                                Vec2u{
+                                    .a = draw_pos.a + (offset * one_char_size.a) + left_blank_offset,
+                                    .b = draw_pos.b + y_offset,
+                                },
+                                one_char_size,
+                            );
+                        }
+                    }
+
+                    // move in the actual buffer only if we're not in a tab
+                    if (tab_idx == 0) {
+                        buff_idx += 1;
+                    } else {
+                        // we are currently drawing a tab
+                        tab_idx -= 1;
+                        if (tab_idx == 0) { // are we done drawing this tab? time to move forward in the idx
+                            buff_idx += 1;
+                        }
+                    }
+
+                    // move right only where we are currently drawing in the viewport
+                    // otherwise, it's just offscreen movement, we don't have anything to draw
+                    if (move_done >= self.viewport.columns.a) {
+                        offset += 1;
+                    }
+                    move_done += 1;
+                }
 
                 y_offset += self.one_char_size.b;
             } else |_| {
@@ -309,53 +466,46 @@ pub const WidgetTextEdit = struct {
         return left_blank_offset;
     }
 
-    fn renderSelection(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u) void {
+    // TODO(remy): unit test
+    fn isSelected(self: WidgetTextEdit, glyph: Vec2u) bool {
         if (self.selection.state == .Inactive) {
-            return;
+            return false;
         }
 
-        var i: usize = self.viewport.lines.a;
-        var y_offset: usize = 0;
+        if (glyph.b < self.selection.start.b or glyph.b > self.selection.stop.b) {
+            return false;
+        }
 
-        while (i < self.viewport.lines.b) : (i += 1) {
-            if (self.editor.buffer.getLine(i)) |line| {
-                var utf8size = line.utf8size() catch |err| {
-                    std.log.err("WidgetTextEdit.renderSelection: can't get utf8size of line {d}: {}", .{ i, err });
-                    return;
-                };
+        // one the starting line
 
-                var viewport_x_offset = self.viewport.columns.a * self.one_char_size.a;
-
-                if (i >= self.selection.start.b and i <= self.selection.stop.b) {
-                    var start_x = draw_pos.a;
-                    // start of the line or not?
-                    if (self.selection.start.b == i) {
-                        start_x += self.selection.start.a * self.one_char_size.a - viewport_x_offset;
-                    }
-                    // end of the line or not?
-                    var end_x = draw_pos.a + (utf8size - 1) * self.one_char_size.a - viewport_x_offset;
-                    if (self.selection.stop.b == i) {
-                        end_x = draw_pos.a + self.selection.stop.a * self.one_char_size.a - viewport_x_offset;
-                    }
-
-                    var width: i64 = @max(@intCast(i64, end_x) - @intCast(i64, start_x), 0);
-
-                    Draw.fillRect(
-                        sdl_renderer,
-                        scaler,
-                        Vec2u{ .a = start_x, .b = draw_pos.b + y_offset },
-                        Vec2u{ .a = @intCast(usize, width), .b = self.one_char_size.b },
-                        c.SDL_Color{ .r = 175, .g = 175, .b = 175, .a = 100 },
-                    );
-                }
-                y_offset += self.one_char_size.b;
-            } else |err| {
-                std.log.err("WidgetTextEdit.renderSelection: can't get line {d}: {}", .{ i, err });
-                return;
+        if (glyph.b == self.selection.start.b and glyph.b != self.selection.stop.b) {
+            if (glyph.a >= self.selection.start.a) {
+                return true;
             }
+            return false;
         }
 
-        return;
+        // one the ending line
+
+        if (glyph.b == self.selection.stop.b and glyph.b != self.selection.start.b) {
+            if (glyph.a <= self.selection.stop.a) {
+                return true;
+            }
+            return false;
+        }
+
+        // starting and ending on this line
+        if (self.selection.start.b == self.selection.stop.b and glyph.b == self.selection.start.b and
+            glyph.a >= self.selection.start.a and glyph.a <= self.selection.stop.a)
+        {
+            return true;
+        }
+
+        if (glyph.b >= self.selection.start.b and glyph.b < self.selection.stop.b) {
+            return true;
+        }
+
+        return false;
     }
 
     /// computeViewport is dependant on visible_cols_and_lines, which is computed every
@@ -395,26 +545,6 @@ pub const WidgetTextEdit = struct {
             self.viewport.columns.a += distance;
             self.viewport.columns.b += distance;
         }
-    }
-
-    // TODO(remy): comment
-    // TODO(remy): unit test
-    fn cursorPosFromWindowPos(self: WidgetTextEdit, click_window_pos: Vec2u, draw_pos: Vec2u) Vec2u {
-        var rv = Vec2u{ .a = 0, .b = 0 };
-
-        // remove the offset
-        var in_editor = Vec2u{
-            .a = @intCast(usize, @max(@intCast(i64, click_window_pos.a - draw_pos.a) - @intCast(i64, self.selection_left_offset), 0)),
-            .b = click_window_pos.b - draw_pos.b,
-        };
-
-        rv.a = in_editor.a / self.one_char_size.a;
-        rv.b = in_editor.b / self.one_char_size.b;
-
-        rv.a += self.viewport.columns.a;
-        rv.b += self.viewport.lines.a;
-
-        return rv;
     }
 
     fn setCursorPos(self: *WidgetTextEdit, pos: Vec2u, scroll: bool) void {
@@ -702,26 +832,7 @@ pub const WidgetTextEdit = struct {
             return;
         }
 
-        var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, draw_pos);
-
-        if (cursor_pos.b < 0) {
-            cursor_pos.b = 0;
-        } else if (cursor_pos.b >= self.editor.buffer.lines.items.len) {
-            cursor_pos.b = self.editor.buffer.lines.items.len - 1;
-        }
-
-        var line = self.editor.buffer.getLine(cursor_pos.b) catch |err| {
-            std.log.err("WindowText.onMouseMove: can't get current line {d}: {}", .{ cursor_pos.b, err });
-            return;
-        };
-        var utf8size = line.utf8size() catch |err| {
-            std.log.err("WindowText.onMouseMove: can't get current line utf8size {d}: {}", .{ cursor_pos.b, err });
-            return;
-        };
-
-        if (cursor_pos.a > utf8size) {
-            cursor_pos.a = utf8size;
-        }
+        var cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
 
         self.updateSelection(cursor_pos);
         self.setCursorPos(cursor_pos, true);
@@ -775,7 +886,7 @@ pub const WidgetTextEdit = struct {
         }
 
         // move the mouse on the click
-        var cursor_pos = self.cursorPosFromWindowPos(mouse_window_pos, draw_pos);
+        var cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
         self.setCursorPos(cursor_pos, false);
         self.validateCursorPosition(true);
 
@@ -965,7 +1076,7 @@ pub const WidgetTextEdit = struct {
             .EndOfLine => {
                 if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
                     if (l.utf8size()) |utf8size| {
-                        if (l.bytes()[l.bytes().len - 1] == '\n') {
+                        if (l.bytes()[l.bytes().len - 1] == char_linereturn) {
                             self.cursor.pos.a = utf8size - 1;
                         } else {
                             self.cursor.pos.a = utf8size;
@@ -1016,7 +1127,7 @@ pub const WidgetTextEdit = struct {
                         return;
                     }
                     var i: usize = 0;
-                    while (l.bytes()[i] == char_space) : (i += 1) {}
+                    while (l.bytes()[i] == char_space or l.bytes()[i] == char_tab) : (i += 1) {}
                     self.moveCursor(Vec2i{ .a = @intCast(i64, i), .b = 0 }, true);
                 } else |_| {} // TODO(remy): do something with the error
             },
@@ -1031,7 +1142,7 @@ pub const WidgetTextEdit = struct {
                     }
                     var i: usize = 0;
                     var start_line_pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
-                    while (l.bytes()[i] == char_space) : (i += 1) {
+                    while (l.bytes()[i] == char_space or l.bytes()[i] == char_tab) : (i += 1) {
                         self.editor.insertUtf8Text(start_line_pos, string_space) catch {}; // TODO(remy): do something with the error
                     }
                 } else |_| {} // TODO(remy): do something with the error

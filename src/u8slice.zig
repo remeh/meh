@@ -2,6 +2,11 @@ const std = @import("std");
 const assert = std.debug.assert;
 const expect = std.testing.expect;
 
+pub const char_space = ' ';
+pub const char_tab = '\t';
+pub const char_linereturn = '\n';
+pub const string_space = " ";
+
 pub const U8SliceError = error{
     OutOfLine,
 };

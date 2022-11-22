@@ -2,6 +2,7 @@ const std = @import("std");
 const expect = std.testing.expect;
 
 const U8Slice = @import("u8slice.zig").U8Slice;
+const Vec2u = @import("vec.zig").Vec2u;
 const Vec2i = @import("vec.zig").Vec2i;
 
 pub const BufferError = error{

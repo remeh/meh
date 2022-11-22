@@ -26,4 +26,19 @@ pub const Draw = struct {
         var scaled_pos = scaler.Scale2u(position);
         font.drawText(scaled_pos, str);
     }
+
+    pub fn glyph(font: Font, scaler: Scaler, position: Vec2u, str: []const u8) void {
+        if (str.len == 0) {
+            return;
+        }
+
+        // do not draw line returns
+        if (str[0] == '\n') {
+            return;
+        }
+
+        _ = c.SDL_SetRenderDrawColor(font.sdl_renderer, 255, 255, 255, 255);
+        var scaled_pos = scaler.Scale2u(position);
+        _ = font.drawGlyph(scaled_pos, str);
+    }
 };

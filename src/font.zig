@@ -6,6 +6,9 @@ const Rect2u = @import("vec.zig").Rect2u;
 const Vec2u = @import("vec.zig").Vec2u;
 const U8Slice = @import("u8slice.zig").U8Slice;
 
+const char_tab = @import("u8slice.zig").char_tab;
+const char_linereturn = @import("u8slice.zig").char_linereturn;
+
 pub const FontError = error{
     CantLoadFont,
     CantBuildAtlas,
@@ -167,40 +170,55 @@ pub const Font = struct {
         return Rect2u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
     }
 
+    /// drawGlyph draws the glyph starting at the first byte of the given `str`.
+    pub fn drawGlyph(self: Font, position: Vec2u, str: []const u8) usize {
+        if (str.len == 0) {
+            return 1;
+        }
+
+        var seq_size: u3 = std.unicode.utf8ByteSequenceLength(str[0]) catch |err| {
+            std.log.err("Font.drawGlyph: error while checking utf8 byte sequence length in text {s}: {}", .{ str, err });
+            return 1;
+        };
+
+        var glyph_rect_in_atlas = self.glyphPos(str[0..seq_size]);
+
+        var src_rect = c.SDL_Rect{
+            .x = @intCast(c_int, glyph_rect_in_atlas.a),
+            .y = @intCast(c_int, glyph_rect_in_atlas.b),
+            .w = @intCast(c_int, glyph_rect_in_atlas.c),
+            .h = @intCast(c_int, glyph_rect_in_atlas.d),
+        };
+
+        var dst_rect = c.SDL_Rect{
+            .x = @intCast(c_int, position.a),
+            .y = @intCast(c_int, position.b),
+            .w = @divTrunc(@intCast(c_int, self.font_size), 2),
+            .h = @intCast(c_int, self.font_size),
+        };
+
+        _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, &dst_rect);
+
+        return seq_size;
+    }
+
     /// drawText draws the given text at the given position, position being in window coordinates.
     pub fn drawText(self: Font, position: Vec2u, text: []const u8) void {
         var i: usize = 0;
         var x_offset: usize = 0;
 
         while (i < text.len) {
-            if (text[i] == 0 or text[i] == '\n') {
+            if (text[i] == 0 or text[i] == char_linereturn) {
                 break;
             }
-            var seq_size: u3 = std.unicode.utf8ByteSequenceLength(text[i]) catch |err| {
-                std.log.err("Font.drawText: error while checking utf8 byte sequence length in text {s}: {}", .{ text, err });
+
+            if (text[i] == char_tab) {
                 i += 1;
+                x_offset += self.font_size * 2;
                 continue;
-            };
+            }
 
-            var glyph_rect_in_atlas = self.glyphPos(text[i .. i + seq_size]);
-
-            var src_rect = c.SDL_Rect{
-                .x = @intCast(c_int, glyph_rect_in_atlas.a),
-                .y = @intCast(c_int, glyph_rect_in_atlas.b),
-                .w = @intCast(c_int, glyph_rect_in_atlas.c),
-                .h = @intCast(c_int, glyph_rect_in_atlas.d),
-            };
-
-            var dst_rect = c.SDL_Rect{
-                .x = @intCast(c_int, position.a + x_offset),
-                .y = @intCast(c_int, position.b),
-                .w = @divTrunc(@intCast(c_int, self.font_size), 2),
-                .h = @intCast(c_int, self.font_size),
-            };
-
-            _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, &dst_rect);
-
-            i += seq_size;
+            i += self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, text[i..]);
             x_offset += self.font_size / 2;
         }
     }

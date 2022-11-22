@@ -108,11 +108,6 @@ pub const App = struct {
 
         _ = c.SDL_SetRenderDrawBlendMode(sdl_renderer, c.SDL_BLENDMODE_BLEND);
 
-        // show and raise the window
-
-        c.SDL_ShowWindow(sdl_window);
-        c.SDL_RaiseWindow(sdl_window);
-
         // load the fonts
 
         var font_lowdpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 18);
@@ -222,7 +217,7 @@ pub const App = struct {
             self.current_font,
             scaler,
             self.widget_text_edit_pos,
-            Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b - 10 },
+            Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b },
             one_char_size,
         );
 
@@ -237,7 +232,6 @@ pub const App = struct {
                 one_char_size,
             );
         }
-        // command input TODO
 
         // rendering
         _ = c.SDL_RenderPresent(self.sdl_renderer);

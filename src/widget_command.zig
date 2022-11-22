@@ -13,7 +13,8 @@ const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 const Insert = @import("widget_text_edit.zig").Insert;
-const char_space = @import("widget_text_edit.zig").char_space;
+
+const char_space = @import("u8slice.zig").char_space;
 
 const WidgetCommandError = error{
     ArgsOutOfBounds,
