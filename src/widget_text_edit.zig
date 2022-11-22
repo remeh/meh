@@ -77,7 +77,7 @@ pub const Cursor = struct {
 
         switch (input_mode) {
             .Insert => {
-                Draw.fill_rect(
+                Draw.fillRect(
                     sdl_renderer,
                     scaler,
                     Vec2u{
@@ -89,7 +89,7 @@ pub const Cursor = struct {
                 );
             },
             else => {
-                Draw.fill_rect(
+                Draw.fillRect(
                     sdl_renderer,
                     scaler,
                     Vec2u{
@@ -236,7 +236,7 @@ pub const WidgetTextEdit = struct {
 
         // render the background
 
-        Draw.fill_rect(
+        Draw.fillRect(
             sdl_renderer,
             scaler,
             Vec2u{ .a = draw_pos.a, .b = draw_pos.b },
@@ -253,7 +253,7 @@ pub const WidgetTextEdit = struct {
             };
 
             if (i == self.cursor.pos.b) {
-                Draw.fill_rect(
+                Draw.fillRect(
                     sdl_renderer,
                     scaler,
                     Vec2u{ .a = draw_pos.a, .b = y_offset },
@@ -262,7 +262,7 @@ pub const WidgetTextEdit = struct {
                 );
             }
 
-            Draw.draw_text(
+            Draw.text(
                 font,
                 scaler,
                 Vec2u{ .a = text_pos_x, .b = y_offset },
@@ -293,7 +293,7 @@ pub const WidgetTextEdit = struct {
                 }
 
                 var data = line.bytes()[self.viewport.columns.a..@min(self.viewport.columns.b, line.size())];
-                Draw.draw_text(
+                Draw.text(
                     font,
                     scaler,
                     Vec2u{ .a = draw_pos.a + left_blank_offset, .b = draw_pos.b + y_offset },
@@ -340,7 +340,7 @@ pub const WidgetTextEdit = struct {
 
                     var width: i64 = @max(@intCast(i64, end_x) - @intCast(i64, start_x), 0);
 
-                    Draw.fill_rect(
+                    Draw.fillRect(
                         sdl_renderer,
                         scaler,
                         Vec2u{ .a = start_x, .b = draw_pos.b + y_offset },

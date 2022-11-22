@@ -74,7 +74,7 @@ pub const WidgetCommand = struct {
         self.widget_text_edit.viewport.lines.b = 1;
 
         // overlay
-        Draw.fill_rect(
+        Draw.fillRect(
             sdl_renderer,
             scaler,
             Vec2u{ .a = 0, .b = 0 },
@@ -83,7 +83,7 @@ pub const WidgetCommand = struct {
         );
 
         // text edit background
-        Draw.fill_rect(
+        Draw.fillRect(
             sdl_renderer,
             scaler,
             draw_pos,

@@ -7,7 +7,7 @@ const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2u = @import("vec.zig").Vec2u;
 
 pub const Draw = struct {
-    pub fn fill_rect(sdl_renderer: *c.SDL_Renderer, scaler: Scaler, position: Vec2u, size: Vec2u, color: c.SDL_Color) void {
+    pub fn fillRect(sdl_renderer: *c.SDL_Renderer, scaler: Scaler, position: Vec2u, size: Vec2u, color: c.SDL_Color) void {
         var scaled_pos = scaler.Scale2u(position);
         var scaled_size = scaler.Scale2u(size);
 
@@ -21,9 +21,9 @@ pub const Draw = struct {
         _ = c.SDL_RenderFillRect(sdl_renderer, &rect);
     }
 
-    pub fn draw_text(font: Font, scaler: Scaler, position: Vec2u, text: []const u8) void {
+    pub fn text(font: Font, scaler: Scaler, position: Vec2u, str: []const u8) void {
         _ = c.SDL_SetRenderDrawColor(font.sdl_renderer, 255, 255, 255, 255);
         var scaled_pos = scaler.Scale2u(position);
-        font.drawText(scaled_pos, text);
+        font.drawText(scaled_pos, str);
     }
 };
