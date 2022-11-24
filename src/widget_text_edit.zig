@@ -368,6 +368,22 @@ pub const WidgetTextEdit = struct {
         return width;
     }
 
+    // TODO(remy): remove
+    fn glyphColor(_: WidgetTextEdit, str: []const u8) Vec4u {
+        if (str.len == 0) {
+            return Colors.light_gray;
+        }
+
+        if (str[0] == '(' or str[0] == ')' or
+            str[0] == '[' or str[0] == ']' or
+            str[0] == '{' or str[0] == '}')
+        {
+            return Vec4u{ .a = 46, .b = 126, .c = 184, .d = 255 };
+        }
+
+        return Colors.light_gray;
+    }
+
     fn renderLinesAndSelection(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) usize {
         var i: usize = self.viewport.lines.a;
         var y_offset: usize = 0;
@@ -404,6 +420,7 @@ pub const WidgetTextEdit = struct {
                         // we have to draw a glyph
 
                         if (tab_idx == 0) {
+                            var color = self.glyphColor(bytes[buff_idx .. buff_idx + 1]);
                             Draw.glyph(
                                 font,
                                 scaler,
@@ -411,7 +428,7 @@ pub const WidgetTextEdit = struct {
                                     .a = draw_pos.a + (offset * one_char_size.a) + left_blank_offset,
                                     .b = draw_pos.b + y_offset,
                                 },
-                                Colors.light_gray,
+                                color,
                                 bytes[buff_idx .. buff_idx + 1],
                             );
                         }
