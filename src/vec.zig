@@ -3,7 +3,7 @@ const c = @import("clib.zig").c;
 pub const Vec2i = struct { a: i64, b: i64 };
 pub const Vec2f = struct { a: f32, b: f32 };
 pub const Vec2u = struct { a: usize, b: usize };
-pub const Rect2u = struct { a: usize, b: usize, c: usize, d: usize };
+pub const Vec4u = struct { a: usize, b: usize, c: usize, d: usize };
 
 /// Vec2itou turns a Vec2i into a Vec2u.
 /// Uses with care since the conversion may corrupt the data.
@@ -21,8 +21,4 @@ pub fn Vec2utoi(in: Vec2u) Vec2i {
 /// Uses with care since the conversion may corrupt the data.
 pub fn Vec2ftou(in: Vec2f) Vec2u {
     return Vec2u{ .a = @floatToInt(usize, in.a), .b = @floatToInt(usize, in.b) };
-}
-
-pub fn ImVec2(x: f32, y: f32) c.ImVec2 {
-    return c.ImVec2{ .x = x, .y = y };
 }

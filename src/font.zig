@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
-const Rect2u = @import("vec.zig").Rect2u;
+const Vec4u = @import("vec.zig").Vec4u;
 const Vec2u = @import("vec.zig").Vec2u;
 const U8Slice = @import("u8slice.zig").U8Slice;
 
@@ -22,7 +22,7 @@ pub const atlas_size = 512;
 /// all texts of the application.
 pub const FontAtlas = struct {
     texture: *c.SDL_Texture,
-    glyph_pos: std.AutoHashMap(u21, Rect2u),
+    glyph_pos: std.AutoHashMap(u21, Vec4u),
     /// while writing the atlas, current position to write a glyph.
     current_pos: Vec2u,
     /// while writing the atlas, we have to keep track of next Y to use since some
@@ -58,7 +58,7 @@ pub const Font = struct {
             .ttf_font = font,
             .atlas = FontAtlas{
                 .texture = undefined,
-                .glyph_pos = std.AutoHashMap(u21, Rect2u).init(allocator),
+                .glyph_pos = std.AutoHashMap(u21, Vec4u).init(allocator),
                 .current_pos = Vec2u{ .a = 0, .b = 0 },
                 .next_y = font_size,
             },
@@ -126,7 +126,7 @@ pub const Font = struct {
 
             try self.atlas.glyph_pos.put(
                 i,
-                Rect2u{
+                Vec4u{
                     .a = self.atlas.current_pos.a,
                     .b = self.atlas.current_pos.b,
                     .c = @intCast(usize, text.w),
@@ -151,14 +151,14 @@ pub const Font = struct {
 
     /// glyphPos returns the glyph position in the current font atlas texture.
     /// Never errors and returns a placeholder for unknown glyphs (or if an internal error happened).
-    fn glyphPos(self: Font, glyph: []const u8) Rect2u {
+    fn glyphPos(self: Font, glyph: []const u8) Vec4u {
         if (std.mem.eql(u8, glyph, "")) {
-            return Rect2u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
+            return Vec4u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
         }
 
         var g: u21 = std.unicode.utf8Decode(glyph) catch |err| {
             std.log.err("Font.glyphPos: can't decode utf8 glyph: {s}: {}", .{ glyph, err });
-            return Rect2u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
+            return Vec4u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
         };
 
         var glyph_pos = self.atlas.glyph_pos.get(g);
@@ -167,11 +167,11 @@ pub const Font = struct {
         }
 
         // unknown glyph, return the placeholder.
-        return Rect2u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
+        return Vec4u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
     }
 
     /// drawGlyph draws the glyph starting at the first byte of the given `str`.
-    pub fn drawGlyph(self: Font, position: Vec2u, str: []const u8) usize {
+    pub fn drawGlyph(self: Font, position: Vec2u, color: Vec4u, str: []const u8) usize {
         if (str.len == 0) {
             return 1;
         }
@@ -197,13 +197,14 @@ pub const Font = struct {
             .h = @intCast(c_int, self.font_size),
         };
 
+        _ = c.SDL_SetTextureColorMod(self.atlas.texture, @intCast(u8, color.a), @intCast(u8, color.b), @intCast(u8, color.c));
         _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, &dst_rect);
 
         return seq_size;
     }
 
     /// drawText draws the given text at the given position, position being in window coordinates.
-    pub fn drawText(self: Font, position: Vec2u, text: []const u8) void {
+    pub fn drawText(self: Font, position: Vec2u, color: Vec4u, text: []const u8) void {
         var i: usize = 0;
         var x_offset: usize = 0;
 
@@ -218,7 +219,7 @@ pub const Font = struct {
                 continue;
             }
 
-            i += self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, text[i..]);
+            i += self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, color, text[i..]);
             x_offset += self.font_size / 2;
         }
     }

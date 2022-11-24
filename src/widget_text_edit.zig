@@ -4,6 +4,7 @@ const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
+const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
@@ -15,6 +16,7 @@ const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec2utoi = @import("vec.zig").Vec2utoi;
+const Vec4u = @import("vec.zig").Vec4u;
 
 const char_space = @import("u8slice.zig").char_space;
 const char_tab = @import("u8slice.zig").char_tab;
@@ -92,7 +94,7 @@ pub const Cursor = struct {
                         .b = draw_pos.b,
                     },
                     Vec2u{ .a = 2, .b = one_char_size.b },
-                    c.SDL_Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
+                    Colors.white,
                 );
             },
             else => {
@@ -104,7 +106,7 @@ pub const Cursor = struct {
                         .b = draw_pos.b,
                     },
                     Vec2u{ .a = one_char_size.a, .b = one_char_size.b },
-                    c.SDL_Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
+                    Colors.white,
                 );
             },
         }
@@ -301,7 +303,7 @@ pub const WidgetTextEdit = struct {
 
     /// Returns x offset introduced by drawing the lines numbers
     fn renderLineNumbers(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
-        var text_pos_x: usize = 10;
+        var text_pos_x: usize = one_char_size.a;
 
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
@@ -319,14 +321,14 @@ pub const WidgetTextEdit = struct {
         }
         var width = (max_digits + 2) * one_char_size.a;
 
-        // render the background
+        // render the separation line
 
-        Draw.fillRect(
+        Draw.line(
             sdl_renderer,
             scaler,
-            Vec2u{ .a = draw_pos.a, .b = draw_pos.b },
+            Vec2u{ .a = draw_pos.a + width, .b = draw_pos.b },
             Vec2u{ .a = draw_pos.a + width, .b = widget_size.b - draw_pos.b },
-            c.SDL_Color{ .r = 20, .g = 20, .b = 20, .a = 255 },
+            Vec4u{ .a = 70, .b = 70, .c = 70, .d = 255 },
         );
 
         // render the line numbers
@@ -337,22 +339,28 @@ pub const WidgetTextEdit = struct {
                 return 0;
             };
 
+            var text_color = Colors.gray;
             if (i == self.cursor.pos.b) {
-                Draw.fillRect(
-                    sdl_renderer,
-                    scaler,
-                    Vec2u{ .a = draw_pos.a, .b = y_offset },
-                    Vec2u{ .a = draw_pos.a + width, .b = self.one_char_size.b },
-                    c.SDL_Color{ .r = 120, .g = 120, .b = 120, .a = 255 },
-                );
+                text_color = Colors.white;
             }
 
             Draw.text(
                 font,
                 scaler,
                 Vec2u{ .a = text_pos_x, .b = y_offset },
+                text_color,
                 cbuff,
             );
+
+            if (i == self.cursor.pos.b) {
+                Draw.fillRect(
+                    sdl_renderer,
+                    scaler,
+                    Vec2u{ .a = draw_pos.a, .b = y_offset },
+                    Vec2u{ .a = draw_pos.a + width, .b = self.one_char_size.b },
+                    Vec4u{ .a = 220, .b = 220, .c = 220, .d = 20 },
+                );
+            }
 
             y_offset += self.one_char_size.b;
         }
@@ -403,6 +411,7 @@ pub const WidgetTextEdit = struct {
                                     .a = draw_pos.a + (offset * one_char_size.a) + left_blank_offset,
                                     .b = draw_pos.b + y_offset,
                                 },
+                                Colors.light_gray,
                                 bytes[buff_idx .. buff_idx + 1],
                             );
                         }
@@ -418,7 +427,7 @@ pub const WidgetTextEdit = struct {
                                     .b = draw_pos.b + y_offset,
                                 },
                                 one_char_size,
-                                c.SDL_Color{ .r = 175, .g = 175, .b = 175, .a = 100 },
+                                Vec4u{ .a = 175, .b = 175, .c = 175, .d = 100 },
                             );
                         }
 

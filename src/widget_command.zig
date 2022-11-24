@@ -11,6 +11,7 @@ const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
+const Vec4u = @import("vec.zig").Vec4u;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 const Insert = @import("widget_text_edit.zig").Insert;
 
@@ -80,7 +81,7 @@ pub const WidgetCommand = struct {
             scaler,
             Vec2u{ .a = 0, .b = 0 },
             window_scaled_size,
-            c.SDL_Color{ .r = 20, .g = 20, .b = 20, .a = 130 },
+            Vec4u{ .a = 20, .b = 20, .c = 20, .d = 130 },
         );
 
         // text edit background
@@ -89,7 +90,7 @@ pub const WidgetCommand = struct {
             scaler,
             draw_pos,
             widget_size,
-            c.SDL_Color{ .r = 20, .g = 20, .b = 20, .a = 240 },
+            Vec4u{ .a = 20, .b = 20, .c = 20, .d = 240 },
         );
 
         // text edit
