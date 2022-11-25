@@ -5,6 +5,7 @@ const expect = std.testing.expect;
 const Vec4u = @import("vec.zig").Vec4u;
 const Vec2u = @import("vec.zig").Vec2u;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 
 const char_tab = @import("u8slice.zig").char_tab;
 const char_linereturn = @import("u8slice.zig").char_linereturn;
@@ -171,17 +172,12 @@ pub const Font = struct {
     }
 
     /// drawGlyph draws the glyph starting at the first byte of the given `str`.
-    pub fn drawGlyph(self: Font, position: Vec2u, color: Vec4u, str: []const u8) usize {
+    pub fn drawGlyph(self: Font, position: Vec2u, color: Vec4u, str: []const u8) void {
         if (str.len == 0) {
-            return 1;
+            return;
         }
 
-        var glyph_bytes_size: u3 = std.unicode.utf8ByteSequenceLength(str[0]) catch |err| {
-            std.log.err("Font.drawGlyph: error while checking utf8 byte sequence length in text {s}: {}", .{ str, err });
-            return 1;
-        };
-
-        var glyph_rect_in_atlas = self.glyphPos(str[0..glyph_bytes_size]);
+        var glyph_rect_in_atlas = self.glyphPos(str);
 
         var src_rect = c.SDL_Rect{
             .x = @intCast(c_int, glyph_rect_in_atlas.a),
@@ -199,28 +195,32 @@ pub const Font = struct {
 
         _ = c.SDL_SetTextureColorMod(self.atlas.texture, @intCast(u8, color.a), @intCast(u8, color.b), @intCast(u8, color.c));
         _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, &dst_rect);
-
-        return glyph_bytes_size;
     }
 
     /// drawText draws the given text at the given position, position being in window coordinates.
     pub fn drawText(self: Font, position: Vec2u, color: Vec4u, text: []const u8) void {
-        var i: usize = 0;
         var x_offset: usize = 0;
+        var it = UTF8Iterator.init(text, 0) catch |err| {
+            std.log.err("Font.drawText: {}", .{err});
+            return;
+        };
 
-        while (i < text.len) {
-            if (text[i] == 0 or text[i] == char_linereturn) {
+        while (true) {
+            if (it.glyph()[0] == 0 or it.glyph()[0] == char_linereturn) {
                 break;
             }
 
-            if (text[i] == char_tab) {
-                i += 1;
+            if (it.glyph()[0] == char_tab) {
                 x_offset += self.font_size * 2;
                 continue;
             }
 
-            i += self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, color, text[i..]);
+            self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, color, it.glyph());
             x_offset += self.font_size / 2;
+
+            if (!it.next()) {
+                break;
+            }
         }
     }
 };

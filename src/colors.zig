@@ -21,6 +21,13 @@ pub const gray = Vec4u{
     .d = 255,
 };
 
+pub const red = Vec4u{
+    .a = 255,
+    .b = 0,
+    .c = 0,
+    .d = 220,
+};
+
 pub const dark_gray = Vec4u{
     .a = 20,
     .b = 20,

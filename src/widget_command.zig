@@ -4,6 +4,7 @@ const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
+const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const Font = @import("font.zig").Font;
@@ -34,7 +35,7 @@ pub const WidgetCommand = struct {
             .allocator = allocator,
             .widget_text_edit = WidgetTextEdit.initWithBuffer(allocator, try Buffer.initEmpty(allocator)),
         };
-        rv.widget_text_edit.draw_line_numbers = false;
+        rv.widget_text_edit.render_line_numbers = false;
         rv.widget_text_edit.editor.history_enabled = false;
         rv.widget_text_edit.viewport.lines.a = 0;
         rv.widget_text_edit.viewport.columns.a = 0;
@@ -93,10 +94,12 @@ pub const WidgetCommand = struct {
             Vec4u{ .a = 20, .b = 20, .c = 20, .d = 240 },
         );
 
+        var margin: Vec2u = Vec2u{ .a = 15, .b = 15 };
+
         // text edit
         var pos = draw_pos;
-        pos.a += 15;
-        pos.b += 15;
+        pos.a += margin.a;
+        pos.b += margin.b;
         self.widget_text_edit.render(
             sdl_renderer,
             font,
@@ -219,6 +222,10 @@ pub const WidgetCommand = struct {
         self.widget_text_edit.cursor.pos.b = 0;
     }
 
+    pub fn onTextInput(self: *WidgetCommand, txt: []const u8) void {
+        _ = self.widget_text_edit.onTextInput(txt);
+    }
+
     // Functions
     // ---------
 
@@ -290,19 +297,4 @@ pub const WidgetCommand = struct {
     }
 };
 
-test "widget_command get args" {
-    var wc = WidgetCommand{
-        .buff = std.mem.zeroes([8192]u8),
-    };
-    std.mem.copy(u8, &wc.buff, "q");
-    try expect(wc.countArgs() == 1);
-    std.mem.copy(u8, &wc.buff, "o file.zig");
-    try expect(wc.countArgs() == 2);
-    std.mem.copy(u8, &wc.buff, "o  file.zig   file2.zig  file3.zig ");
-    try expect(wc.countArgs() == 4);
-    try expect(std.mem.eql(u8, try wc.getArg(0), "o"));
-    try expect(std.mem.eql(u8, try wc.getArg(1), "file.zig"));
-    try expect(std.mem.eql(u8, try wc.getArg(2), "file2.zig"));
-    try expect(std.mem.eql(u8, try wc.getArg(3), "file3.zig"));
-    try expect(wc.getArg(4) == WidgetCommandError.ArgsOutOfBounds);
-}
+// TODO(remy): unit tests

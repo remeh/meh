@@ -206,7 +206,7 @@ pub const Buffer = struct {
 test "init_empty" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initEmpty(allocator);
-    try expect(buffer.lines.items.len == 0);
+    try expect(buffer.lines.items.len == 1);
     try expect(buffer.filepath.isEmpty() == true);
     try expect(buffer.in_ram_only == true);
     buffer.deinit();

@@ -12,11 +12,15 @@ const Font = @import("font.zig").Font;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec2utoi = @import("vec.zig").Vec2utoi;
 const Vec4u = @import("vec.zig").Vec4u;
+
+const utoi = @import("vec.zig").utoi;
+const itou = @import("vec.zig").itou;
 
 const char_space = @import("u8slice.zig").char_space;
 const char_tab = @import("u8slice.zig").char_tab;
@@ -26,7 +30,7 @@ const string_space = @import("u8slice.zig").string_space;
 // TODO(remy): where should we define this?
 // TODO(remy): comment
 // TODO(remy): comment
-pub const char_offset_before_move = 5;
+pub const glyph_offset_before_move = 5;
 // TODO(remy): comment
 pub const tab_spaces = 4;
 
@@ -53,11 +57,12 @@ pub const CursorMove = enum {
     AfterIndentation,
 };
 
-// TODO(remy): comment
+/// Cursor represents the editing position in the WidgetTextEdit.
+/// Its position is in glyph.
+/// It is not tab-aware.
 pub const Cursor = struct {
-    /// pos is the position relative to the editor
-    /// This one is not dependant of utf8. 1 right means 1 character right, would it be
-    /// an utf8 chars needing 3 bytes or one needing 1 byte.
+    /// pos is the position in glyph.
+    /// Use UTF8Iterator if you need help moving in a line per glyph.
     pos: Vec2u,
 
     // Constructors
@@ -73,17 +78,10 @@ pub const Cursor = struct {
     // -------
 
     /// `render` renders the cursor in the `WidgetTextEdit`.
-    // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
-    pub fn render(
-        _: Cursor,
-        sdl_renderer: *c.SDL_Renderer,
-        input_mode: InputMode,
-        scaler: Scaler,
-        draw_pos: Vec2u,
-        one_char_size: Vec2u,
-    ) void {
+    // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
+    pub fn render(_: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) void {
         switch (input_mode) {
             .Insert => {
                 Draw.fillRect(
@@ -121,7 +119,7 @@ pub const Cursor = struct {
         // --
 
         var in_editor = Vec2u{
-            .a = @intCast(usize, @max(@intCast(i64, click_window_pos.a - draw_pos.a) - @intCast(i64, text_edit.line_numbers_offset), 0)) / text_edit.one_char_size.a,
+            .a = itou(@max(utoi(click_window_pos.a - draw_pos.a) - utoi(text_edit.line_numbers_offset), 0)) / text_edit.one_char_size.a,
             .b = (click_window_pos.b - draw_pos.b) / text_edit.one_char_size.b,
         };
 
@@ -134,19 +132,22 @@ pub const Cursor = struct {
         if (rv.b < 0) {
             rv.b = 0;
         } else if (rv.b >= text_edit.editor.buffer.lines.items.len) {
-            rv.b = text_edit.editor.buffer.lines.items.len - 1;
-            var last_line = text_edit.editor.buffer.getLine(text_edit.editor.buffer.lines.items.len - 1) catch |err| {
-                std.log.err("Cursor.posFromWindowPos: can't get last line {d}: {}", .{ rv.b, err });
-                return rv;
-            };
-            rv.a = last_line.size() - 1;
+            if (text_edit.editor.buffer.lines.items.len > 0) {
+                rv.b = text_edit.editor.buffer.lines.items.len - 1;
+                var last_line = text_edit.editor.buffer.getLine(text_edit.editor.buffer.lines.items.len - 1) catch |err| {
+                    std.log.err("Cursor.posFromWindowPos: can't get last line {d}: {}", .{ rv.b, err });
+                    return rv;
+                };
+                rv.a = last_line.size() - 1;
+            } else {
+                rv.b = 0;
+                rv.a = 0;
+            }
             return rv;
         }
 
         // column
         // --
-
-        rv.a = text_edit.viewport.columns.a;
 
         var line = text_edit.editor.buffer.getLine(rv.b) catch |err| {
             std.log.err("Cursor.posFromWindowPos: can't get current line {d}: {}", .{ rv.b, err });
@@ -158,7 +159,7 @@ pub const Cursor = struct {
             return rv;
         };
 
-        if (rv.a > utf8size) {
+        if (in_editor.a + text_edit.viewport.columns.a > utf8size) {
             rv.a = utf8size;
             return rv;
         }
@@ -168,13 +169,15 @@ pub const Cursor = struct {
             return rv;
         }
 
-        var buff_idx: usize = 0;
         var tabs_idx: usize = 0;
         var move_done: usize = 0;
-        var bytes = line.bytes();
+        var it = UTF8Iterator.init(line.bytes(), 0) catch |err| {
+            std.log.err("Cursor.posFromWindowPos: {}", .{err});
+            return rv;
+        };
 
-        while (move_done < text_edit.viewport.columns.b and buff_idx < bytes.len) {
-            if (bytes[buff_idx] == char_tab and tabs_idx == 0) {
+        while (move_done < text_edit.viewport.columns.b) {
+            if (it.glyph()[0] == char_tab and tabs_idx == 0) {
                 // it is a tab
                 tabs_idx = 4;
             }
@@ -182,13 +185,14 @@ pub const Cursor = struct {
                 tabs_idx -= 1;
             }
             if (tabs_idx == 0) {
-                var glyph_bytes_size = line.utf8glyphSize(buff_idx);
-                buff_idx += glyph_bytes_size;
+                if (!it.next()) {
+                    break;
+                }
             }
 
             move_done += 1;
             if (move_done >= text_edit.viewport.columns.a + in_editor.a) {
-                rv.a = move_done;
+                rv.a = it.current_glyph;
                 break;
             }
         }
@@ -225,16 +229,27 @@ pub const WidgetTextEditSelection = struct {
 // TODO(remy): comment
 pub const WidgetTextEdit = struct {
     allocator: std.mem.Allocator,
-    cursor: Cursor, // TODO(remy): replace me with a custom (containing cursor mode)
-    draw_line_numbers: bool,
+    cursor: Cursor,
     editor: Editor,
     input_mode: InputMode,
-    // TODO(remy): comment
+    /// render_line_numbers is set to true when the line numbers have to be rendered
+    /// It is set to false when the WidgetTextEdit is used as an edit input.
+    render_line_numbers: bool,
+    /// viewport represents what part of the buffer has to be visible
+    /// It is measured in glyphs.
     viewport: WidgetTextEditViewport,
+    /// selection in the current editor. It is measured in glyphs.
     selection: WidgetTextEditSelection,
-    line_numbers_offset: usize, // when rendering the line number, it creates a left offset
+    /// line_numbers_offset is the x offset created by drawing the line numbers
+    /// at the left of the editor.
+    /// In pixel.
+    line_numbers_offset: usize,
+    /// visible_cols_and_lines is computed every render and represents how many
+    /// columns and lines are visible in the editor.
     visible_cols_and_lines: Vec2u,
-    one_char_size: Vec2u, // refreshed before every frame
+    /// one_char_size is computed every render and represents the size of one
+    /// glyph rendered in the WidgetTextEdit.
+    one_char_size: Vec2u,
 
     // Constructors
     // ------------
@@ -244,7 +259,7 @@ pub const WidgetTextEdit = struct {
         return WidgetTextEdit{
             .allocator = allocator,
             .cursor = Cursor.init(),
-            .draw_line_numbers = true,
+            .render_line_numbers = true,
             .editor = Editor.init(allocator, buffer),
             .input_mode = InputMode.Insert,
             .one_char_size = Vec2u{ .a = 16, .b = 8 },
@@ -288,7 +303,7 @@ pub const WidgetTextEdit = struct {
 
         var left_offset: usize = 0;
 
-        if (self.draw_line_numbers) {
+        if (self.render_line_numbers) {
             left_offset = self.renderLineNumbers(sdl_renderer, font, scaler, pos, widget_size, one_char_size);
             pos.a += left_offset;
         }
@@ -345,13 +360,7 @@ pub const WidgetTextEdit = struct {
                 text_color = Colors.white;
             }
 
-            Draw.text(
-                font,
-                scaler,
-                Vec2u{ .a = text_pos_x, .b = y_offset },
-                text_color,
-                cbuff,
-            );
+            Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset }, text_color, cbuff);
 
             if (i == self.cursor.pos.b) {
                 Draw.fillRect(
@@ -402,16 +411,18 @@ pub const WidgetTextEdit = struct {
                 // we always have to render every line from the start: since they may contain a \t
                 // we will have to take care of the fact that a \t use multiple spaces.
 
-                var buff_idx: usize = 0;
+                var it = UTF8Iterator.init(line.bytes(), 0) catch |err| {
+                    std.log.err("WidgetTextEdit.renderLinesAndSelection: {}", .{err});
+                    return left_blank_offset;
+                };
+
                 var tab_idx: usize = 0;
                 var move_done: usize = 0;
                 var offset: usize = 0; // offset in char, relative to the left of the widget (i.e. right of the line numbers if any)
                 var bytes = line.bytes();
 
-                while (buff_idx < line.size() and offset < self.viewport.columns.b) {
-                    var glyph_bytes_size: usize = line.utf8glyphSize(buff_idx);
-
-                    if (bytes[buff_idx] == char_tab and tab_idx == 0) {
+                while (offset < self.viewport.columns.b) {
+                    if (it.glyph()[0] == char_tab and tab_idx == 0) {
                         tab_idx = tab_spaces;
                     }
 
@@ -423,7 +434,7 @@ pub const WidgetTextEdit = struct {
                         // we have to draw a glyph
 
                         if (tab_idx == 0) {
-                            var color = self.glyphColor(bytes[buff_idx..]);
+                            var color = self.glyphColor(bytes[it.current_byte..]);
                             _ = Draw.glyph(
                                 font,
                                 scaler,
@@ -432,13 +443,13 @@ pub const WidgetTextEdit = struct {
                                     .b = draw_pos.b + y_offset,
                                 },
                                 color,
-                                bytes[buff_idx..],
+                                bytes[it.current_byte .. it.current_byte + it.current_glyph_size],
                             );
                         }
 
                         // draw the selection rectangle if necessary
 
-                        if (self.isSelected(Vec2u{ .a = move_done, .b = i })) {
+                        if (self.isSelected(Vec2u{ .a = it.current_glyph, .b = i })) {
                             Draw.fillRect(
                                 font.sdl_renderer,
                                 scaler,
@@ -453,7 +464,7 @@ pub const WidgetTextEdit = struct {
 
                         // draw the cursor if necessary
 
-                        if (self.cursor.pos.a == move_done and (tab_idx == 4 or tab_idx == 0) and self.cursor.pos.b == i) {
+                        if (self.cursor.pos.a == it.current_glyph and (tab_idx == 4 or tab_idx == 0) and self.cursor.pos.b == i) {
                             self.cursor.render(
                                 font.sdl_renderer,
                                 self.input_mode,
@@ -467,15 +478,43 @@ pub const WidgetTextEdit = struct {
                         }
                     }
 
+                    var done = false;
+
                     // move in the actual buffer only if we're not in a tab
                     if (tab_idx == 0) {
-                        buff_idx += glyph_bytes_size;
+                        if (!it.next()) {
+                            done = true;
+                        }
                     } else {
                         // we are currently drawing a tab
                         tab_idx -= 1;
                         if (tab_idx == 0) { // are we done drawing this tab? time to move forward in the idx
-                            buff_idx += glyph_bytes_size;
+                            if (!it.next()) {
+                                done = true;
+                            }
                         }
+                    }
+
+                    // we are done, we will quit this loop.
+                    // However we have one last thing to do to check for a edge case: if we are
+                    // at the end of the line, and the current position is on the cursor
+                    // we have to draw the cursor.
+                    // It happens on the very last line of the WidgetTextEdit (and so
+                    // for all WidgetTextEdit used as an input field.
+                    if (done) {
+                        if (i == self.cursor.pos.b and self.cursor.pos.a == it.current_glyph) {
+                            self.cursor.render(
+                                font.sdl_renderer,
+                                self.input_mode,
+                                scaler,
+                                Vec2u{
+                                    .a = draw_pos.a + ((offset + 1) * one_char_size.a) + left_blank_offset,
+                                    .b = draw_pos.b + y_offset,
+                                },
+                                one_char_size,
+                            );
+                        }
+                        break;
                     }
 
                     // move right only where we are currently drawing in the viewport
@@ -555,8 +594,8 @@ pub const WidgetTextEdit = struct {
         }
 
         // the cursor is below
-        if (self.cursor.pos.b + char_offset_before_move > self.viewport.lines.b) {
-            var distance = self.cursor.pos.b + char_offset_before_move - self.viewport.lines.b;
+        if (self.cursor.pos.b + glyph_offset_before_move > self.viewport.lines.b) {
+            var distance = self.cursor.pos.b + glyph_offset_before_move - self.viewport.lines.b;
             self.viewport.lines.a += distance;
             self.viewport.lines.b += distance;
         }
@@ -569,14 +608,14 @@ pub const WidgetTextEdit = struct {
         }
 
         // the cursor is on the right
-        if (self.cursor.pos.a + char_offset_before_move > self.viewport.columns.b) {
-            var distance = self.cursor.pos.a + char_offset_before_move - self.viewport.columns.b;
+        if (self.cursor.pos.a + glyph_offset_before_move > self.viewport.columns.b) {
+            var distance = self.cursor.pos.a + glyph_offset_before_move - self.viewport.columns.b;
             self.viewport.columns.a += distance;
             self.viewport.columns.b += distance;
         }
     }
 
-    fn setCursorPos(self: *WidgetTextEdit, pos: Vec2u, scroll: bool) void {
+    pub fn setCursorPos(self: *WidgetTextEdit, pos: Vec2u, scroll: bool) void {
         self.cursor.pos = pos;
         if (scroll) {
             self.scrollToCursor();
@@ -587,7 +626,7 @@ pub const WidgetTextEdit = struct {
         if (self.editor.search(txt, self.cursor.pos, false)) |new_cursor_pos| {
             self.setCursorPos(new_cursor_pos, true);
         } else |err| {
-            std.log.warn("WidgetCommand.interpret: can't search for '{s}' in document '{s}': {}", .{ txt.bytes(), self.editor.buffer.filepath.bytes(), err });
+            std.log.warn("WidgetTextEdit.search: can't search for '{s}' in document '{s}': {}", .{ txt.bytes(), self.editor.buffer.filepath.bytes(), err });
         }
     }
 
@@ -832,7 +871,7 @@ pub const WidgetTextEdit = struct {
     // FIXME(remy): this should move the viewport but not moving the
     // the cursor.
     pub fn onMouseWheel(self: *WidgetTextEdit, move: Vec2i) void {
-        var scroll_move = @divTrunc(@intCast(i64, self.viewport.lines.b) - @intCast(i64, self.viewport.lines.a), 4);
+        var scroll_move = @divTrunc(utoi(self.viewport.lines.b) - utoi(self.viewport.lines.a), 4);
         if (scroll_move < 0) {
             scroll_move = 4;
         }
@@ -947,6 +986,8 @@ pub const WidgetTextEdit = struct {
             return rv;
         }
 
+        // FIXME(remy): consider using the UTF8Iterator here, maybe not worth
+
         var i: usize = self.selection.start.b;
         while (i <= self.selection.stop.b) : (i += 1) {
             var line = try self.editor.buffer.getLine(i);
@@ -981,13 +1022,13 @@ pub const WidgetTextEdit = struct {
         var lines_a: i64 = 0;
         var lines_b: i64 = 0;
 
-        cols_a = @intCast(i64, self.viewport.columns.a) + move.a;
-        cols_b = @intCast(i64, self.viewport.columns.b) + move.a;
+        cols_a = utoi(self.viewport.columns.a) + move.a;
+        cols_b = utoi(self.viewport.columns.b) + move.a;
 
         // lines
 
-        lines_a = @intCast(i64, self.viewport.lines.a) + move.b;
-        lines_b = @intCast(i64, self.viewport.lines.b) + move.b;
+        lines_a = utoi(self.viewport.lines.a) + move.b;
+        lines_b = utoi(self.viewport.lines.b) + move.b;
 
         if (lines_a < 0) {
             self.viewport.lines.a = 0;
@@ -995,8 +1036,8 @@ pub const WidgetTextEdit = struct {
         } else if (lines_a > self.editor.buffer.lines.items.len) {
             return;
         } else {
-            self.viewport.lines.a = @intCast(usize, lines_a);
-            self.viewport.lines.b = @intCast(usize, lines_b);
+            self.viewport.lines.a = itou(lines_a);
+            self.viewport.lines.b = itou(lines_b);
         }
 
         // +5 here to allow some space on the window right border and the text
@@ -1008,23 +1049,23 @@ pub const WidgetTextEdit = struct {
             self.viewport.columns.a = 0;
             self.viewport.columns.b = self.visible_cols_and_lines.a;
         } else if (cols_b > longest_visible_line) {
-            self.viewport.columns.a = @intCast(usize, @max(0, @intCast(i64, longest_visible_line) - @intCast(i64, self.visible_cols_and_lines.a)));
+            self.viewport.columns.a = itou(@max(0, utoi(longest_visible_line) - utoi(self.visible_cols_and_lines.a)));
             self.viewport.columns.b = longest_visible_line;
         } else {
-            self.viewport.columns.a = @intCast(usize, cols_a);
-            self.viewport.columns.b = @intCast(usize, cols_b);
+            self.viewport.columns.a = itou(cols_a);
+            self.viewport.columns.b = itou(cols_b);
         }
 
         if (self.viewport.columns.b > longest_visible_line) {
-            self.viewport.columns.a = @intCast(usize, @max(0, @intCast(i64, longest_visible_line) - @intCast(i64, self.visible_cols_and_lines.a)));
+            self.viewport.columns.a = itou(@max(0, utoi(longest_visible_line) - utoi(self.visible_cols_and_lines.a)));
             self.viewport.columns.b = @max(longest_visible_line, self.visible_cols_and_lines.a);
         } else {
             self.viewport.columns.b = self.viewport.columns.a + self.visible_cols_and_lines.a;
         }
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
+    /// moveCursor moves the cursor in the current WidgetTextEdit view.
+    /// Values passed in `move` are in glyph.
     /// If you want to make sure the cursor is on a valid position, consider
     /// using `validateCursorPosition`.
     pub fn moveCursor(self: *WidgetTextEdit, move: Vec2i, scroll: bool) void {
@@ -1051,14 +1092,19 @@ pub const WidgetTextEdit = struct {
         if (cursor_pos.b + move.b <= 0) {
             self.cursor.pos.b = 0;
         } else {
-            self.cursor.pos.b = @intCast(usize, cursor_pos.b + move.b);
+            self.cursor.pos.b = itou(cursor_pos.b + move.b);
         }
 
         // x movement
-        if (cursor_pos.a + move.a <= 0) {
+        if (cursor_pos.a + move.a <= 0 or line.size() == 0) {
             self.cursor.pos.a = 0;
         } else {
-            self.cursor.pos.a = @intCast(usize, cursor_pos.a + move.a);
+            var after_move: usize = itou(cursor_pos.a + move.a);
+            if (UTF8Iterator.init(line.bytes(), after_move)) |it| {
+                self.cursor.pos.a = it.current_glyph;
+            } else |err| {
+                std.log.err("WidgetTextEdit.moveCursor: can't compute moveCursor new position: {}", .{err});
+            }
         }
 
         self.validateCursorPosition(scroll);
@@ -1074,6 +1120,12 @@ pub const WidgetTextEdit = struct {
             self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
         }
 
+        if (self.editor.buffer.lines.items.len == 0) {
+            self.cursor.pos.a = 0;
+            self.cursor.pos.b = 0;
+            return;
+        }
+
         if (self.editor.buffer.lines.items[self.cursor.pos.b].utf8size()) |utf8size| {
             if (utf8size == 0) {
                 self.cursor.pos.a = 0;
@@ -1081,7 +1133,7 @@ pub const WidgetTextEdit = struct {
                 if (self.cursor.pos.a >= utf8size) {
                     // there is a edge case: on the last line, we're OK going one
                     // char out, in order to be able to insert new things there.
-                    if (self.cursor.pos.b < @intCast(i64, self.editor.buffer.lines.items.len) - 1) {
+                    if (self.cursor.pos.b < utoi(self.editor.buffer.lines.items.len) - 1) {
                         self.cursor.pos.a = utf8size - 1;
                     } else {
                         self.cursor.pos.a = utf8size;
@@ -1248,9 +1300,8 @@ pub const WidgetTextEdit = struct {
 
 test "widget_text_edit moveCursor" {
     const allocator = std.testing.allocator;
-    var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
+    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     // top of the file, moving up shouldn't do anything
@@ -1296,9 +1347,8 @@ test "widget_text_edit moveCursor" {
 
 test "widget_text_edit moveCursorSpecial" {
     const allocator = std.testing.allocator;
-    var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
+    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     widget.moveCursorSpecial(CursorMove.EndOfLine, true);
@@ -1322,8 +1372,7 @@ test "widget_text_edit moveCursorSpecial" {
 
 test "widget_text_edit init deinit" {
     const allocator = std.testing.allocator;
-    var app: *App = undefined;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, app, buffer, Vec2u{ .a = 50, .b = 100 });
+    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.deinit();
 }

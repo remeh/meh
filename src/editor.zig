@@ -65,6 +65,7 @@ pub const Editor = struct {
             std.log.err("can't append to the history: {any}", .{err});
             data.deinit();
         };
+
         self.has_changes_compared_to_disk = true;
     }
 
@@ -137,6 +138,11 @@ pub const Editor = struct {
     // TODO(remy): unit test
     /// `txt` must be in utf8.
     pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8) !void {
+        if (self.buffer.lines.items.len == 0) {
+            var new_line = U8Slice.initEmpty(self.allocator);
+            try self.buffer.lines.append(new_line);
+        }
+
         var line = try self.buffer.getLine(@intCast(u64, pos.b));
 
         // since utf8 could be one or multiple bytes, we have to find

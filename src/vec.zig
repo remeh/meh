@@ -22,3 +22,11 @@ pub fn Vec2utoi(in: Vec2u) Vec2i {
 pub fn Vec2ftou(in: Vec2f) Vec2u {
     return Vec2u{ .a = @floatToInt(usize, in.a), .b = @floatToInt(usize, in.b) };
 }
+
+pub fn itou(in: i64) usize {
+    return @intCast(usize, in);
+}
+
+pub fn utoi(in: usize) i64 {
+    return @intCast(i64, in);
+}

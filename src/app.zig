@@ -14,6 +14,7 @@ const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
+const itou = @import("vec.zig").itou;
 
 pub const AppError = error{
     CantInit,
@@ -389,7 +390,7 @@ pub const App = struct {
             if (max_sleep_ms < 0) {
                 max_sleep_ms = 0;
             }
-            std.time.sleep(@intCast(u64, max_sleep_ms * std.time.ns_per_ms));
+            std.time.sleep(itou(max_sleep_ms * std.time.ns_per_ms));
         }
 
         c.SDL_StopTextInput();
@@ -418,7 +419,7 @@ pub const App = struct {
                 }
             },
             c.SDL_TEXTINPUT => {
-                _ = self.widget_command.widget_text_edit.onTextInput(readTextFromSDLInput(&event.text.text));
+                _ = self.widget_command.onTextInput(readTextFromSDLInput(&event.text.text));
             },
             else => {},
         }

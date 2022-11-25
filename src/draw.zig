@@ -20,14 +20,36 @@ pub const Draw = struct {
             @intCast(u8, color.d),
         );
 
-        var rect = c.SDL_Rect{
+        var r = c.SDL_Rect{
             .x = @intCast(c_int, scaled_pos.a),
             .y = @intCast(c_int, scaled_pos.b),
             .w = @intCast(c_int, scaled_size.a),
             .h = @intCast(c_int, scaled_size.b),
         };
 
-        _ = c.SDL_RenderFillRect(sdl_renderer, &rect);
+        _ = c.SDL_RenderFillRect(sdl_renderer, &r);
+    }
+
+    pub fn rect(sdl_renderer: *c.SDL_Renderer, scaler: Scaler, position: Vec2u, size: Vec2u, color: Vec4u) void {
+        var scaled_pos = scaler.Scale2u(position);
+        var scaled_size = scaler.Scale2u(size);
+
+        _ = c.SDL_SetRenderDrawColor(
+            sdl_renderer,
+            @intCast(u8, color.a),
+            @intCast(u8, color.b),
+            @intCast(u8, color.c),
+            @intCast(u8, color.d),
+        );
+
+        var r = c.SDL_Rect{
+            .x = @intCast(c_int, scaled_pos.a),
+            .y = @intCast(c_int, scaled_pos.b),
+            .w = @intCast(c_int, scaled_size.a),
+            .h = @intCast(c_int, scaled_size.b),
+        };
+
+        _ = c.SDL_RenderDrawRect(sdl_renderer, &r);
     }
 
     pub fn line(sdl_renderer: *c.SDL_Renderer, scaler: Scaler, start: Vec2u, end: Vec2u, color: Vec4u) void {
@@ -57,18 +79,17 @@ pub const Draw = struct {
     }
 
     /// glyph draws the given glyph.
-    /// Returns the size in bytes read in str to draw the glyph.
-    pub fn glyph(font: Font, scaler: Scaler, position: Vec2u, color: Vec4u, str: []const u8) usize {
+    pub fn glyph(font: Font, scaler: Scaler, position: Vec2u, color: Vec4u, str: []const u8) void {
         if (str.len == 0) {
-            return 0;
+            return;
         }
 
         // do not draw line returns
         if (str[0] == '\n') {
-            return 1;
+            return;
         }
 
         var scaled_pos = scaler.Scale2u(position);
-        return font.drawGlyph(scaled_pos, color, str);
+        font.drawGlyph(scaled_pos, color, str);
     }
 };

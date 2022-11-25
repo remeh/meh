@@ -6,9 +6,118 @@ pub const char_space = ' ';
 pub const char_tab = '\t';
 pub const char_linereturn = '\n';
 pub const string_space = " ";
+pub const string_replacement_character = "�";
 
 pub const U8SliceError = error{
     OutOfLine,
+};
+
+pub const UTF8IteratorError = error{
+    GlyphOutOfBuffer,
+    InvalidByte,
+};
+
+/// UTF8Iterator helps you iterate through an UTF8 text.
+/// Usage is:
+///     var it = UTF8Iterator("my utf8 text", 0); // 0 is the position in bytes you want to start in the text
+///     while (it.next()) {
+///         // here you can use it.glyph() to get the current glyph
+///         // or it.current_glyph_size to get its size in bytes
+///         // also, it.current_byte is the position of the glyph in the text
+///     }
+pub const UTF8Iterator = struct {
+    current_byte: usize,
+    current_glyph: usize,
+    current_glyph_size: usize,
+    text: []const u8,
+
+    pub fn init(text: []const u8, start_glyph: usize) !UTF8Iterator {
+        var glyph_size: usize = std.unicode.utf8ByteSequenceLength(text[0]) catch {
+            return UTF8IteratorError.InvalidByte;
+        };
+
+        var rv = UTF8Iterator{
+            .current_byte = 0,
+            .current_glyph = 0,
+            .current_glyph_size = glyph_size,
+            .text = text,
+        };
+
+        var i: usize = start_glyph;
+        while (i > 0) : (i -= 1) {
+            if (!rv.next()) {
+                return rv; // we've reached the last glyph
+            }
+        }
+
+        return rv;
+    }
+
+    //
+
+    /// Compare it.current_byte or it.current_glyph before and after the call
+    /// to make sure a move happened.
+    pub fn prev(self: *UTF8Iterator) void {
+        if (self.current_byte == 0) {
+            if (std.unicode.utf8ByteSequenceLength(self.text[self.current_byte])) |size| {
+                self.current_glyph_size = size;
+            } else |_| {
+                // best effort
+                self.current_glyph_size = 1;
+            }
+            self.current_glyph = 0;
+            return;
+        }
+
+        var byte: usize = self.current_byte;
+        while (byte > 0) {
+            byte -= 1;
+            if (std.unicode.utf8ByteSequenceLength(self.text[byte])) |size| {
+                self.current_byte = byte;
+                self.current_glyph_size = size;
+                self.current_glyph -= 1;
+                return;
+            } else |_| {
+                continue;
+            }
+        }
+    }
+
+    /// next move the iterator forward in the buffer.
+    /// Returns true if there is data left, return false if there is none (but still
+    /// increase the value a last time).
+    pub fn next(self: *UTF8Iterator) bool {
+        if (self.text.len == self.current_byte + self.current_glyph_size) {
+            self.current_byte += 1;
+            self.current_glyph += self.current_glyph_size;
+            self.current_glyph_size = 1;
+            return false;
+        }
+
+        self.current_byte += self.current_glyph_size;
+
+        var glyph_size: usize = std.unicode.utf8ByteSequenceLength(self.text[self.current_byte]) catch |err| {
+            std.log.err("UTF8Iterator.next: can't get glyph size: {}", .{err});
+            // best effort
+            self.current_byte += 1;
+            self.current_glyph += 1;
+            self.current_glyph_size = 1;
+            return false;
+        };
+
+        self.current_glyph += 1;
+        self.current_glyph_size = glyph_size;
+
+        return true;
+    }
+
+    pub fn glyph(self: UTF8Iterator) []const u8 {
+        if (self.current_byte >= self.text.len) {
+            std.log.err("UTF8Iterator.glyph: called but iterator is done.", .{});
+            return string_replacement_character;
+        }
+        return self.text[self.current_byte .. self.current_byte + self.current_glyph_size];
+    }
 };
 
 /// U8Slice is a type helper to move []const u8 around in
@@ -104,7 +213,7 @@ pub const U8Slice = struct {
         return self.data.items;
     }
 
-    /// utf8pos receives a position in character, returns the offset in bytes in the line.
+    /// utf8pos receives a position in glyph, returns the offset in bytes in the line.
     pub fn utf8pos(self: U8Slice, glyph_pos: usize) !usize {
         var i: usize = 0;
         var bytes_pos: usize = 0;
@@ -115,17 +224,6 @@ pub const U8Slice = struct {
             bytes_pos += try std.unicode.utf8ByteSequenceLength(self.data.items[bytes_pos]);
         }
         return bytes_pos;
-    }
-
-    /// utf8glyphSize returns the glyph size of the glyph at the given byte position in the slice.
-    /// If the byte position is invalid, displays an error and returns 1;
-    pub fn utf8glyphSize(self: U8Slice, glyph_byte_pos: usize) usize {
-        var glyph_size: usize = std.unicode.utf8ByteSequenceLength(self.data.items[glyph_byte_pos]) catch |err| {
-            std.log.err("U8Slice.utf8glyphSize: invalid glyph byte position: {}", .{err});
-            return 1;
-        };
-
-        return glyph_size;
     }
 
     /// deinit releases memory used by the U8Slice.
@@ -190,4 +288,152 @@ test "init_from_slice_and_append_data" {
     try expect(str.size() == 19);
     try expect(str.isEmpty() == false);
     str.deinit();
+}
+
+test "iterator basic test" {
+    var it = try UTF8Iterator.init("normal string", 0);
+    try expect(it.current_byte == 0);
+    try expect(it.current_glyph == 0);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "n"));
+    it.prev();
+    try expect(it.current_byte == 0);
+    try expect(it.current_glyph == 0);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "n"));
+    try expect(it.next() == true);
+    try expect(it.current_byte == 1);
+    try expect(it.current_glyph == 1);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "o"));
+    try expect(it.next() == true);
+    try expect(it.current_byte == 2);
+    try expect(it.current_glyph == 2);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "r"));
+    it.prev();
+    try expect(it.current_byte == 1);
+    try expect(it.current_glyph == 1);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "o"));
+    it.prev();
+    try expect(it.current_byte == 0);
+    try expect(it.current_glyph == 0);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "n"));
+    it.prev();
+    try expect(it.current_byte == 0);
+    try expect(it.current_glyph == 0);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "n"));
+
+    var i: usize = 0;
+    while (it.next()) {
+        i += 1;
+    }
+
+    try expect(i == "normal string".len - 1);
+    try expect(it.current_byte == "normal string".len);
+    try expect(it.current_glyph == "normal string".len);
+    try expect(it.current_glyph_size == 1);
+
+    it = try UTF8Iterator.init("normal string", 5);
+    try expect(it.current_byte == 5);
+    try expect(it.current_glyph == 5);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "l"));
+}
+
+test "iterator utf8" {
+    var it = try UTF8Iterator.init("one éà 😃👻", 0);
+    try expect(it.current_byte == 0);
+    try expect(it.current_glyph == 0);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "o"));
+    try expect(it.next());
+    try expect(it.current_byte == 1);
+    try expect(it.current_glyph == 1);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "n"));
+    try expect(it.next());
+    try expect(it.current_byte == 2);
+    try expect(it.current_glyph == 2);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), "e"));
+    try expect(it.next());
+    try expect(it.current_byte == 3);
+    try expect(it.current_glyph == 3);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), " "));
+    try expect(it.next());
+    try expect(it.current_byte == 4);
+    try expect(it.current_glyph == 4);
+    try expect(it.current_glyph_size == 2);
+    try expect(std.mem.eql(u8, it.glyph(), "é"));
+    try expect(it.next());
+    try expect(it.current_byte == 6);
+    try expect(it.current_glyph == 5);
+    try expect(it.current_glyph_size == 2);
+    try expect(std.mem.eql(u8, it.glyph(), "à"));
+    try expect(it.next());
+    try expect(it.current_byte == 8);
+    try expect(it.current_glyph == 6);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), " "));
+    try expect(it.next());
+    try expect(it.current_byte == 9);
+    try expect(it.current_glyph == 7);
+    try expect(it.current_glyph_size == 4);
+    try expect(std.mem.eql(u8, it.glyph(), "😃"));
+    try expect(it.next());
+    try expect(it.current_byte == 13);
+    try expect(it.current_glyph == 8);
+    try expect(it.current_glyph_size == 4);
+    try expect(std.mem.eql(u8, it.glyph(), "👻"));
+    it.prev();
+    try expect(it.current_byte == 9);
+    try expect(it.current_glyph == 7);
+    try expect(it.current_glyph_size == 4);
+    try expect(std.mem.eql(u8, it.glyph(), "😃"));
+    it.prev();
+    try expect(it.current_byte == 8);
+    try expect(it.current_glyph == 6);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), " "));
+    it.prev();
+    try expect(it.current_byte == 6);
+    try expect(it.current_glyph == 5);
+    try expect(it.current_glyph_size == 2);
+    try expect(std.mem.eql(u8, it.glyph(), "à"));
+    it.prev();
+    try expect(it.current_byte == 4);
+    try expect(it.current_glyph == 4);
+    try expect(it.current_glyph_size == 2);
+    try expect(std.mem.eql(u8, it.glyph(), "é"));
+
+    // with start glyph
+
+    it = try UTF8Iterator.init("one éà 😃👻", 3);
+    try expect(it.current_byte == 3);
+    try expect(it.current_glyph == 3);
+    try expect(it.current_glyph_size == 1);
+    try expect(std.mem.eql(u8, it.glyph(), " "));
+
+    it = try UTF8Iterator.init("one éà 😃👻", 4);
+    try expect(it.current_byte == 4);
+    try expect(it.current_glyph == 4);
+    try expect(it.current_glyph_size == 2);
+    try expect(std.mem.eql(u8, it.glyph(), "é"));
+
+    it = try UTF8Iterator.init("one éà 😃👻", 7);
+    try expect(it.current_byte == 9);
+    try expect(it.current_glyph == 7);
+    try expect(it.current_glyph_size == 4);
+    try expect(std.mem.eql(u8, it.glyph(), "😃"));
+
+    it = try UTF8Iterator.init("one éà 😃👻", 8);
+    try expect(it.current_byte == 13);
+    try expect(it.current_glyph == 8);
+    try expect(it.current_glyph_size == 4);
+    try expect(std.mem.eql(u8, it.glyph(), "👻"));
 }
