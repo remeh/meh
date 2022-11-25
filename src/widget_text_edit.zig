@@ -173,7 +173,7 @@ pub const Cursor = struct {
         var move_done: usize = 0;
         var bytes = line.bytes();
 
-        while (buff_idx < @min(bytes.len, text_edit.viewport.columns.b)) {
+        while (move_done < text_edit.viewport.columns.b and buff_idx < bytes.len) {
             if (bytes[buff_idx] == char_tab and tabs_idx == 0) {
                 // it is a tab
                 tabs_idx = 4;
@@ -182,12 +182,13 @@ pub const Cursor = struct {
                 tabs_idx -= 1;
             }
             if (tabs_idx == 0) {
-                buff_idx += 1;
+                var glyph_bytes_size = line.utf8glyphSize(buff_idx);
+                buff_idx += glyph_bytes_size;
             }
 
             move_done += 1;
             if (move_done >= text_edit.viewport.columns.a + in_editor.a) {
-                rv.a = buff_idx;
+                rv.a = move_done;
                 break;
             }
         }
@@ -407,7 +408,9 @@ pub const WidgetTextEdit = struct {
                 var offset: usize = 0; // offset in char, relative to the left of the widget (i.e. right of the line numbers if any)
                 var bytes = line.bytes();
 
-                while (buff_idx < @min(self.viewport.columns.b, line.size())) {
+                while (buff_idx < line.size() and offset < self.viewport.columns.b) {
+                    var glyph_bytes_size: usize = line.utf8glyphSize(buff_idx);
+
                     if (bytes[buff_idx] == char_tab and tab_idx == 0) {
                         tab_idx = tab_spaces;
                     }
@@ -420,8 +423,8 @@ pub const WidgetTextEdit = struct {
                         // we have to draw a glyph
 
                         if (tab_idx == 0) {
-                            var color = self.glyphColor(bytes[buff_idx .. buff_idx + 1]);
-                            Draw.glyph(
+                            var color = self.glyphColor(bytes[buff_idx..]);
+                            _ = Draw.glyph(
                                 font,
                                 scaler,
                                 Vec2u{
@@ -429,13 +432,13 @@ pub const WidgetTextEdit = struct {
                                     .b = draw_pos.b + y_offset,
                                 },
                                 color,
-                                bytes[buff_idx .. buff_idx + 1],
+                                bytes[buff_idx..],
                             );
                         }
 
                         // draw the selection rectangle if necessary
 
-                        if (self.isSelected(Vec2u{ .a = buff_idx, .b = i })) {
+                        if (self.isSelected(Vec2u{ .a = move_done, .b = i })) {
                             Draw.fillRect(
                                 font.sdl_renderer,
                                 scaler,
@@ -450,7 +453,7 @@ pub const WidgetTextEdit = struct {
 
                         // draw the cursor if necessary
 
-                        if (self.cursor.pos.a == buff_idx and (tab_idx == 4 or tab_idx == 0) and self.cursor.pos.b == i) {
+                        if (self.cursor.pos.a == move_done and (tab_idx == 4 or tab_idx == 0) and self.cursor.pos.b == i) {
                             self.cursor.render(
                                 font.sdl_renderer,
                                 self.input_mode,
@@ -466,12 +469,12 @@ pub const WidgetTextEdit = struct {
 
                     // move in the actual buffer only if we're not in a tab
                     if (tab_idx == 0) {
-                        buff_idx += 1;
+                        buff_idx += glyph_bytes_size;
                     } else {
                         // we are currently drawing a tab
                         tab_idx -= 1;
                         if (tab_idx == 0) { // are we done drawing this tab? time to move forward in the idx
-                            buff_idx += 1;
+                            buff_idx += glyph_bytes_size;
                         }
                     }
 

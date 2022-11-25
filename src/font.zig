@@ -117,8 +117,8 @@ pub const Font = struct {
                 continue;
             }
 
-            var seq_size = try std.unicode.utf8Encode(@intCast(u21, i), b[0..]);
-            b[seq_size] = 0;
+            var glyph_bytes_size = try std.unicode.utf8Encode(@intCast(u21, i), b[0..]);
+            b[glyph_bytes_size] = 0;
 
             text = c.TTF_RenderUTF8_LCD(self.ttf_font, b[0..], white, bg);
             _ = c.SDL_BlitSurface(text, 0, surface, &c.SDL_Rect{ .x = @intCast(c_int, self.atlas.current_pos.a), .y = @intCast(c_int, self.atlas.current_pos.b), .w = text.w, .h = text.h });
@@ -176,12 +176,12 @@ pub const Font = struct {
             return 1;
         }
 
-        var seq_size: u3 = std.unicode.utf8ByteSequenceLength(str[0]) catch |err| {
+        var glyph_bytes_size: u3 = std.unicode.utf8ByteSequenceLength(str[0]) catch |err| {
             std.log.err("Font.drawGlyph: error while checking utf8 byte sequence length in text {s}: {}", .{ str, err });
             return 1;
         };
 
-        var glyph_rect_in_atlas = self.glyphPos(str[0..seq_size]);
+        var glyph_rect_in_atlas = self.glyphPos(str[0..glyph_bytes_size]);
 
         var src_rect = c.SDL_Rect{
             .x = @intCast(c_int, glyph_rect_in_atlas.a),
@@ -200,7 +200,7 @@ pub const Font = struct {
         _ = c.SDL_SetTextureColorMod(self.atlas.texture, @intCast(u8, color.a), @intCast(u8, color.b), @intCast(u8, color.c));
         _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, &dst_rect);
 
-        return seq_size;
+        return glyph_bytes_size;
     }
 
     /// drawText draws the given text at the given position, position being in window coordinates.

@@ -105,16 +105,27 @@ pub const U8Slice = struct {
     }
 
     /// utf8pos receives a position in character, returns the offset in bytes in the line.
-    pub fn utf8pos(self: U8Slice, character_pos: usize) !usize {
+    pub fn utf8pos(self: U8Slice, glyph_pos: usize) !usize {
         var i: usize = 0;
         var bytes_pos: usize = 0;
-        while (i < character_pos) : (i += 1) {
+        while (i < glyph_pos) : (i += 1) {
             if (bytes_pos >= self.data.items.len) {
                 return U8SliceError.OutOfLine;
             }
             bytes_pos += try std.unicode.utf8ByteSequenceLength(self.data.items[bytes_pos]);
         }
         return bytes_pos;
+    }
+
+    /// utf8glyphSize returns the glyph size of the glyph at the given byte position in the slice.
+    /// If the byte position is invalid, displays an error and returns 1;
+    pub fn utf8glyphSize(self: U8Slice, glyph_byte_pos: usize) usize {
+        var glyph_size: usize = std.unicode.utf8ByteSequenceLength(self.data.items[glyph_byte_pos]) catch |err| {
+            std.log.err("U8Slice.utf8glyphSize: invalid glyph byte position: {}", .{err});
+            return 1;
+        };
+
+        return glyph_size;
     }
 
     /// deinit releases memory used by the U8Slice.

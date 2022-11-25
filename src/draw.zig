@@ -56,17 +56,19 @@ pub const Draw = struct {
         font.drawText(scaled_pos, color, str);
     }
 
-    pub fn glyph(font: Font, scaler: Scaler, position: Vec2u, color: Vec4u, str: []const u8) void {
+    /// glyph draws the given glyph.
+    /// Returns the size in bytes read in str to draw the glyph.
+    pub fn glyph(font: Font, scaler: Scaler, position: Vec2u, color: Vec4u, str: []const u8) usize {
         if (str.len == 0) {
-            return;
+            return 0;
         }
 
         // do not draw line returns
         if (str[0] == '\n') {
-            return;
+            return 1;
         }
 
         var scaled_pos = scaler.Scale2u(position);
-        _ = font.drawGlyph(scaled_pos, color, str);
+        return font.drawGlyph(scaled_pos, color, str);
     }
 };
