@@ -13,6 +13,7 @@ const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
+const WidgetInput = @import("widget_input.zig").WidgetInput;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 const Insert = @import("widget_text_edit.zig").Insert;
 
@@ -25,7 +26,7 @@ const WidgetCommandError = error{
 // TODO(remy): comment
 pub const WidgetCommand = struct {
     allocator: std.mem.Allocator,
-    widget_text_edit: WidgetTextEdit,
+    input: WidgetInput,
 
     // Constructors
     // ------------
@@ -33,19 +34,13 @@ pub const WidgetCommand = struct {
     pub fn init(allocator: std.mem.Allocator) !WidgetCommand {
         var rv = WidgetCommand{
             .allocator = allocator,
-            .widget_text_edit = WidgetTextEdit.initWithBuffer(allocator, try Buffer.initEmpty(allocator)),
+            .input = try WidgetInput.init(allocator),
         };
-        rv.widget_text_edit.render_line_numbers = false;
-        rv.widget_text_edit.editor.history_enabled = false;
-        rv.widget_text_edit.viewport.lines.a = 0;
-        rv.widget_text_edit.viewport.columns.a = 0;
-        rv.widget_text_edit.setInputMode(.Insert);
-        rv.reset();
         return rv;
     }
 
     pub fn deinit(self: *WidgetCommand) void {
-        self.widget_text_edit.deinit();
+        self.input.deinit();
     }
 
     // Events
@@ -54,10 +49,7 @@ pub const WidgetCommand = struct {
     // TODO(remy):
     // TODO(remy): comment
     pub fn onBackspace(self: *WidgetCommand) void {
-        self.widget_text_edit.editor.deleteUtf8Char(self.widget_text_edit.cursor.pos, true) catch |err| {
-            std.log.err("WidgetCommand.onBackspace: {}", .{err});
-        };
-        self.widget_text_edit.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+        self.input.onBackspace();
     }
 
     // Methods
@@ -73,9 +65,6 @@ pub const WidgetCommand = struct {
         widget_size: Vec2u,
         one_char_size: Vec2u,
     ) void {
-        self.widget_text_edit.viewport.lines.a = 0;
-        self.widget_text_edit.viewport.lines.b = 1;
-
         // overlay
         Draw.fillRect(
             sdl_renderer,
@@ -100,7 +89,7 @@ pub const WidgetCommand = struct {
         var pos = draw_pos;
         pos.a += margin.a;
         pos.b += margin.b;
-        self.widget_text_edit.render(
+        self.input.render(
             sdl_renderer,
             font,
             scaler,
@@ -212,18 +201,15 @@ pub const WidgetCommand = struct {
             }
         }
 
-        self.reset();
-    }
-
-    pub fn reset(self: *WidgetCommand) void {
-        self.widget_text_edit.editor.buffer.lines.items[0].deinit();
-        self.widget_text_edit.editor.buffer.lines.items[0] = U8Slice.initEmpty(self.allocator);
-        self.widget_text_edit.cursor.pos.a = 0;
-        self.widget_text_edit.cursor.pos.b = 0;
+        self.input.reset();
     }
 
     pub fn onTextInput(self: *WidgetCommand, txt: []const u8) void {
-        _ = self.widget_text_edit.onTextInput(txt);
+        _ = self.input.onTextInput(txt);
+    }
+
+    pub fn reset(self: *WidgetCommand) void {
+        self.input.reset();
     }
 
     // Functions
@@ -236,12 +222,11 @@ pub const WidgetCommand = struct {
         var i: usize = 0;
         var was_space = false;
 
-        var line = self.widget_text_edit.editor.buffer.getLine(0) catch |err| {
+        var line = self.input.text() catch |err| {
             std.log.err("WidgetCommand.countArgs: can't get line 0: {}", .{err});
             return 0;
         };
         var buff = line.bytes();
-        std.log.debug("{s}", .{buff});
 
         while (i < buff.len) : (i += 1) {
             if (buff[i] == 0) {
@@ -266,7 +251,7 @@ pub const WidgetCommand = struct {
             return WidgetCommandError.ArgsOutOfBounds;
         }
 
-        var line = try self.widget_text_edit.editor.buffer.getLine(0);
+        var line = try self.input.text();
         var buff = line.bytes();
 
         // find the end
