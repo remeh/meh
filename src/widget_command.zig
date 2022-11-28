@@ -46,10 +46,12 @@ pub const WidgetCommand = struct {
     // Events
     // ------
 
-    // TODO(remy):
-    // TODO(remy): comment
     pub fn onBackspace(self: *WidgetCommand) void {
         self.input.onBackspace();
+    }
+
+    pub fn onTextInput(self: *WidgetCommand, txt: []const u8) void {
+        _ = self.input.onTextInput(txt);
     }
 
     // Methods
@@ -168,7 +170,7 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":debug")) {
             var widget_text_edit = app.currentWidgetTextEdit();
-            std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text_edit.editor.buffer.filepath.bytes(), widget_text_edit.editor.buffer.lines.items.len });
+            std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text_edit.editor.buffer.fullpath.bytes(), widget_text_edit.editor.buffer.lines.items.len });
             std.log.debug("Window pixel size: {}", .{app.window_pixel_size});
             std.log.debug("Window scaled size: {}", .{app.window_scaled_size});
             std.log.debug("Viewport: {}", .{widget_text_edit.viewport});
@@ -204,16 +206,9 @@ pub const WidgetCommand = struct {
         self.input.reset();
     }
 
-    pub fn onTextInput(self: *WidgetCommand, txt: []const u8) void {
-        _ = self.input.onTextInput(txt);
-    }
-
     pub fn reset(self: *WidgetCommand) void {
         self.input.reset();
     }
-
-    // Functions
-    // ---------
 
     /// countArgs returns how many arguments there currently is in the buff.
     /// The first one (the command) is part of this total.

@@ -58,7 +58,7 @@ pub const WidgetInput = struct {
 
     // TODO(remy): comment
     pub fn onBackspace(self: *WidgetInput) void {
-        self.widget_text_edit.editor.deleteUtf8Char(self.widget_text_edit.cursor.pos, true) catch |err| {
+        self.widget_text_edit.editor.deleteGlyph(self.widget_text_edit.cursor.pos, true) catch |err| {
             std.log.err("WidgetInput: {}", .{err});
         };
         self.widget_text_edit.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
@@ -84,6 +84,7 @@ pub const WidgetInput = struct {
     ) void {
         self.widget_text_edit.viewport.lines.a = 0;
         self.widget_text_edit.viewport.lines.b = 1;
+        _ = c.SDL_SetTextureColorMod(font.atlas.texture, 255, 255, 255);
         self.widget_text_edit.render(sdl_renderer, font, scaler, position, widget_size, one_char_size);
     }
 };

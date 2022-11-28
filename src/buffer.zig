@@ -16,8 +16,8 @@ pub const Buffer = struct {
     allocator: std.mem.Allocator,
     /// in_ram_only indicates there is not file backing this buffer storage.
     in_ram_only: bool,
-    /// filepath is the filepath to the file backing this buffer storage.
-    filepath: U8Slice,
+    /// fullpath is the fullpath to the file backing this buffer storage.
+    fullpath: U8Slice,
     /// lines is the content of this Buffer.
     lines: std.ArrayList(U8Slice),
 
@@ -31,21 +31,27 @@ pub const Buffer = struct {
         var buff = Buffer{
             .allocator = allocator,
             .in_ram_only = true,
-            .filepath = U8Slice.initEmpty(allocator),
+            .fullpath = U8Slice.initEmpty(allocator),
             .lines = std.ArrayList(U8Slice).init(allocator),
         };
         try buff.lines.append(empty_line);
         return buff;
     }
 
-    /// initFromFile creates a buffer, reads data from the given filepath
+    /// initFromFile creates a buffer, reads data from the given fullpath
     /// and copies it in the Buffer instance.
     /// initFromFile calls `trackLineReturnPositions` to start tracking the line returns.
     pub fn initFromFile(allocator: std.mem.Allocator, filepath: []const u8) !Buffer {
+        // make sure that the provided fullpath is absolute
+        var path = try std.fs.realpathAlloc(allocator, filepath);
+        defer allocator.free(path);
+        var fullpath = U8Slice.initEmpty(allocator);
+        try fullpath.appendConst(path);
+
         var rv = Buffer{
             .allocator = allocator,
             .in_ram_only = false,
-            .filepath = try U8Slice.initFromSlice(allocator, filepath),
+            .fullpath = fullpath,
             .lines = std.ArrayList(U8Slice).init(allocator),
         };
 
@@ -100,7 +106,7 @@ pub const Buffer = struct {
             try rv.lines.append(u8slice);
         }
 
-        std.log.debug("Buffer.initFromFile: read file {s}, lines count: {d}", .{ filepath, rv.lines.items.len });
+        std.log.debug("Buffer.initFromFile: read file {s}, lines count: {d}", .{ fullpath.bytes(), rv.lines.items.len });
 
         return rv;
     }
@@ -112,12 +118,12 @@ pub const Buffer = struct {
         if (self.in_ram_only) {
             return;
         }
-        if (self.filepath.size() == 0) {
+        if (self.fullpath.size() == 0) {
             return BufferError.NoFilepath;
         }
 
         // check if the file exists, if not, try creating it
-        var file = try (std.fs.cwd().createFile(self.filepath.bytes(), .{ .truncate = true }));
+        var file = try (std.fs.cwd().createFile(self.fullpath.bytes(), .{ .truncate = true }));
 
         // at this point, the file is opened, defer closing it.
         defer file.close();
@@ -131,7 +137,7 @@ pub const Buffer = struct {
 
         try buf_writer.flush();
         self.in_ram_only = false;
-        std.log.debug("Buffer.writeOnDisk: write file {s}, bytes written: {d}", .{ self.filepath.bytes(), bytes_written });
+        std.log.debug("Buffer.writeOnDisk: write file {s}, bytes written: {d}", .{ self.fullpath.bytes(), bytes_written });
     }
 
     pub fn deinit(self: *Buffer) void {
@@ -139,7 +145,7 @@ pub const Buffer = struct {
             line.deinit();
         }
         self.lines.deinit();
-        self.filepath.deinit();
+        self.fullpath.deinit();
     }
 
     // Methods
@@ -195,7 +201,7 @@ test "init_empty" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initEmpty(allocator);
     try expect(buffer.lines.items.len == 1);
-    try expect(buffer.filepath.isEmpty() == true);
+    try expect(buffer.fullpath.isEmpty() == true);
     try expect(buffer.in_ram_only == true);
     buffer.deinit();
 }
@@ -205,13 +211,13 @@ test "init_from_file" {
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
     try expect(buffer.in_ram_only == false);
     try expect(buffer.lines.items.len == 1);
-    try expect(std.mem.eql(u8, buffer.filepath.bytes(), "tests/sample_1"));
+    try expect(std.mem.eql(u8, buffer.fullpath.bytes(), "tests/sample_1"));
     try expect(std.mem.eql(u8, buffer.lines.items[0].bytes(), "hello world\n"));
     buffer.deinit();
     buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
     try expect(buffer.in_ram_only == false);
     try expect(buffer.lines.items.len == 3);
-    try expect(std.mem.eql(u8, buffer.filepath.bytes(), "tests/sample_2"));
+    try expect(std.mem.eql(u8, buffer.fullpath.bytes(), "tests/sample_2"));
     try expect(std.mem.eql(u8, buffer.lines.items[0].bytes(), "hello world\n"));
     try expect(std.mem.eql(u8, buffer.lines.items[1].bytes(), "and a second line\n"));
     try expect(std.mem.eql(u8, buffer.lines.items[2].bytes(), "and a third"));

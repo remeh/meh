@@ -1,6 +1,8 @@
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 
+/// Scaler is used to pass both the current window scaling and the methods
+/// to turn a vector from virtual window scaled size to window real pixel size.
 pub const Scaler = struct {
     scale: f32,
 

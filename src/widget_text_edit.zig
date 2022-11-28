@@ -596,13 +596,12 @@ pub const WidgetTextEdit = struct {
         // when rendering the line numbers, we use a part of the width
         // this impacts how many glyphs are rendered, we have take this into account while
         // computing when scrolling to follow the cursor.
-        
+
         var offset_before_move: usize = glyph_offset_before_move;
         if (self.render_line_numbers) {
             offset_before_move += self.line_numbers_offset / self.one_char_size.a;
         }
-        
-    
+
         // the cursor is above
         if (self.cursor.pos.b < self.viewport.lines.a) {
             var count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
@@ -643,7 +642,7 @@ pub const WidgetTextEdit = struct {
         if (self.editor.search(txt, self.cursor.pos, false)) |new_cursor_pos| {
             self.setCursorPos(new_cursor_pos, true);
         } else |err| {
-            std.log.warn("WidgetTextEdit.search: can't search for '{s}' in document '{s}': {}", .{ txt.bytes(), self.editor.buffer.filepath.bytes(), err });
+            std.log.warn("WidgetTextEdit.search: can't search for '{s}' in document '{s}': {}", .{ txt.bytes(), self.editor.buffer.fullpath.bytes(), err });
         }
     }
 
@@ -836,7 +835,7 @@ pub const WidgetTextEdit = struct {
                         } else |err| {
                             std.log.err("WidgetTextEdit.onTextInput: can't get line while executing 'x' input: {}", .{err});
                         }
-                        self.editor.deleteUtf8Char(self.cursor.pos, false) catch |err| {
+                        self.editor.deleteGlyph(self.cursor.pos, false) catch |err| {
                             std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
                         };
                     },
@@ -872,7 +871,7 @@ pub const WidgetTextEdit = struct {
                     if (self.editor.buffer.getLine(pos.b)) |line| {
                         while (i < tab_spaces) : (i += 1) {
                             if (line.size() > 0 and line.data.items[0] == char_space) {
-                                self.editor.deleteUtf8Char(pos, false) catch |err| {
+                                self.editor.deleteGlyph(pos, false) catch |err| {
                                     std.log.err("WidgetTextEdit.onTab: can't remove spaces in command mode: {}", .{err});
                                 };
                             }
@@ -966,7 +965,7 @@ pub const WidgetTextEdit = struct {
     pub fn onBackspace(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
             .Insert => {
-                self.editor.deleteUtf8Char(self.cursor.pos, true) catch |err| {
+                self.editor.deleteGlyph(self.cursor.pos, true) catch |err| {
                     std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
                 };
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);

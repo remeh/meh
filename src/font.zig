@@ -10,6 +10,8 @@ const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const char_tab = @import("u8slice.zig").char_tab;
 const char_linereturn = @import("u8slice.zig").char_linereturn;
 
+const font_data = @embedFile("res/UbuntuMono-Regular.ttf");
+
 pub const FontError = error{
     CantLoadFont,
     CantBuildAtlas,
@@ -45,8 +47,11 @@ pub const Font = struct {
         var fp = U8Slice.initEmpty(allocator);
         try fp.appendConst(filepath);
 
+        // will be cleaned up by the TTF_OpenFontRW call (the second parameter set to 1).
+        var rwops: *c.SDL_RWops = c.SDL_RWFromConstMem(font_data, font_data.len);
+
         var font: *c.TTF_Font = undefined;
-        if (c.TTF_OpenFont(@ptrCast([*c]const u8, filepath), @intCast(c_int, font_size))) |f| {
+        if (c.TTF_OpenFontRW(rwops, 1, @intCast(c_int, font_size))) |f| {
             font = f;
         } else {
             std.log.err("{s}", .{c.TTF_GetError()});

@@ -7,7 +7,9 @@ const Buffer = @import("buffer.zig").Buffer;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
+const U8Slice = @import("u8slice.zig").U8Slice;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
+const WidgetLookup = @import("widget_lookup.zig").WidgetLookup;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
 const Vec2f = @import("vec.zig").Vec2f;
@@ -22,6 +24,7 @@ pub const AppError = error{
 pub const FocusedWidget = enum {
     Editor,
     Command,
+    Lookup,
 };
 
 pub const FontMode = enum {
@@ -39,6 +42,7 @@ pub const FontMode = enum {
 pub const App = struct {
     allocator: std.mem.Allocator,
     widget_command: WidgetCommand,
+    widget_lookup: WidgetLookup,
     textedits: std.ArrayList(WidgetTextEdit),
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
@@ -72,6 +76,8 @@ pub const App = struct {
 
     /// mainloop is running flag.
     is_running: bool,
+
+    working_dir: U8Slice,
 
     /// current_widget_text_edit_tab is the currently selected widget text in the
     /// opened WidgetTextEdits/editors/buffers.
@@ -126,12 +132,20 @@ pub const App = struct {
         var font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 22);
         var font_hidpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 32);
 
+        // working directory
+
+        var working_dir = U8Slice.initEmpty(allocator);
+        var fullpath = try std.fs.realpathAlloc(allocator, ".");
+        defer allocator.free(fullpath);
+        try working_dir.appendConst(fullpath);
+
         // return the created app
         return App{
             .allocator = allocator,
             .widget_text_edit_pos = Vec2u{ .a = 0, .b = 8 * 4 },
             .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
             .widget_command = try WidgetCommand.init(allocator),
+            .widget_lookup = try WidgetLookup.init(allocator),
             .current_widget_text_edit_tab = 0,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
@@ -146,6 +160,7 @@ pub const App = struct {
             .window_pixel_size = window_size,
             .window_scaled_size = window_size,
             .window_scaling = 1.0,
+            .working_dir = working_dir,
         };
     }
 
@@ -177,10 +192,32 @@ pub const App = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
+    // TODO(remy): should switch to an already opened buffer
     pub fn openFile(self: *App, filepath: []const u8) !void {
-        var buffer = try Buffer.initFromFile(self.allocator, filepath);
+        // make sure that the provided filepath is absolute
+        var path = try std.fs.realpathAlloc(self.allocator, filepath);
+        defer self.allocator.free(path);
+        var fullpath = U8Slice.initEmpty(self.allocator);
+        try fullpath.appendConst(path);
+
+        // first, loop through all buffers to see if it's already opened or not
+        var idx: usize = 0;
+        for (self.textedits.items) |textedit| {
+            // already opened, just switch to it
+            if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), fullpath.bytes())) {
+                self.current_widget_text_edit_tab = idx;
+                return;
+            }
+            idx += 1;
+        }
+
+        // open the buffer, create an editor
+        var buffer = try Buffer.initFromFile(self.allocator, fullpath.bytes());
         var editor = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
         try self.textedits.append(editor);
+
+        // immediately switch to this buffer
+        self.current_widget_text_edit_tab = self.textedits.items.len - 1;
     }
 
     // FIXME(remy): this method isn't testing anything and will crash the
@@ -224,18 +261,22 @@ pub const App = struct {
 
         // editor window
 
-        var widget_text_edit = &self.textedits.items[0];
-        widget_text_edit.render(
-            self.sdl_renderer,
-            self.current_font,
-            scaler,
-            self.widget_text_edit_pos,
-            Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b },
-            one_char_size,
-        );
+        if (self.current_widget_text_edit_tab < self.textedits.items.len) {
+            var widget_text_edit = &self.textedits.items[self.current_widget_text_edit_tab];
+            widget_text_edit.render(
+                self.sdl_renderer,
+                self.current_font,
+                scaler,
+                self.widget_text_edit_pos,
+                Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b },
+                one_char_size,
+            );
+        }
 
-        if (self.focused_widget == .Command) {
-            self.widget_command.render(
+        // widgets
+
+        switch (self.focused_widget) {
+            .Command => self.widget_command.render(
                 self.sdl_renderer,
                 self.current_font,
                 scaler,
@@ -243,7 +284,17 @@ pub const App = struct {
                 Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = 50 },
                 Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = 50 },
                 one_char_size,
-            );
+            ),
+            .Lookup => self.widget_lookup.render(
+                self.sdl_renderer,
+                self.current_font,
+                scaler,
+                self.window_scaled_size, // used for the overlay
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.1) },
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.8) },
+                one_char_size,
+            ),
+            else => {}, // nothing more to render then
         }
 
         // rendering
@@ -381,6 +432,10 @@ pub const App = struct {
                         self.editorEvents(event);
                         to_render = true;
                     },
+                    .Lookup => {
+                        self.lookupEvents(event);
+                        to_render = true;
+                    },
                 }
 
                 // the focus widget changed, trigger an immedate repaint
@@ -437,6 +492,56 @@ pub const App = struct {
         }
     }
 
+    fn lookupEvents(self: *App, event: c.SDL_Event) void {
+        var input_state = c.SDL_GetKeyboardState(null);
+        var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
+        //        var shift: bool = input_state[c.SDL_SCANCODE_LSHIFT] == 1 or input_state[c.SDL_SCANCODE_RSHIFT] == 1;
+        //        var cmd: bool = input_state[c.SDL_SCANCODE_LGUI] == 1 or input_state[c.SDL_SCANCODE_RGUI] == 1;
+        switch (event.type) {
+            c.SDL_KEYDOWN => {
+                switch (event.key.keysym.sym) {
+                    c.SDLK_RETURN => {
+                        if (self.widget_lookup.select()) |selected| {
+                            if (selected) |entry| {
+                                // we'll try to open that file
+                                self.openFile(entry.fullpath.bytes()) catch |err| {
+                                    std.log.debug("App.lookupEvents: can't open file: {}", .{err});
+                                    return;
+                                };
+                                // leave the widget
+                                self.focused_widget = FocusedWidget.Editor;
+                            }
+                        } else |err| {
+                            std.log.err("App.lookupEvents: can't select current entry: {}", .{err});
+                        }
+                    },
+                    c.SDLK_BACKSPACE => {
+                        self.widget_lookup.onBackspace();
+                    },
+                    c.SDLK_ESCAPE => {
+                        self.widget_lookup.reset();
+                        self.focused_widget = FocusedWidget.Editor;
+                    },
+                    c.SDLK_n => {
+                        if (ctrl) {
+                            self.widget_lookup.next();
+                        }
+                    },
+                    c.SDLK_p => {
+                        if (ctrl) {
+                            self.widget_lookup.previous();
+                        }
+                    },
+                    else => {},
+                }
+            },
+            c.SDL_TEXTINPUT => {
+                _ = self.widget_lookup.onTextInput(readTextFromSDLInput(&event.text.text));
+            },
+            else => {},
+        }
+    }
+
     fn editorEvents(self: *App, event: c.SDL_Event) void {
         var input_state = c.SDL_GetKeyboardState(null);
         var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
@@ -467,7 +572,24 @@ pub const App = struct {
                     },
                     else => {
                         if (ctrl) {
-                            _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd);
+                            switch (event.key.keysym.sym) {
+                                c.SDLK_p => {
+                                    self.widget_lookup.reset();
+                                    self.widget_lookup.setFilepath(self.working_dir) catch |err| {
+                                        std.log.err("App.editorEvents: can't set WidgetLookup filepath: {}", .{err});
+                                        return;
+                                    };
+                                    self.widget_lookup.scanDir() catch |err| {
+                                        std.log.err("App.editorEvents: can't list file in WidgetLookup: {}", .{err});
+                                        return;
+                                    };
+                                    self.widget_lookup.filter() catch |err| {
+                                        std.log.err("App.editorEvents: can't run initial filter call: {}", .{err});
+                                    };
+                                    self.focused_widget = .Lookup;
+                                },
+                                else => _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),
+                            }
                         }
                     },
                 }
