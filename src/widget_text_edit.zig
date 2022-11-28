@@ -592,8 +592,17 @@ pub const WidgetTextEdit = struct {
     }
 
     /// scrollToCursor scrolls to the cursor if it is not visible.
-    // TODO(remy): unit test
     fn scrollToCursor(self: *WidgetTextEdit) void {
+        // when rendering the line numbers, we use a part of the width
+        // this impacts how many glyphs are rendered, we have take this into account while
+        // computing when scrolling to follow the cursor.
+        
+        var offset_before_move: usize = glyph_offset_before_move;
+        if (self.render_line_numbers) {
+            offset_before_move += self.line_numbers_offset / self.one_char_size.a;
+        }
+        
+    
         // the cursor is above
         if (self.cursor.pos.b < self.viewport.lines.a) {
             var count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
@@ -616,8 +625,8 @@ pub const WidgetTextEdit = struct {
         }
 
         // the cursor is on the right
-        if (self.cursor.pos.a + glyph_offset_before_move > self.viewport.columns.b) {
-            var distance = self.cursor.pos.a + glyph_offset_before_move - self.viewport.columns.b;
+        if (self.cursor.pos.a + offset_before_move > self.viewport.columns.b) {
+            var distance = self.cursor.pos.a + offset_before_move - self.viewport.columns.b;
             self.viewport.columns.a += distance;
             self.viewport.columns.b += distance;
         }
@@ -687,6 +696,7 @@ pub const WidgetTextEdit = struct {
     }
 
     // TODO(remy): unit test
+    /// paste is writing what's available in the clipboard in the WidgetTextEdit.
     pub fn paste(self: *WidgetTextEdit) !void {
         // read data from the clipboard
         var data = c.SDL_GetClipboardText();
@@ -731,8 +741,7 @@ pub const WidgetTextEdit = struct {
         return true;
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
+    /// onTextInput is called when the user has pressed a regular key.
     pub fn onTextInput(self: *WidgetTextEdit, txt: []const u8) bool {
         switch (self.input_mode) {
             .Insert => {
@@ -842,14 +851,17 @@ pub const WidgetTextEdit = struct {
         return true;
     }
 
+    /// onTab is called when the user has pressed the Tab key.
     // TODO(remy): support untabbing selection
-    // TODO(remy): automatically respect previous indent on empty lines
     pub fn onTab(self: *WidgetTextEdit, shift: bool) void {
         switch (self.input_mode) {
             .Insert => {
                 var i: usize = 0;
                 while (i < tab_spaces) : (i += 1) {
-                    self.editor.insertUtf8Text(self.cursor.pos, string_space) catch {}; // TODO(remy): grab the error
+                    self.editor.insertUtf8Text(self.cursor.pos, string_space) catch |err| {
+                        std.log.err("WidgetTextEdit.onTab: can't insert spaces in insert mode: {}", .{err});
+                        return;
+                    };
                 }
                 self.moveCursor(Vec2i{ .a = 4, .b = 0 }, true);
             },
@@ -860,13 +872,20 @@ pub const WidgetTextEdit = struct {
                     if (self.editor.buffer.getLine(pos.b)) |line| {
                         while (i < tab_spaces) : (i += 1) {
                             if (line.size() > 0 and line.data.items[0] == char_space) {
-                                self.editor.deleteUtf8Char(pos, false) catch {}; // TODO(remy): grab the error
+                                self.editor.deleteUtf8Char(pos, false) catch |err| {
+                                    std.log.err("WidgetTextEdit.onTab: can't remove spaces in command mode: {}", .{err});
+                                };
                             }
                         }
-                    } else |_| {} // TODO(remy): grab the error
+                    } else |err| {
+                        std.log.err("WidgetTextEdit.onTab: can't remove tabs in command mode: {}", .{err});
+                        return;
+                    }
                 } else {
                     while (i < tab_spaces) : (i += 1) {
-                        self.editor.insertUtf8Text(pos, string_space) catch {}; // TODO(remy): grab the error
+                        self.editor.insertUtf8Text(pos, string_space) catch |err| {
+                            std.log.err("WidgetTextEdit.onTab: can't insert spaces in command mode: {}", .{err});
+                        };
                     }
                 }
             },
@@ -876,8 +895,7 @@ pub const WidgetTextEdit = struct {
         self.validateCursorPosition(true);
     }
 
-    // FIXME(remy): this should move the viewport but not moving the
-    // the cursor.
+    /// onMouseWheel is called when the user is using the wheel of the mouse.
     pub fn onMouseWheel(self: *WidgetTextEdit, move: Vec2i) void {
         var scroll_move = @divTrunc(utoi(self.viewport.lines.b) - utoi(self.viewport.lines.a), 4);
         if (scroll_move < 0) {
@@ -896,15 +914,15 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    // TODO(remy): unit test
+    /// onMouseMove is called when the user is moving the cursor on top of the window.
     pub fn onMouseMove(self: *WidgetTextEdit, mouse_window_pos: Vec2u, draw_pos: Vec2u) void {
-        // ignore out of the editor click
-        if (mouse_window_pos.a < draw_pos.a or mouse_window_pos.b < draw_pos.b) {
+        // ignore movements when not selecting text.
+        if (self.selection.state != .MouseSelection) {
             return;
         }
 
-        // ignore movements when not selecting text.
-        if (self.selection.state != .MouseSelection) {
+        // ignore out of the editor click
+        if (mouse_window_pos.a < draw_pos.a or mouse_window_pos.b < draw_pos.b) {
             return;
         }
 
@@ -914,8 +932,7 @@ pub const WidgetTextEdit = struct {
         self.setCursorPos(cursor_pos, true);
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
+    /// onReturn is called when the user has pressed Return.
     pub fn onReturn(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
             .Insert => self.newLine(),
@@ -923,8 +940,10 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    // TODO(remy):
-    // TODO(remy): comment
+    /// onEscape is called when the user has pressed Esc.
+    /// Calling onEscape will:
+    ///   * remove selection if any
+    ///   * switch the input mode to `Command`
     /// returns true if the event has been absorbed by the WidgetTextEdit.
     pub fn onEscape(self: *WidgetTextEdit) bool {
         // stop selection mode
@@ -941,8 +960,9 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    // TODO(remy):
-    // TODO(remy): comment
+    /// onBackspace is called when the user has pressed Backspace.
+    /// In input mode, delete a char.
+    /// In command mode, move the cursor left.
     pub fn onBackspace(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
             .Insert => {
@@ -951,11 +971,16 @@ pub const WidgetTextEdit = struct {
                 };
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
             },
+            .Command => {
+                self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+            },
             else => {},
         }
     }
 
-    // TODO(remy): unit test
+    /// onMouseStartSelection is called when the user has clicked with the mouse.
+    /// When this method is called, the click just happened and the button is still pressed down.
+    // TODO(remy): middle & right click
     pub fn onMouseStartSelection(self: *WidgetTextEdit, mouse_window_pos: Vec2u, draw_pos: Vec2u) void {
         if (mouse_window_pos.a < draw_pos.a or mouse_window_pos.b < draw_pos.b) {
             return;
@@ -970,7 +995,8 @@ pub const WidgetTextEdit = struct {
         self.startSelection(self.cursor.pos, .MouseSelection);
     }
 
-    // TODO(remy): unit test
+    /// onMouseStopSelection is called when the user has stopped pressing with the mouse button.
+    // TODO(remy): middle & right click
     pub fn onMouseStopSelection(self: *WidgetTextEdit, mouse_window_pos: Vec2u, draw_pos: Vec2u) void {
         if (mouse_window_pos.a < draw_pos.a or mouse_window_pos.b < draw_pos.b) {
             return;
@@ -983,8 +1009,8 @@ pub const WidgetTextEdit = struct {
     // Text edition methods
     // -------------------
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
+    /// buildSelectedText uses the current selection in the WidgetTextEdit to return
+    /// the currently selected text.
     /// buildSelectedText always returns a string ending with a \0.
     pub fn buildSelectedText(self: WidgetTextEdit) !U8Slice {
         var rv = U8Slice.initEmpty(self.allocator);
@@ -993,8 +1019,6 @@ pub const WidgetTextEdit = struct {
         if (self.selection.state == .Inactive) {
             return rv;
         }
-
-        // FIXME(remy): consider using the UTF8Iterator here, maybe not worth
 
         var i: usize = self.selection.start.b;
         while (i <= self.selection.stop.b) : (i += 1) {
@@ -1021,7 +1045,8 @@ pub const WidgetTextEdit = struct {
         return rv;
     }
 
-    // TODO(remy): comment
+    /// The viewport is the part of editor visible in the current WidgetTextEdit.
+    /// moveViewport move that visible "virtual window". `move` must be in glyph.
     // TODO(remy): unit test
     // TODO(remy): implement smooth movement
     pub fn moveViewport(self: *WidgetTextEdit, move: Vec2i) void {

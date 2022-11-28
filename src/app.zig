@@ -1,7 +1,6 @@
 const std = @import("std");
 const c = @import("clib.zig").c;
-
-const debugRect = @import("clib.zig").debugRect;
+const expect = std.testing.expect;
 
 const Buffer = @import("buffer.zig").Buffer;
 
@@ -31,12 +30,12 @@ pub const FontMode = enum {
     HiDPI,
 };
 
-// TODO(comment):
-// The app has three fonts mode:
-//   * hidpi: using a bigger font but scaled by 0.5, providing the hidpi rendering quality
-//   * lowdpi: using a normal font with no scale
-//   * lowdpibigfont: using a normal font with no scale, but slightly bigger font than lowdpi
-//                    for high resolutions (for the text to not look small).
+/// Main app structure.
+/// The app has three fonts mode:
+///   * hidpi: using a bigger font but scaled by 0.5, providing the hidpi rendering quality
+///   * lowdpi: using a normal font with no scale
+///   * lowdpibigfont: using a normal font with no scale, but slightly bigger font than lowdpi
+///                    for high resolutions (for the text to not look small).
 pub const App = struct {
     allocator: std.mem.Allocator,
     widget_command: WidgetCommand,
@@ -44,11 +43,19 @@ pub const App = struct {
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
 
+    /// widget_text_edit_pos is the position of the main WidgetTextEdit in the
+    /// window. Independant of the scale (i.e. position of the widget in window_scaled_size).
     widget_text_edit_pos: Vec2u,
 
-    // TODO(remy): comment
+    /// window_pixel_size is the amount of pixel used to draw the window.
+    /// E.g. in a normal resolution, a window of size 800x800 has window_pixel_size
+    /// equals to 800x800, whereas on a retina/hidpi screen (let's say with a scale of 1.5x)
+    /// the window_pixel_size will be equal to 1600x1600.
     window_pixel_size: Vec2u,
-    // TODO(remy): comment
+    /// window_scaled_size is the window size.
+    /// E.g. in normal resolution, a window of size 800x800 has window_scaled_size
+    /// of value 800x800. In a retina/hidpi screen, the window_scaled_size is also
+    /// equals to 800x800.
     window_scaled_size: Vec2u,
     /// window_scaling contains the scale between the actual GL rendered
     /// surface and the window size.
@@ -66,8 +73,12 @@ pub const App = struct {
     /// mainloop is running flag.
     is_running: bool,
 
-    // TODO(remy): comment
+    /// current_widget_text_edit_tab is the currently selected widget text in the
+    /// opened WidgetTextEdits/editors/buffers.
     current_widget_text_edit_tab: usize,
+
+    /// focused_widget is the widget which currently has the focus and receives
+    /// the events from the keyboard and mouse.
     focused_widget: FocusedWidget,
 
     // Constructors
@@ -184,6 +195,7 @@ pub const App = struct {
             return;
         };
 
+        // FIXME(remy): we have to de-allocate the previous one
         // if (self.font_custom) |custom| {
         // custom.deinit();
         // }
@@ -324,7 +336,7 @@ pub const App = struct {
         var event: c.SDL_Event = undefined;
         self.is_running = true;
         var to_render = true;
-        c.SDL_StartTextInput(); // TODO(remy): do this only if current focus is the widget_text_edit
+        c.SDL_StartTextInput(); // TODO(remy): confirm it's the good way of using this
 
         const frame_per_second = 60;
         const max_ms_skip = 1000 / frame_per_second;
@@ -467,21 +479,22 @@ pub const App = struct {
                 _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
             },
             c.SDL_MOUSEMOTION => {
-                self.currentWidgetTextEdit().onMouseMove(self.sdlMousePosToVec2u(event.motion.x, event.motion.y), self.widget_text_edit_pos);
+                self.currentWidgetTextEdit().onMouseMove(sdlMousePosToVec2u(event.motion.x, event.motion.y), self.widget_text_edit_pos);
             },
             c.SDL_MOUSEBUTTONDOWN => {
-                self.currentWidgetTextEdit().onMouseStartSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.widget_text_edit_pos);
+                self.currentWidgetTextEdit().onMouseStartSelection(sdlMousePosToVec2u(event.button.x, event.button.y), self.widget_text_edit_pos);
             },
             c.SDL_MOUSEBUTTONUP => {
-                self.currentWidgetTextEdit().onMouseStopSelection(self.sdlMousePosToVec2u(event.button.x, event.button.y), self.widget_text_edit_pos);
+                self.currentWidgetTextEdit().onMouseStopSelection(sdlMousePosToVec2u(event.button.x, event.button.y), self.widget_text_edit_pos);
             },
             else => {},
         }
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
-    fn sdlMousePosToVec2u(_: App, x: c_int, y: c_int) Vec2u {
+    /// sdlMousePosToVec2u converts the mouse position in c_ints into a Vec2u
+    /// If the click happened outside of the left/top window, the concerned value
+    /// will be 0.
+    fn sdlMousePosToVec2u(x: c_int, y: c_int) Vec2u {
         var rv = Vec2u{ .a = 0, .b = 0 };
         if (x < 0) {
             rv.a = 0;
@@ -496,6 +509,7 @@ pub const App = struct {
         return rv;
     }
 
+    /// readTextFromSDLInput reads and sizes the received text from the SDL_TEXTINPUT event.
     fn readTextFromSDLInput(sdl_text_input: []const u8) []const u8 {
         var i: usize = 0;
         while (i < sdl_text_input.len) : (i += 1) {
@@ -506,3 +520,18 @@ pub const App = struct {
         return sdl_text_input[0..sdl_text_input.len];
     }
 };
+
+test "app sdlMousePosToVec2u" {
+    var rv = App.sdlMousePosToVec2u(5, 15);
+    try expect(rv.a == 5);
+    try expect(rv.b == 15);
+    rv = App.sdlMousePosToVec2u(-10, 15);
+    try expect(rv.a == 0);
+    try expect(rv.b == 15);
+    rv = App.sdlMousePosToVec2u(5, -15);
+    try expect(rv.a == 5);
+    try expect(rv.b == 0);
+    rv = App.sdlMousePosToVec2u(-10, -15);
+    try expect(rv.a == 0);
+    try expect(rv.b == 0);
+}

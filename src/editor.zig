@@ -19,7 +19,8 @@ pub const EditorError = error{
     NoSearchResult,
 };
 
-// TODO(remy): comment
+/// Editor helps editing a Buffer.
+/// Provides UTF8 methods to insert text, remove text, etc.
 pub const Editor = struct {
     allocator: std.mem.Allocator,
     buffer: Buffer,
@@ -181,12 +182,13 @@ pub const Editor = struct {
         }
     }
 
-    // TODO(remy): comment
+    /// paste pastes the content of `txt` at the given `position` in the buffer.
+    /// Returns a position (in glyph) representing the end position after having
+    /// pasted the `txt` content.
     // TODO(remy): unit test
-    pub fn paste(self: *Editor, pos: Vec2u, txt: U8Slice) !Vec2u {
+    pub fn paste(self: *Editor, position: Vec2u, txt: U8Slice) !Vec2u {
         var i: usize = 0;
-        var insert_pos = pos;
-        // TODO(remy): deal with \n
+        var insert_pos = position;
         while (i < txt.data.items.len) {
             // new line
             if (txt.data.items[i] == '\n') {
@@ -196,7 +198,7 @@ pub const Editor = struct {
                 i += 1;
                 continue;
             }
-            // normal character
+            // not a new line
             var to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
             try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add]);
             insert_pos.a += 1;
