@@ -285,9 +285,11 @@ pub const WidgetTextEdit = struct {
     // Rendering methods
     // -----------------
 
-    // TODO(remy): comment
-    // TODO(remy): unit test (at least to validate that there is no leaks)
-    /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally.
+    /// render renders the WidgetTextEdit.
+    /// Renders line number at the left of the widget only if `render_line_numbers` is set to true. Set it to false to
+    /// renders an input text.
+    /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
+    /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
     pub fn render(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
         self.one_char_size = one_char_size;
         self.visible_cols_and_lines = Vec2u{
@@ -311,12 +313,15 @@ pub const WidgetTextEdit = struct {
         // render the lines
         // it also adds a left offset (a small blank)
 
-        left_offset = self.renderLinesAndSelection(font, scaler, pos, one_char_size);
+        left_offset = self.renderLines(font, scaler, pos, one_char_size);
         pos.a += left_offset;
 
         self.line_numbers_offset = pos.a;
     }
 
+    // renderLineNumbers renders the lines number at the left of the widget.
+    /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
+    /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
     /// Returns x offset introduced by drawing the lines numbers
     fn renderLineNumbers(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
         var text_pos_x: usize = one_char_size.a;
@@ -394,7 +399,10 @@ pub const WidgetTextEdit = struct {
         return Colors.light_gray;
     }
 
-    fn renderLinesAndSelection(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) usize {
+    /// renderLines renders the lines of text, the selections if any, and the cursor if visible.
+    /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
+    /// using the given `scaler`. `draw_pos` and `one_char_size` should be in pixel.
+    fn renderLines(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) usize {
         var i: usize = self.viewport.lines.a;
         var y_offset: usize = 0;
         var left_blank_offset: usize = 5;
@@ -534,7 +542,7 @@ pub const WidgetTextEdit = struct {
         return left_blank_offset;
     }
 
-    // TODO(remy): unit test
+    /// isSelected returns true if the given glyph is selected in the managed editor.
     fn isSelected(self: WidgetTextEdit, glyph: Vec2u) bool {
         if (self.selection.state == .Inactive) {
             return false;
@@ -1286,7 +1294,7 @@ pub const WidgetTextEdit = struct {
         self.validateCursorPosition(scroll);
     }
 
-    // TODO(remy): comment
+    /// undo cancels the previous change.
     pub fn undo(self: *WidgetTextEdit) void {
         if (self.editor.undo()) |pos| {
             self.setCursorPos(pos, true);
@@ -1374,5 +1382,98 @@ test "widget_text_edit init deinit" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
     var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+    widget.deinit();
+}
+
+test "widget_text_edit isSelected" {
+    const allocator = std.testing.allocator;
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+
+    widget.startSelection(Vec2u{ .a = 3, .b = 0 }, .KeyboardSelection);
+    widget.updateSelection(Vec2u{ .a = 13, .b = 1 });
+
+    try expect(widget.isSelected(Vec2u{ .a = 3, .b = 0 }));
+    try expect(widget.isSelected(Vec2u{ .a = 13, .b = 0 }));
+    try expect(widget.isSelected(Vec2u{ .a = 14, .b = 0 }));
+    try expect(widget.isSelected(Vec2u{ .a = 19, .b = 0 })); // outside of the line but still, considered selected and should not crash
+
+    try expect(widget.isSelected(Vec2u{ .a = 0, .b = 1 }));
+    try expect(widget.isSelected(Vec2u{ .a = 13, .b = 1 }));
+    try expect(!widget.isSelected(Vec2u{ .a = 14, .b = 1 }));
+    try expect(!widget.isSelected(Vec2u{ .a = 0, .b = 2 }));
+
+    widget.stopSelection(.KeyboardSelection);
+    var txt = try widget.buildSelectedText();
+    defer txt.deinit();
+
+    try expect(txt.size() == 23);
+
+    widget.deinit();
+}
+
+test "widget_text_edit scrollToCursor" {
+    const allocator = std.testing.allocator;
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+
+    widget.viewport.columns = Vec2u{ .a = 0, .b = 5 };
+    widget.viewport.lines = Vec2u{ .a = 0, .b = 5 };
+
+    try expect(widget.cursor.pos.a == 0);
+    try expect(widget.cursor.pos.b == 0);
+
+    // move right
+
+    widget.cursor.pos.a = 4;
+    widget.scrollToCursor();
+    try expect(widget.viewport.columns.a == 4);
+    try expect(widget.viewport.columns.b == 9);
+    try expect(widget.viewport.lines.a == 0);
+    try expect(widget.viewport.lines.b == 5);
+
+    // again
+
+    widget.cursor.pos.a = 5;
+    widget.scrollToCursor();
+    try expect(widget.viewport.columns.a == 5);
+    try expect(widget.viewport.columns.b == 10);
+    try expect(widget.viewport.lines.a == 0);
+    try expect(widget.viewport.lines.b == 5);
+
+    // back to left
+
+    widget.cursor.pos.a = 0;
+    widget.scrollToCursor();
+    try expect(widget.viewport.columns.a == 0);
+    try expect(widget.viewport.columns.b == 5);
+    try expect(widget.viewport.lines.a == 0);
+    try expect(widget.viewport.lines.b == 5);
+
+    // move down
+
+    widget.cursor.pos.b = 1;
+    widget.scrollToCursor();
+    try expect(widget.viewport.columns.a == 0);
+    try expect(widget.viewport.columns.b == 5);
+    try expect(widget.viewport.lines.a == 1);
+    try expect(widget.viewport.lines.b == 6);
+
+    widget.cursor.pos.b = 3;
+    widget.scrollToCursor();
+    try expect(widget.viewport.columns.a == 0);
+    try expect(widget.viewport.columns.b == 5);
+    try expect(widget.viewport.lines.a == 3);
+    try expect(widget.viewport.lines.b == 8);
+
+    // up again
+
+    widget.cursor.pos.b = 0;
+    widget.scrollToCursor();
+    try expect(widget.viewport.columns.a == 0);
+    try expect(widget.viewport.columns.b == 5);
+    try expect(widget.viewport.lines.a == 0);
+    try expect(widget.viewport.lines.b == 5);
+
     widget.deinit();
 }

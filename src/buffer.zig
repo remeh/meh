@@ -26,7 +26,6 @@ pub const Buffer = struct {
 
     /// init_empty initializes an empty buffer.
     /// Creates an initial first line.
-    // TODO(remy): better comment
     pub fn initEmpty(allocator: std.mem.Allocator) !Buffer {
         var empty_line = U8Slice.initEmpty(allocator);
         var buff = Buffer{
@@ -135,18 +134,6 @@ pub const Buffer = struct {
         std.log.debug("Buffer.writeOnDisk: write file {s}, bytes written: {d}", .{ self.filepath.bytes(), bytes_written });
     }
 
-    // TODO(remy): remove
-    fn dump(self: Buffer, line_count: i64) void {
-        var i: usize = 0;
-        for (self.lines.items) |str| {
-            std.log.debug("line {d}: {s}", .{ i, str.data.items });
-            i += 1;
-            if (line_count > 0 and i > line_count) {
-                break;
-            }
-        }
-    }
-
     pub fn deinit(self: *Buffer) void {
         for (self.lines.items) |line| {
             line.deinit();
@@ -178,6 +165,7 @@ pub const Buffer = struct {
 
     /// longestLine returns the size of the longest line in the lines visible
     /// between the given interval.
+    // TODO(remy): unit test
     pub fn longestLine(self: *Buffer, line_start: usize, line_end: usize) usize {
         if (line_start >= self.lines.items.len) {
             return 0;
