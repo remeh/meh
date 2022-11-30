@@ -131,8 +131,17 @@ pub const WidgetLookup = struct {
         var entry = self.filtered_entries.items[self.selected_entry_idx];
 
         if (entry.type == .Directory) {
+            // build the next path
             try self.current_path.appendConst("/");
             try self.current_path.appendSlice(entry.filename);
+            // make sure it is absolute
+            var fullpath = try std.fs.realpathAlloc(self.allocator, self.current_path.bytes());
+            defer self.allocator.free(fullpath);
+            self.current_path.deinit();
+            // store it as the fullpath
+            self.current_path = U8Slice.initEmpty(self.allocator);
+            try self.current_path.appendConst(fullpath);
+
             self.reset();
             try self.scanDir();
             try self.filter();
