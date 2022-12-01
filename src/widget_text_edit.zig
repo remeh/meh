@@ -552,6 +552,11 @@ pub const WidgetTextEdit = struct {
         if (self.selection.state == .Inactive) {
             return false;
         }
+        
+        if (self.selection.start.a == self.selection.stop.a and
+            self.selection.start.b == self.selection.stop.b) {
+            return false;
+        }
 
         if (glyph.b < self.selection.start.b or glyph.b > self.selection.stop.b) {
             return false;
@@ -569,7 +574,7 @@ pub const WidgetTextEdit = struct {
         // one the ending line
 
         if (glyph.b == self.selection.stop.b and glyph.b != self.selection.start.b) {
-            if (glyph.a <= self.selection.stop.a) {
+            if (self.selection.stop.a > 0 and glyph.a <= self.selection.stop.a - 1) {
                 return true;
             }
             return false;
@@ -577,7 +582,7 @@ pub const WidgetTextEdit = struct {
 
         // starting and ending on this line
         if (self.selection.start.b == self.selection.stop.b and glyph.b == self.selection.start.b and
-            glyph.a >= self.selection.start.a and glyph.a <= self.selection.stop.a)
+            glyph.a >= self.selection.start.a and self.selection.stop.a > 0 and glyph.a <= self.selection.stop.a - 1)
         {
             return true;
         }
@@ -776,7 +781,10 @@ pub const WidgetTextEdit = struct {
                     'g' => self.moveCursorSpecial(CursorMove.StartOfBuffer, true),
                     'G' => self.moveCursorSpecial(CursorMove.EndOfBuffer, true),
                     // start inserting
-                    'i' => self.setInputMode(.Insert),
+                    'i' => {
+                        self.setInputMode(.Insert);
+                        self.validateCursorPosition(true);
+                    },
                     'I' => {
                         self.moveCursorSpecial(CursorMove.StartOfLine, true);
                         self.setInputMode(.Insert);
@@ -842,24 +850,32 @@ pub const WidgetTextEdit = struct {
                             std.log.err("WidgetTextEdit.onTextInput: can't delete line: {}", .{err});
                         }
                     },
-                    // TODO(remy): selection support
                     'x' => {
-                        // edge-case: last char of the line
-                        if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
-                            if (line.size() > 0 and
-                                ((self.cursor.pos.a == line.size() - 1 and self.cursor.pos.b < self.editor.buffer.lines.items.len - 1) // normal line
-                                or // normal line
-                                (self.cursor.pos.a == line.size() and self.cursor.pos.b == self.editor.buffer.lines.items.len - 1)) // very last line
-                            ) {
-                                // special case, we don't want to do delete anything
-                                return true;
+                        if (self.selection.state != .Inactive) {
+                            if (self.editor.deleteChunk(self.selection.start, self.selection.stop)) |cursor_pos| {
+                                self.setCursorPos(cursor_pos, true);
+                                self.selection.state = .Inactive;
+                            } else |err| {
+                                std.log.err("WidgetTextEdit.onTextInput: can't remove a chunk of data: {}", .{err});
                             }
-                        } else |err| {
-                            std.log.err("WidgetTextEdit.onTextInput: can't get line while executing 'x' input: {}", .{err});
+                        } else {
+                            // edge-case: last char of the line
+                            if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
+                                if (line.size() > 0 and
+                                    ((self.cursor.pos.a == line.size() - 1 and self.cursor.pos.b < self.editor.buffer.lines.items.len - 1) // normal line
+                                    or // normal line
+                                    (self.cursor.pos.a == line.size() and self.cursor.pos.b == self.editor.buffer.lines.items.len - 1)) // very last line
+                                ) {
+                                    // special case, we don't want to do delete anything
+                                    return true;
+                                }
+                            } else |err| {
+                                std.log.err("WidgetTextEdit.onTextInput: can't get line while executing 'x' input: {}", .{err});
+                            }
+                            self.editor.deleteGlyph(self.cursor.pos, false) catch |err| {
+                                std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
+                            };
                         }
-                        self.editor.deleteGlyph(self.cursor.pos, false) catch |err| {
-                            std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
-                        };
                     },
                     'u' => {
                         self.undo();

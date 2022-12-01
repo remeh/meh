@@ -30,6 +30,9 @@ pub const ChangeType = enum {
 /// The Change owns the `data` and has to release it.
 /// The `pos` vector can have different meanings depending on the `type` of the Change.
 pub const Change = struct {
+    /// block_id is used to creates blocks of edit, in order to revert a complete block
+    /// in a row.
+    block_id: i64,
     type: ChangeType,
     data: U8Slice,
     /// depending on the `change_type`, only the first field of the

@@ -9,6 +9,7 @@ const ChangeType = @import("history.zig").ChangeType;
 const History = @import("history.zig").History;
 const ImVec2 = @import("vec.zig").ImVec2;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
@@ -29,6 +30,8 @@ pub const Editor = struct {
     has_changes_compared_to_disk: bool,
     history: std.ArrayList(Change),
     history_enabled: bool,
+    history_current_block_id: i64,
+    prng: std.rand.DefaultPrng,
 
     // Constructors
     // ------------
@@ -40,6 +43,8 @@ pub const Editor = struct {
             .has_changes_compared_to_disk = false,
             .history = std.ArrayList(Change).init(allocator),
             .history_enabled = true,
+            .history_current_block_id = 0,
+            .prng = std.rand.DefaultPrng.init(1234),
         };
     }
 
@@ -61,6 +66,7 @@ pub const Editor = struct {
             return;
         }
         self.history.append(Change{
+            .block_id = self.history_current_block_id,
             .data = data,
             .pos = pos,
             .type = change_type,
@@ -70,6 +76,10 @@ pub const Editor = struct {
         };
 
         self.has_changes_compared_to_disk = true;
+    }
+    
+    fn historyEndBlock(self: *Editor) void {
+        self.history_current_block_id = self.prng.random().int(i64);
     }
 
     /// undo un-does the last change and all previous changes of the same type.
@@ -113,6 +123,85 @@ pub const Editor = struct {
         var deleted_line = self.buffer.lines.orderedRemove(line_pos);
         // history
         self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2u{ .a = 0, .b = line_pos });
+    }
+
+    /// deleteChunk removes chunk of text in lines.
+    /// `start_pos` and `end_pos` are in glyph.
+    /// Returns the new cursor position.
+    pub fn deleteChunk(self: *Editor, start_pos: Vec2u, end_pos: Vec2u) !Vec2u {
+        if (start_pos.b < 0 or end_pos.b >= self.buffer.lines.items.len) {
+            return BufferError.OutOfBuffer;
+        }
+
+        // single line or part of a single line to delete
+        // ----------------------------------------------
+
+        if (start_pos.b == end_pos.b) {
+            // delete only a piece of it
+            var j: usize = start_pos.a;
+            while (j < end_pos.a) : (j += 1) {
+                try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = start_pos.b }, false);
+            }
+            return Vec2u{ .a = start_pos.a, .b = start_pos.b };
+        }
+
+        // multiple lines to delete
+        // ------------------------
+
+        var i: usize = 0;
+        var line_removed: usize = 0;
+        while (i <= end_pos.b) : (i += 1) {
+            var line = try self.buffer.getLine(i - line_removed);
+            var line_size = try line.utf8size();
+
+            // starting line has to be complete deleted
+            if (start_pos.a == 0 and i == start_pos.b and (end_pos.b > start_pos.b or end_pos.a == line_size - 1)) {
+                // we have to completely delete the first line
+                try self.deleteLine(start_pos.b - line_removed);
+                line_removed += 1;
+                continue;
+            }
+
+            // starting line only has a chunk to remove
+            if (start_pos.a > 0 and i == start_pos.b) {
+                // we have to partially removes data from the first line
+                var j: usize = 0;
+                while (j < line_size - start_pos.a) : (j += 1) {
+                    try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = i - line_removed }, false);
+                }
+            }
+
+            // in between lines can be simply removed
+            if (i > start_pos.b and i < end_pos.b) {
+                try self.deleteLine(i - line_removed);
+                line_removed += 1;
+            }
+
+            // ending line only has a chunk to remove, we have to take all what's left on the end
+            // line, and put it on the cursor position
+            if (i == end_pos.b and end_pos.a > 0 and end_pos.a < line_size) {
+                var j: usize = end_pos.a - 1;
+                var k: usize = 0;
+
+                var it = try UTF8Iterator.init(line.bytes(), j);
+                while (j < line_size) : (j += 1) {
+                    if (it.next()) {
+                        try self.insertUtf8Text(Vec2u{ .a = start_pos.a + k, .b = start_pos.b }, it.glyph());
+                    }
+                    k += 1;
+                }
+
+                j = 0;
+                while (j < end_pos.a) : (j += 1) {
+                    try self.deleteGlyph(Vec2u{ .a = 0, .b = i - line_removed }, false);
+                }
+
+                try self.deleteLine(i - line_removed);
+                line_removed += 1;
+            }
+        }
+
+        return Vec2u{ .a = start_pos.a, .b = start_pos.b };
     }
 
     // TODO(remy): comment
@@ -166,6 +255,7 @@ pub const Editor = struct {
         var line = try self.buffer.getLine(pos.b);
         if (left and pos.a == 0) {
             // TODO(remy): removing a line.
+            std.log.debug("TODO(remy): removing a line", .{});
         } else {
             var remove_pos: usize = 0;
             if (left) {
