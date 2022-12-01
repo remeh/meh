@@ -179,6 +179,8 @@ pub const WidgetLookup = struct {
                 else => continue,
             }
         }
+
+        std.sort.sort(Entry, self.entries.items, {}, WidgetLookup.sortByFullpath);
     }
 
     // TODO(remy): comment
@@ -306,6 +308,11 @@ pub const WidgetLookup = struct {
         }
 
         Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, entry.filename.bytes());
+    }
+
+    fn sortByFullpath(context: void, a: Entry, b: Entry) bool {
+        _ = context;
+        return std.mem.lessThan(u8, a.fullpath.bytes(), b.fullpath.bytes());
     }
 };
 

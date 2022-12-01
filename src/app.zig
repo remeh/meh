@@ -583,6 +583,7 @@ pub const App = struct {
                                         self.widget_lookup.filter() catch |err| {
                                             std.log.err("App.editorEvents: can't run initial filter call: {}", .{err});
                                         };
+                                        self.widget_lookup.selected_entry_idx = self.current_widget_text_edit_tab;
                                     } else {
                                         // scan directory mode
                                         self.widget_lookup.setFilepath(self.working_dir) catch |err| {
