@@ -9,6 +9,7 @@ const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 const WidgetInput = @import("widget_input.zig").WidgetInput;
+const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
 const EntryType = enum { File, Directory };
 
@@ -187,6 +188,20 @@ pub const WidgetLookup = struct {
                 else => continue,
             }
         }
+
+        std.sort.sort(Entry, self.entries.items, {}, WidgetLookup.sortByFullpath);
+    }
+
+    // TODO(remy): comment
+    pub fn setTextEdits(self: *WidgetLookup, textedits: std.ArrayList(WidgetTextEdit)) !void {
+        self.reset();
+        for (textedits.items) |textedit| {
+            try self.entries.append(Entry{
+                .filename = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
+                .fullpath = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
+                .type = .File,
+            });
+        }
     }
 
     pub fn next(self: *WidgetLookup) void {
@@ -302,6 +317,11 @@ pub const WidgetLookup = struct {
         }
 
         Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, entry.filename.bytes());
+    }
+
+    fn sortByFullpath(context: void, a: Entry, b: Entry) bool {
+        _ = context;
+        return std.mem.lessThan(u8, a.fullpath.bytes(), b.fullpath.bytes());
     }
 };
 

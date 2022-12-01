@@ -261,7 +261,7 @@ pub const WidgetTextEdit = struct {
             .cursor = Cursor.init(),
             .render_line_numbers = true,
             .editor = Editor.init(allocator, buffer),
-            .input_mode = InputMode.Insert,
+            .input_mode = InputMode.Command,
             .one_char_size = Vec2u{ .a = 16, .b = 8 },
             .viewport = WidgetTextEditViewport{
                 .columns = Vec2u{ .a = 0, .b = 1 },
