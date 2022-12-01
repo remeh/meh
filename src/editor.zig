@@ -19,6 +19,8 @@ pub const EditorError = error{
     NoSearchResult,
 };
 
+pub const SearchDirection = enum { Before, After };
+
 /// Editor helps editing a Buffer.
 /// Provides UTF8 methods to insert text, remove text, etc.
 pub const Editor = struct {
@@ -212,7 +214,7 @@ pub const Editor = struct {
     /// search looks for the given utf8 text starting from the given position
     /// Use `before` to look before the given position instead of after.
     /// TODO(remy): unit test
-    pub fn search(self: Editor, txt: U8Slice, starting_pos: Vec2u, before: bool) !Vec2u {
+    pub fn search(self: Editor, txt: U8Slice, starting_pos: Vec2u, direction: SearchDirection) !Vec2u {
         var i: usize = starting_pos.b;
 
         if (starting_pos.b > self.buffer.lines.items.len) {
@@ -246,7 +248,7 @@ pub const Editor = struct {
                 return EditorError.NoSearchResult;
             }
 
-            if (before) {
+            if (direction == .Before) {
                 if (i == 0) {
                     return EditorError.NoSearchResult;
                 } else {

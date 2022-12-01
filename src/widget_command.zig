@@ -9,6 +9,7 @@ const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
+const SearchDirection = @import("editor.zig").SearchDirection;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
@@ -159,9 +160,8 @@ pub const WidgetCommand = struct {
                 }
             }
 
-            std.log.debug("WidgetCommand.interpret: search for {s}", .{str.bytes()});
             var wt = app.currentWidgetTextEdit();
-            wt.search(str);
+            wt.search(str, SearchDirection.After, true);
             return;
         }
 

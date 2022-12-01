@@ -77,6 +77,7 @@ pub const App = struct {
     /// mainloop is running flag.
     is_running: bool,
 
+    /// working_dir stores the current path to use when opening new files, etc.
     working_dir: U8Slice,
 
     /// current_widget_text_edit_tab is the currently selected widget text in the
@@ -174,6 +175,8 @@ pub const App = struct {
         self.font_lowdpi.deinit();
         self.font_lowdpibigfont.deinit();
         self.font_hidpi.deinit();
+
+        self.working_dir.deinit();
 
         c.SDL_DestroyRenderer(self.sdl_renderer);
         self.sdl_renderer = undefined;

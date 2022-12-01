@@ -11,6 +11,7 @@ const EditorError = @import("editor.zig").EditorError;
 const Font = @import("font.zig").Font;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Scaler = @import("scaler.zig").Scaler;
+const SearchDirection = @import("editor.zig").SearchDirection;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2f = @import("vec.zig").Vec2f;
@@ -250,6 +251,8 @@ pub const WidgetTextEdit = struct {
     /// one_char_size is computed every render and represents the size of one
     /// glyph rendered in the WidgetTextEdit.
     one_char_size: Vec2u,
+    /// last_search contains the last search terms having been used in this WidgetTextEdit.
+    last_search: U8Slice,
 
     // Constructors
     // ------------
@@ -275,10 +278,12 @@ pub const WidgetTextEdit = struct {
                 .stop = Vec2u{ .a = 0, .b = 0 },
                 .state = .Inactive,
             },
+            .last_search = U8Slice.initEmpty(allocator),
         };
     }
 
     pub fn deinit(self: *WidgetTextEdit) void {
+        self.last_search.deinit();
         self.editor.deinit();
     }
 
@@ -638,11 +643,21 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    pub fn search(self: *WidgetTextEdit, txt: U8Slice) void {
-        if (self.editor.search(txt, self.cursor.pos, false)) |new_cursor_pos| {
+    pub fn search(self: *WidgetTextEdit, txt: U8Slice, direction: SearchDirection, new_terms: bool) void {
+        if (new_terms) {
+            self.last_search.deinit();
+            self.last_search = U8Slice.initFromSlice(self.allocator, txt.bytes()) catch |err| {
+                std.log.err("WidgetTextEdit.search: can't store last search terms: {}", .{err});
+                return;
+            };
+        }
+
+        if (self.editor.search(txt, self.cursor.pos, direction)) |new_cursor_pos| {
             self.setCursorPos(new_cursor_pos, true);
         } else |err| {
-            std.log.warn("WidgetTextEdit.search: can't search for '{s}' in document '{s}': {}", .{ txt.bytes(), self.editor.buffer.fullpath.bytes(), err });
+            if (err != EditorError.NoSearchResult) {
+                std.log.warn("WidgetTextEdit.search: can't search for '{s}' in document '{s}': {}", .{ txt.bytes(), self.editor.buffer.fullpath.bytes(), err });
+            }
         }
     }
 
@@ -786,6 +801,13 @@ pub const WidgetTextEdit = struct {
                         self.moveCursorSpecial(CursorMove.EndOfLine, true);
                         self.newLine();
                         self.setInputMode(.Insert);
+                    },
+                    // search next & previous
+                    'n' => {
+                        self.search(self.last_search, .After, false);
+                    },
+                    'N' => {
+                        self.search(self.last_search, .Before, false);
                     },
                     // copy & paste
                     'v' => {
