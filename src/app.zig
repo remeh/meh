@@ -575,17 +575,28 @@ pub const App = struct {
                             switch (event.key.keysym.sym) {
                                 c.SDLK_p => {
                                     self.widget_lookup.reset();
-                                    self.widget_lookup.setFilepath(self.working_dir) catch |err| {
-                                        std.log.err("App.editorEvents: can't set WidgetLookup filepath: {}", .{err});
-                                        return;
-                                    };
-                                    self.widget_lookup.scanDir() catch |err| {
-                                        std.log.err("App.editorEvents: can't list file in WidgetLookup: {}", .{err});
-                                        return;
-                                    };
-                                    self.widget_lookup.filter() catch |err| {
-                                        std.log.err("App.editorEvents: can't run initial filter call: {}", .{err});
-                                    };
+                                    if (shift) {
+                                        // opened buffers mode
+                                        self.widget_lookup.setTextEdits(self.textedits) catch |err| {
+                                            std.log.err("App.editorEvents: can't set WidgetLookup buffers list: {}", .{err});
+                                        };
+                                        self.widget_lookup.filter() catch |err| {
+                                            std.log.err("App.editorEvents: can't run initial filter call: {}", .{err});
+                                        };
+                                    } else {
+                                        // scan directory mode
+                                        self.widget_lookup.setFilepath(self.working_dir) catch |err| {
+                                            std.log.err("App.editorEvents: can't set WidgetLookup filepath: {}", .{err});
+                                            return;
+                                        };
+                                        self.widget_lookup.scanDir() catch |err| {
+                                            std.log.err("App.editorEvents: can't list file in WidgetLookup: {}", .{err});
+                                            return;
+                                        };
+                                        self.widget_lookup.filter() catch |err| {
+                                            std.log.err("App.editorEvents: can't run initial filter call: {}", .{err});
+                                        };
+                                    }
                                     self.focused_widget = .Lookup;
                                 },
                                 else => _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),

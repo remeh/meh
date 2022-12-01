@@ -9,6 +9,7 @@ const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 const WidgetInput = @import("widget_input.zig").WidgetInput;
+const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
 const EntryType = enum { File, Directory };
 
@@ -177,6 +178,18 @@ pub const WidgetLookup = struct {
                 },
                 else => continue,
             }
+        }
+    }
+
+    // TODO(remy): comment
+    pub fn setTextEdits(self: *WidgetLookup, textedits: std.ArrayList(WidgetTextEdit)) !void {
+        self.reset();
+        for (textedits.items) |textedit| {
+            try self.entries.append(Entry{
+                .filename = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
+                .fullpath = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
+                .type = .File,
+            });
         }
     }
 
