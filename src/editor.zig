@@ -77,8 +77,9 @@ pub const Editor = struct {
 
         self.has_changes_compared_to_disk = true;
     }
-    
-    fn historyEndBlock(self: *Editor) void {
+
+    // TODO(remy): comment
+    pub fn historyEndBlock(self: *Editor) void {
         self.history_current_block_id = self.prng.random().int(i64);
     }
 
@@ -89,10 +90,10 @@ pub const Editor = struct {
             return EditorError.NothingToUndo;
         }
         var change = self.history.pop();
-        var t = change.type;
+        var t = change.block_id;
         try History.undo(self, change);
         var pos = change.pos;
-        while (self.history.items.len > 0 and self.history.items[self.history.items.len - 1].type == t) {
+        while (self.history.items.len > 0 and self.history.items[self.history.items.len - 1].block_id == t) {
             change = self.history.pop();
             try History.undo(self, change);
             pos = change.pos;
@@ -206,6 +207,7 @@ pub const Editor = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
+    // TODO(remy): direction instead of "above"
     // TODO(remy): what happens on the very last line of the buffer/editor?
     /// `above` is a special behavior where the new line is created above the current line.
     pub fn newLine(self: *Editor, pos: Vec2u, above: bool) !void {
@@ -250,6 +252,7 @@ pub const Editor = struct {
         self.historyAppend(ChangeType.InsertUtf8Char, undefined, utf8_pos);
     }
 
+    // TODO(remy): direction instead of "left"
     /// deleteGlyph deletes on glyph from the underlying buffer.
     pub fn deleteGlyph(self: *Editor, pos: Vec2u, left: bool) !void {
         var line = try self.buffer.getLine(pos.b);

@@ -552,9 +552,10 @@ pub const WidgetTextEdit = struct {
         if (self.selection.state == .Inactive) {
             return false;
         }
-        
+
         if (self.selection.start.a == self.selection.stop.a and
-            self.selection.start.b == self.selection.stop.b) {
+            self.selection.start.b == self.selection.stop.b)
+        {
             return false;
         }
 
@@ -725,6 +726,7 @@ pub const WidgetTextEdit = struct {
         defer str.deinit();
         // paste in the editor
         var new_cursor_pos = try self.editor.paste(self.cursor.pos, str);
+        self.editor.historyEndBlock();
         // move the cursor
         self.setCursorPos(new_cursor_pos, true);
     }
@@ -842,6 +844,7 @@ pub const WidgetTextEdit = struct {
                     // others
                     'd' => {
                         if (self.editor.deleteLine(@intCast(usize, self.cursor.pos.b))) {
+                            self.editor.historyEndBlock();
                             if (self.cursor.pos.b > 0 and self.cursor.pos.b >= self.editor.buffer.lines.items.len) {
                                 self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true);
                             }
@@ -853,6 +856,7 @@ pub const WidgetTextEdit = struct {
                     'x' => {
                         if (self.selection.state != .Inactive) {
                             if (self.editor.deleteChunk(self.selection.start, self.selection.stop)) |cursor_pos| {
+                                self.editor.historyEndBlock();
                                 self.setCursorPos(cursor_pos, true);
                                 self.selection.state = .Inactive;
                             } else |err| {
@@ -983,6 +987,9 @@ pub const WidgetTextEdit = struct {
     ///   * switch the input mode to `Command`
     /// returns true if the event has been absorbed by the WidgetTextEdit.
     pub fn onEscape(self: *WidgetTextEdit) bool {
+        // change the history block, we're switching to do something else
+        self.editor.historyEndBlock();
+
         // stop selection mode
         self.stopSelection(.Inactive);
 
@@ -1315,6 +1322,7 @@ pub const WidgetTextEdit = struct {
             std.log.err("WidgetTextEdit.newLine: {}", .{err});
             return;
         };
+        self.editor.historyEndBlock();
         self.moveCursorSpecial(CursorMove.NextLine, true);
         self.moveCursorSpecial(CursorMove.StartOfLine, true);
         self.moveCursorSpecial(CursorMove.RespectPreviousLineIndent, true);
