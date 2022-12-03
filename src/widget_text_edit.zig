@@ -82,7 +82,21 @@ pub const Cursor = struct {
     /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
-    pub fn render(_: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) void {
+    pub fn render(_: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u, focused: bool) void {
+        if (!focused) {
+            Draw.rect(
+                sdl_renderer,
+                scaler,
+                Vec2u{
+                    .a = draw_pos.a,
+                    .b = draw_pos.b,
+                },
+                Vec2u{ .a = one_char_size.a, .b = one_char_size.b },
+                Colors.white,
+            );
+            return;
+        }
+
         switch (input_mode) {
             .Insert => {
                 Draw.fillRect(
@@ -295,10 +309,10 @@ pub const WidgetTextEdit = struct {
     /// renders an input text.
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
     /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
-    pub fn render(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
+    pub fn render(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u, focused: bool) void {
         self.one_char_size = one_char_size;
         self.visible_cols_and_lines = Vec2u{
-            .a = (widget_size.a) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
+            .a = (widget_size.a - self.line_numbers_offset) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
             .b = ((widget_size.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b))) - 1, // FIXME(remy): this -1 is based on nothing
         };
         self.computeViewport();
@@ -318,10 +332,10 @@ pub const WidgetTextEdit = struct {
         // render the lines
         // it also adds a left offset (a small blank)
 
-        left_offset = self.renderLines(font, scaler, pos, one_char_size);
+        left_offset = self.renderLines(font, scaler, pos, one_char_size, focused);
         pos.a += left_offset;
 
-        self.line_numbers_offset = pos.a;
+        self.line_numbers_offset = pos.a - draw_pos.a;
     }
 
     // renderLineNumbers renders the lines number at the left of the widget.
@@ -329,7 +343,7 @@ pub const WidgetTextEdit = struct {
     /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
     /// Returns x offset introduced by drawing the lines numbers
     fn renderLineNumbers(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
-        var text_pos_x: usize = one_char_size.a;
+        var text_pos_x: usize = draw_pos.a + one_char_size.a;
 
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         var cbuff = &carray;
@@ -407,7 +421,7 @@ pub const WidgetTextEdit = struct {
     /// renderLines renders the lines of text, the selections if any, and the cursor if visible.
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
     /// using the given `scaler`. `draw_pos` and `one_char_size` should be in pixel.
-    fn renderLines(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) usize {
+    fn renderLines(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u, focused: bool) usize {
         var i: usize = self.viewport.lines.a;
         var y_offset: usize = 0;
         var left_blank_offset: usize = 5;
@@ -487,6 +501,7 @@ pub const WidgetTextEdit = struct {
                                     .b = draw_pos.b + y_offset,
                                 },
                                 one_char_size,
+                                focused,
                             );
                         }
                     }
@@ -525,6 +540,7 @@ pub const WidgetTextEdit = struct {
                                     .b = draw_pos.b + y_offset,
                                 },
                                 one_char_size,
+                                focused,
                             );
                         }
                         break;

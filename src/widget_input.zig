@@ -85,6 +85,6 @@ pub const WidgetInput = struct {
         self.widget_text_edit.viewport.lines.a = 0;
         self.widget_text_edit.viewport.lines.b = 1;
         _ = c.SDL_SetTextureColorMod(font.atlas.texture, 255, 255, 255);
-        self.widget_text_edit.render(sdl_renderer, font, scaler, position, widget_size, one_char_size);
+        self.widget_text_edit.render(sdl_renderer, font, scaler, position, widget_size, one_char_size, true);
     }
 };

@@ -27,6 +27,11 @@ pub const FocusedWidget = enum {
     Lookup,
 };
 
+pub const FocusedEditor = enum {
+    Left,
+    Right,
+};
+
 pub const FontMode = enum {
     LowDPI,
     LowDPIBigFont,
@@ -80,9 +85,20 @@ pub const App = struct {
     /// working_dir stores the current path to use when opening new files, etc.
     working_dir: U8Slice,
 
-    /// current_widget_text_edit_tab is the currently selected widget text in the
+    /// current_widget_text_edit is the currently selected widget text in the
     /// opened WidgetTextEdits/editors/buffers.
-    current_widget_text_edit_tab: usize,
+    current_widget_text_edit: usize,
+
+    /// curent_widget_text_edit_tab is the selected textedit in the second
+    /// editor.
+    current_widget_text_edit_alt: usize,
+
+    /// has_split_view is true if the split view is enabled.
+    has_split_view: bool,
+
+    /// focused_editor is the currently focused editor.
+    /// If the split view is closed, it will always be .Left.
+    focused_editor: FocusedEditor,
 
     /// focused_widget is the widget which currently has the focus and receives
     /// the events from the keyboard and mouse.
@@ -147,7 +163,9 @@ pub const App = struct {
             .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
             .widget_command = try WidgetCommand.init(allocator),
             .widget_lookup = try WidgetLookup.init(allocator),
-            .current_widget_text_edit_tab = 0,
+            .current_widget_text_edit = 0,
+            .current_widget_text_edit_alt = 0,
+            .has_split_view = false,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
             .sdl_window = sdl_window.?,
@@ -157,6 +175,7 @@ pub const App = struct {
             .font_hidpi = font_hidpi,
             .current_font = font_lowdpi,
             .font_mode = FontMode.LowDPI,
+            .focused_editor = FocusedEditor.Left,
             .focused_widget = FocusedWidget.Editor,
             .window_pixel_size = window_size,
             .window_scaled_size = window_size,
@@ -208,7 +227,7 @@ pub const App = struct {
         for (self.textedits.items) |textedit| {
             // already opened, just switch to it
             if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), fullpath.bytes())) {
-                self.current_widget_text_edit_tab = idx;
+                self.setCurrentFocusedWidgetTextEditIndex(idx);
                 return;
             }
             idx += 1;
@@ -220,13 +239,32 @@ pub const App = struct {
         try self.textedits.append(editor);
 
         // immediately switch to this buffer
-        self.current_widget_text_edit_tab = self.textedits.items.len - 1;
+        self.setCurrentFocusedWidgetTextEditIndex(self.textedits.items.len - 1);
     }
 
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
     pub fn currentWidgetTextEdit(self: App) *WidgetTextEdit {
-        return &self.textedits.items[self.current_widget_text_edit_tab];
+        if (self.has_split_view and self.focused_editor == .Right) {
+            return &self.textedits.items[self.current_widget_text_edit_alt];
+        }
+        return &self.textedits.items[self.current_widget_text_edit];
+    }
+
+    fn setCurrentFocusedWidgetTextEditIndex(self: *App, index: usize) void {
+        if (self.has_split_view and self.focused_editor == .Right) {
+            self.current_widget_text_edit_alt = index;
+        } else {
+            self.current_widget_text_edit = index;
+        }
+    }
+
+    // TODO(remy): comment
+    pub fn toggleSplit(self: *App) void {
+        self.has_split_view = !self.has_split_view;
+        if (!self.has_split_view) {
+            self.focused_editor = .Left;
+        }
     }
 
     pub fn increaseFont(self: *App) void {
@@ -264,16 +302,37 @@ pub const App = struct {
 
         // editor window
 
-        if (self.current_widget_text_edit_tab < self.textedits.items.len) {
-            var widget_text_edit = &self.textedits.items[self.current_widget_text_edit_tab];
+        if (self.current_widget_text_edit < self.textedits.items.len) {
+            var widget_size = Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b };
+            if (self.has_split_view) {
+                widget_size.a /= 2;
+            }
+
+            var widget_text_edit = &self.textedits.items[self.current_widget_text_edit];
             widget_text_edit.render(
                 self.sdl_renderer,
                 self.current_font,
                 scaler,
                 self.widget_text_edit_pos,
-                Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b },
+                widget_size,
                 one_char_size,
+                self.focused_editor == .Left,
             );
+
+            if (self.has_split_view and self.current_widget_text_edit_alt < self.textedits.items.len) {
+                var split_pos = self.widget_text_edit_pos;
+                split_pos.a = self.window_scaled_size.a / 2;
+                var widget_text_edit_alt = &self.textedits.items[self.current_widget_text_edit_alt];
+                widget_text_edit_alt.render(
+                    self.sdl_renderer,
+                    self.current_font,
+                    scaler,
+                    split_pos,
+                    widget_size,
+                    one_char_size,
+                    self.focused_editor == .Right,
+                );
+            }
         }
 
         // widgets
@@ -575,7 +634,15 @@ pub const App = struct {
                     },
                     else => {
                         if (ctrl) {
+                            // TODO(remy): move to a specific fn
                             switch (event.key.keysym.sym) {
+                                c.SDLK_j => {
+                                    if (self.focused_editor == .Left) {
+                                        self.focused_editor = .Right;
+                                    } else {
+                                        self.focused_editor = .Left;
+                                    }
+                                },
                                 c.SDLK_p => {
                                     self.widget_lookup.reset();
                                     if (shift) {
@@ -586,7 +653,11 @@ pub const App = struct {
                                         self.widget_lookup.filter() catch |err| {
                                             std.log.err("App.editorEvents: can't run initial filter call: {}", .{err});
                                         };
-                                        self.widget_lookup.selected_entry_idx = self.current_widget_text_edit_tab;
+                                        if (self.has_split_view and self.focused_editor == .Right) {
+                                            self.widget_lookup.selected_entry_idx = self.current_widget_text_edit_alt;
+                                        } else {
+                                            self.widget_lookup.selected_entry_idx = self.current_widget_text_edit;
+                                        }
                                     } else {
                                         // scan directory mode
                                         self.widget_lookup.setFilepath(self.working_dir) catch |err| {
@@ -616,13 +687,25 @@ pub const App = struct {
                 _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
             },
             c.SDL_MOUSEMOTION => {
-                self.currentWidgetTextEdit().onMouseMove(sdlMousePosToVec2u(event.motion.x, event.motion.y), self.widget_text_edit_pos);
+                var widget_pos = self.widget_text_edit_pos;
+                if (self.has_split_view and self.focused_editor == .Right) {
+                    widget_pos.a = self.window_scaled_size.a / 2;
+                }
+                self.currentWidgetTextEdit().onMouseMove(sdlMousePosToVec2u(event.motion.x, event.motion.y), widget_pos);
             },
             c.SDL_MOUSEBUTTONDOWN => {
-                self.currentWidgetTextEdit().onMouseStartSelection(sdlMousePosToVec2u(event.button.x, event.button.y), self.widget_text_edit_pos);
+                var widget_pos = self.widget_text_edit_pos;
+                if (self.has_split_view and self.focused_editor == .Right) {
+                    widget_pos.a = self.window_scaled_size.a / 2;
+                }
+                self.currentWidgetTextEdit().onMouseStartSelection(sdlMousePosToVec2u(event.button.x, event.button.y), widget_pos);
             },
             c.SDL_MOUSEBUTTONUP => {
-                self.currentWidgetTextEdit().onMouseStopSelection(sdlMousePosToVec2u(event.button.x, event.button.y), self.widget_text_edit_pos);
+                var widget_pos = self.widget_text_edit_pos;
+                if (self.has_split_view and self.focused_editor == .Right) {
+                    widget_pos.a = self.window_scaled_size.a / 2;
+                }
+                self.currentWidgetTextEdit().onMouseStopSelection(sdlMousePosToVec2u(event.button.x, event.button.y), widget_pos);
             },
             else => {},
         }
