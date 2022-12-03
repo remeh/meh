@@ -715,6 +715,16 @@ pub const WidgetTextEdit = struct {
         self.selection.state = next_state;
     }
 
+    fn deleteSelection(self: *WidgetTextEdit) void {
+        if (self.editor.deleteChunk(self.selection.start, self.selection.stop)) |cursor_pos| {
+            self.editor.historyEndBlock();
+            self.setCursorPos(cursor_pos, true);
+            self.selection.state = .Inactive;
+        } else |err| {
+            std.log.err("WidgetTextEdit.deleteSelection: can't remove a chunk of data: {}", .{err});
+        }
+    }
+
     // TODO(remy): unit test
     /// paste is writing what's available in the clipboard in the WidgetTextEdit.
     pub fn paste(self: *WidgetTextEdit) !void {
@@ -823,8 +833,8 @@ pub const WidgetTextEdit = struct {
                     'v' => {
                         self.startSelection(self.cursor.pos, .KeyboardSelection);
                     },
-                    'y' => {
-                        if (self.selection.state == .KeyboardSelection or self.selection.state == .Active) {
+                    'y', 'Y' => {
+                        if (self.selection.state != .Inactive) {
                             if (self.buildSelectedText()) |selected_text| {
                                 if (selected_text.size() > 0) {
                                     _ = c.SDL_SetClipboardText(@ptrCast([*:0]const u8, selected_text.data.items));
@@ -833,6 +843,11 @@ pub const WidgetTextEdit = struct {
                             } else |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't get selected text: {}", .{err});
                             }
+
+                            if (txt[0] == 'Y') {
+                                self.deleteSelection();
+                            }
+
                             self.stopSelection(.Inactive);
                         }
                     },
@@ -842,7 +857,7 @@ pub const WidgetTextEdit = struct {
                         };
                     },
                     // others
-                    'd' => {
+                    'D' => {
                         if (self.editor.deleteLine(@intCast(usize, self.cursor.pos.b))) {
                             self.editor.historyEndBlock();
                             if (self.cursor.pos.b > 0 and self.cursor.pos.b >= self.editor.buffer.lines.items.len) {
@@ -855,13 +870,7 @@ pub const WidgetTextEdit = struct {
                     },
                     'x' => {
                         if (self.selection.state != .Inactive) {
-                            if (self.editor.deleteChunk(self.selection.start, self.selection.stop)) |cursor_pos| {
-                                self.editor.historyEndBlock();
-                                self.setCursorPos(cursor_pos, true);
-                                self.selection.state = .Inactive;
-                            } else |err| {
-                                std.log.err("WidgetTextEdit.onTextInput: can't remove a chunk of data: {}", .{err});
-                            }
+                            self.deleteSelection();
                         } else {
                             // edge-case: last char of the line
                             if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
@@ -876,7 +885,7 @@ pub const WidgetTextEdit = struct {
                             } else |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't get line while executing 'x' input: {}", .{err});
                             }
-                            self.editor.deleteGlyph(self.cursor.pos, false) catch |err| {
+                            self.editor.deleteGlyph(self.cursor.pos, .Right) catch |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
                             };
                         }
@@ -913,7 +922,7 @@ pub const WidgetTextEdit = struct {
                     if (self.editor.buffer.getLine(pos.b)) |line| {
                         while (i < tab_spaces) : (i += 1) {
                             if (line.size() > 0 and line.data.items[0] == char_space) {
-                                self.editor.deleteGlyph(pos, false) catch |err| {
+                                self.editor.deleteGlyph(pos, .Right) catch |err| {
                                     std.log.err("WidgetTextEdit.onTab: can't remove spaces in command mode: {}", .{err});
                                 };
                             }
@@ -983,6 +992,7 @@ pub const WidgetTextEdit = struct {
 
     /// onEscape is called when the user has pressed Esc.
     /// Calling onEscape will:
+    ///   * end current edit block
     ///   * remove selection if any
     ///   * switch the input mode to `Command`
     /// returns true if the event has been absorbed by the WidgetTextEdit.
@@ -1010,7 +1020,7 @@ pub const WidgetTextEdit = struct {
     pub fn onBackspace(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
             .Insert => {
-                self.editor.deleteGlyph(self.cursor.pos, true) catch |err| {
+                self.editor.deleteGlyph(self.cursor.pos, .Left) catch |err| {
                     std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
                 };
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
