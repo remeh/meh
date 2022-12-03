@@ -21,6 +21,7 @@ pub const EditorError = error{
 };
 
 pub const SearchDirection = enum { Before, After };
+pub const DeleteDirection = enum { Left, Right };
 
 /// Editor helps editing a Buffer.
 /// Provides UTF8 methods to insert text, remove text, etc.
@@ -141,7 +142,7 @@ pub const Editor = struct {
             // delete only a piece of it
             var j: usize = start_pos.a;
             while (j < end_pos.a) : (j += 1) {
-                try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = start_pos.b }, false);
+                try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = start_pos.b }, .Right);
             }
             return Vec2u{ .a = start_pos.a, .b = start_pos.b };
         }
@@ -168,7 +169,7 @@ pub const Editor = struct {
                 // we have to partially removes data from the first line
                 var j: usize = 0;
                 while (j < line_size - start_pos.a) : (j += 1) {
-                    try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = i - line_removed }, false);
+                    try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = i - line_removed }, .Right);
                 }
             }
 
@@ -194,7 +195,7 @@ pub const Editor = struct {
 
                 j = 0;
                 while (j < end_pos.a) : (j += 1) {
-                    try self.deleteGlyph(Vec2u{ .a = 0, .b = i - line_removed }, false);
+                    try self.deleteGlyph(Vec2u{ .a = 0, .b = i - line_removed }, .Right);
                 }
 
                 try self.deleteLine(i - line_removed);
@@ -252,16 +253,15 @@ pub const Editor = struct {
         self.historyAppend(ChangeType.InsertUtf8Char, undefined, utf8_pos);
     }
 
-    // TODO(remy): direction instead of "left"
     /// deleteGlyph deletes on glyph from the underlying buffer.
-    pub fn deleteGlyph(self: *Editor, pos: Vec2u, left: bool) !void {
+    pub fn deleteGlyph(self: *Editor, pos: Vec2u, direction: DeleteDirection) !void {
         var line = try self.buffer.getLine(pos.b);
-        if (left and pos.a == 0) {
+        if (direction == .Left and pos.a == 0) {
             // TODO(remy): removing a line.
             std.log.debug("TODO(remy): removing a line", .{});
         } else {
             var remove_pos: usize = 0;
-            if (left) {
+            if (direction == .Left) {
                 remove_pos = try line.utf8pos(pos.a - 1);
             } else {
                 remove_pos = try line.utf8pos(pos.a);
@@ -408,18 +408,18 @@ test "editor_delete_char_and_undo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
-    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, false);
-    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, false);
-    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, false);
-    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, false);
+    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right);
+    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right);
+    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right);
+    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "o world\n"));
     _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "hello world\n"));
-    try editor.deleteGlyph(Vec2u{ .a = 6, .b = 0 }, false);
-    try editor.deleteGlyph(Vec2u{ .a = 6, .b = 0 }, false);
-    try editor.deleteGlyph(Vec2u{ .a = 6, .b = 0 }, false);
+    try editor.deleteGlyph(Vec2u{ .a = 6, .b = 0 }, .Right);
+    try editor.deleteGlyph(Vec2u{ .a = 6, .b = 0 }, .Right);
+    try editor.deleteGlyph(Vec2u{ .a = 6, .b = 0 }, .Right);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "hello ld\n"));
-    try editor.deleteGlyph(Vec2u{ .a = 1, .b = 1 }, false);
+    try editor.deleteGlyph(Vec2u{ .a = 1, .b = 1 }, .Right);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "ad a second line\n"));
     try editor.deleteLine(1);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "and a third"));
@@ -438,9 +438,9 @@ test "editor_delete_utf8_char_and_undo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_3"));
     try expect(editor.buffer.lines.items.len == 1);
-    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, false);
-    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, false);
-    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, false);
+    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right);
+    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right);
+    try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "îôûñé👻"));
     _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "🎃àéîôûñé👻"));

@@ -58,7 +58,7 @@ pub const WidgetInput = struct {
 
     // TODO(remy): comment
     pub fn onBackspace(self: *WidgetInput) void {
-        self.widget_text_edit.editor.deleteGlyph(self.widget_text_edit.cursor.pos, true) catch |err| {
+        self.widget_text_edit.editor.deleteGlyph(self.widget_text_edit.cursor.pos, .Left) catch |err| {
             std.log.err("WidgetInput: {}", .{err});
         };
         self.widget_text_edit.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
