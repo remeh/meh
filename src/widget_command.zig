@@ -143,6 +143,14 @@ pub const WidgetCommand = struct {
             return;
         }
 
+        // toggle the split
+        // ----------------
+
+        if (std.mem.eql(u8, command, ":split")) {
+            app.toggleSplit();
+            return;
+        }
+
         // search
         // ------
 
