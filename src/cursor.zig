@@ -130,11 +130,6 @@ pub const Cursor = struct {
             return rv;
         };
 
-        if (in_editor.a + text_edit.viewport.columns.a > utf8size) {
-            rv.a = utf8size;
-            return rv;
-        }
-
         if (in_editor.a == 0) {
             rv.a = text_edit.viewport.columns.a;
             return rv;
@@ -166,6 +161,13 @@ pub const Cursor = struct {
                 rv.a = it.current_glyph;
                 break;
             }
+        }
+
+        // if the click is done after the line end, just move the cursor
+        // to the line end.
+        if (in_editor.a > move_done) {
+            rv.a = utf8size;
+            return rv;
         }
 
         return rv;
