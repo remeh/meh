@@ -27,6 +27,7 @@ const char_space = @import("u8slice.zig").char_space;
 const char_tab = @import("u8slice.zig").char_tab;
 const char_linereturn = @import("u8slice.zig").char_linereturn;
 const string_space = @import("u8slice.zig").string_space;
+const string_tab = @import("u8slice.zig").string_tab;
 
 // TODO(remy): where should we define this?
 // TODO(remy): comment
@@ -38,6 +39,7 @@ pub const tab_spaces = 4;
 pub const InputMode = enum {
     Command,
     Insert,
+
     Replace,
 };
 
@@ -1306,12 +1308,25 @@ pub const WidgetTextEdit = struct {
             },
             // TODO(remy): unit test
             .AfterIndentation => {
-                if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
-                    if (l.size() == 0) {
+                if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
+                    if (line.size() == 0) {
                         return;
                     }
+                    var it = UTF8Iterator.init(line.bytes(), 0) catch |err| {
+                        std.log.err("WidgetTextEdit: can't create an iterator for AfterIndentation: {}", .{err});
+                        return;
+                    };
                     var i: usize = 0;
-                    while (l.bytes()[i] == char_space or l.bytes()[i] == char_tab) : (i += 1) {}
+                    while (true) {
+                        if (std.mem.eql(u8, it.glyph(), string_space) or std.mem.eql(u8, it.glyph(), string_tab)) {
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                        if (!it.next()) {
+                            break;
+                        }
+                    }
                     self.moveCursor(Vec2i{ .a = @intCast(i64, i), .b = 0 }, true);
                 } else |_| {} // TODO(remy): do something with the error
             },
@@ -1320,14 +1335,24 @@ pub const WidgetTextEdit = struct {
                 if (self.cursor.pos.b == 0) {
                     return;
                 }
-                if (self.editor.buffer.getLine(self.cursor.pos.b - 1)) |l| {
-                    if (l.size() == 0) {
+                if (self.editor.buffer.getLine(self.cursor.pos.b - 1)) |line| {
+                    if (line.size() == 0) {
                         return;
                     }
-                    var i: usize = 0;
                     var start_line_pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
-                    while (l.bytes()[i] == char_space or l.bytes()[i] == char_tab) : (i += 1) {
-                        self.editor.insertUtf8Text(start_line_pos, string_space) catch {}; // TODO(remy): do something with the error
+                    var it = UTF8Iterator.init(line.bytes(), 0) catch |err| {
+                        std.log.err("WidgetTextEdit: can't create an iterator for RespectPreviousLineIndent: {}", .{err});
+                        return;
+                    };
+                    while (true) {
+                        if (std.mem.eql(u8, it.glyph(), string_space) or std.mem.eql(u8, it.glyph(), string_tab)) {
+                            self.editor.insertUtf8Text(start_line_pos, string_space) catch {}; // TODO(remy): do something with the error
+                        } else {
+                            break;
+                        }
+                        if (!it.next()) {
+                            break;
+                        }
                     }
                 } else |_| {} // TODO(remy): do something with the error
             },

@@ -6,6 +6,7 @@ pub const char_space = ' ';
 pub const char_tab = '\t';
 pub const char_linereturn = '\n';
 pub const string_space = " ";
+pub const string_tab = "\t";
 pub const string_replacement_character = "�";
 
 pub const U8SliceError = error{
