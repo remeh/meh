@@ -3,7 +3,8 @@ const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
 const Buffer = @import("buffer.zig").Buffer;
-
+const Colors = @import("colors.zig");
+const Draw = @import("draw.zig").Draw;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
@@ -314,6 +315,9 @@ pub const App = struct {
             }
 
             var widget_text_edit = &self.textedits.items[self.current_widget_text_edit];
+
+            Draw.text(self.current_font, scaler, Vec2u{ .a = 2, .b = 2 }, Colors.white, widget_text_edit.editor.buffer.fullpath.bytes());
+
             widget_text_edit.render(
                 self.sdl_renderer,
                 self.current_font,
@@ -328,6 +332,9 @@ pub const App = struct {
                 var split_pos = self.widget_text_edit_pos;
                 split_pos.a = self.window_scaled_size.a / 2;
                 var widget_text_edit_alt = &self.textedits.items[self.current_widget_text_edit_alt];
+
+                Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a, .b = 2 }, Colors.white, widget_text_edit_alt.editor.buffer.fullpath.bytes());
+
                 widget_text_edit_alt.render(
                     self.sdl_renderer,
                     self.current_font,
