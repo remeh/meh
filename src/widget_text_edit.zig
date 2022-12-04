@@ -42,6 +42,8 @@ pub const InputMode = enum {
     Insert,
     Replace,
     d,
+    f,
+    F,
 };
 
 pub const CursorMove = enum {
@@ -492,11 +494,9 @@ pub const WidgetTextEdit = struct {
 
         // the cursor is on the right
         if (self.cursor.pos.a + offset_before_move > self.viewport.columns.b) {
-            std.log.debug("before: {}", .{self.viewport.columns});
             var distance = self.cursor.pos.a + offset_before_move - self.viewport.columns.b;
             self.viewport.columns.a += distance;
             self.viewport.columns.b += distance;
-            std.log.debug("after: {}", .{self.viewport.columns});
         }
     }
 
@@ -641,6 +641,22 @@ pub const WidgetTextEdit = struct {
                     std.log.err("WidgetTextEdit.onTextInput: can't insert utf8 text: {}", .{err});
                 }
             },
+            .f, .F => {
+                var direction = SearchDirection.After;
+                if (self.input_mode == .F) {
+                    direction = SearchDirection.Before;
+                }
+                var new_pos = self.editor.findGlyphInLine(
+                    self.cursor.pos,
+                    txt,
+                    direction,
+                ) catch |err| {
+                    std.log.err("WidgetTextEdit.onTextInput: can't find glyph in line: {}", .{err});
+                    return true;
+                };
+                self.setCursorPos(new_pos, true);
+                self.setInputMode(.Command);
+            },
             .d => {
                 switch (txt[0]) {
                     // delete the word under the cursor
@@ -678,8 +694,9 @@ pub const WidgetTextEdit = struct {
                     'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true),
                     'g' => self.moveCursorSpecial(CursorMove.StartOfBuffer, true),
                     'G' => self.moveCursorSpecial(CursorMove.EndOfBuffer, true),
-                    // entering d mode
                     'd' => self.setInputMode(.d),
+                    'f' => self.setInputMode(.f),
+                    'F' => self.setInputMode(.F),
                     // start inserting
                     'i' => {
                         self.setInputMode(.Insert);
@@ -746,7 +763,7 @@ pub const WidgetTextEdit = struct {
                         };
                     },
                     // others
-                    'X' => {
+                    'E' => {
                         self.deleteLine();
                     },
                     'x' => {
@@ -878,23 +895,14 @@ pub const WidgetTextEdit = struct {
     ///   * end current edit block
     ///   * remove selection if any
     ///   * switch the input mode to `Command`
-    /// returns true if the event has been absorbed by the WidgetTextEdit.
-    pub fn onEscape(self: *WidgetTextEdit) bool {
+    pub fn onEscape(self: *WidgetTextEdit) void {
         // change the history block, we're switching to do something else
         self.editor.historyEndBlock();
 
         // stop selection mode
         self.stopSelection(.Inactive);
 
-        // checks if we have to enter command mode
-        switch (self.input_mode) {
-            .Insert, .Replace => {
-                // enter command mod
-                self.input_mode = InputMode.Command;
-                return true;
-            },
-            else => return false,
-        }
+        self.input_mode = InputMode.Command;
     }
 
     /// onBackspace is called when the user has pressed Backspace.

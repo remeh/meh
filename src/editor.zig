@@ -354,6 +354,52 @@ pub const Editor = struct {
         return rv;
     }
 
+    /// findGlyphInLine returns next or previous position of the given glyph (starting at
+    /// the given `start_pos`.
+    pub fn findGlyphInLine(self: Editor, start_pos: Vec2u, glyph: []const u8, direction: SearchDirection) !Vec2u {
+        if (direction == .Before and start_pos.a == 0) {
+            return Vec2u{ .a = start_pos.a, .b = start_pos.b };
+        }
+
+        var line = try self.buffer.getLine(start_pos.b);
+
+        if (direction == .After) {
+            // right
+            var it = try UTF8Iterator.init(line.bytes(), start_pos.a);
+            var idx: usize = start_pos.a;
+            while (true) {
+                if (!it.next()) {
+                    return start_pos;
+                }
+
+                idx += 1;
+
+                if (std.mem.eql(u8, it.glyph(), glyph)) {
+                    return Vec2u{ .a = idx, .b = start_pos.b };
+                }
+            }
+        } else {
+            // left
+            var it = try UTF8Iterator.init(line.bytes(), start_pos.a);
+            var idx: usize = start_pos.a;
+            while (true) {
+                var current_byte = it.current_byte;
+                it.prev();
+                if (it.current_byte == current_byte) {
+                    return start_pos;
+                }
+
+                idx -= 1;
+
+                if (std.mem.eql(u8, it.glyph(), glyph)) {
+                    return Vec2u{ .a = idx, .b = start_pos.b };
+                }
+            }
+        }
+
+        return start_pos;
+    }
+
     /// search looks for the given utf8 text starting from the given position
     /// Use `before` to look before the given position instead of after.
     /// TODO(remy): unit test

@@ -66,6 +66,15 @@ pub const Cursor = struct {
                     Colors.white,
                 );
             },
+            .d, .f => {
+                Draw.rect(
+                    sdl_renderer,
+                    scaler,
+                    Vec2u{ .a = draw_pos.a, .b = draw_pos.b + (one_char_size.b - 2) },
+                    Vec2u{ .a = one_char_size.a, .b = 2 },
+                    Colors.white,
+                );
+            },
             else => {
                 Draw.fillRect(
                     sdl_renderer,
