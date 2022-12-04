@@ -16,6 +16,7 @@ const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
+const Vec4u = @import("vec.zig").Vec4u;
 const itou = @import("vec.zig").itou;
 
 pub const AppError = error{
@@ -331,6 +332,15 @@ pub const App = struct {
             if (self.has_split_view and self.current_widget_text_edit_alt < self.textedits.items.len) {
                 var split_pos = self.widget_text_edit_pos;
                 split_pos.a = self.window_scaled_size.a / 2;
+
+                Draw.line(
+                    self.sdl_renderer,
+                    scaler,
+                    Vec2u{ .a = split_pos.a - 1, .b = split_pos.b },
+                    Vec2u{ .a = split_pos.a - 1, .b = widget_size.b },
+                    Vec4u{ .a = 70, .b = 70, .c = 70, .d = 255 },
+                );
+
                 var widget_text_edit_alt = &self.textedits.items[self.current_widget_text_edit_alt];
 
                 Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a, .b = 2 }, Colors.white, widget_text_edit_alt.editor.buffer.fullpath.bytes());

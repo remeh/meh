@@ -317,6 +317,7 @@ pub const WidgetTextEdit = struct {
             .a = (widget_size.a - self.line_numbers_offset) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
             .b = ((widget_size.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b))) - 1, // FIXME(remy): this -1 is based on nothing
         };
+
         self.computeViewport();
 
         var pos = draw_pos;
@@ -447,10 +448,10 @@ pub const WidgetTextEdit = struct {
 
                 var tab_idx: usize = 0;
                 var move_done: usize = 0;
-                var offset: usize = 0; // offset in char, relative to the left of the widget (i.e. right of the line numbers if any)
+                var offset: usize = 0; // offset in glyph, relative to the left of the widget (i.e. right of the line numbers if any)
                 var bytes = line.bytes();
 
-                while (offset < self.viewport.columns.b) {
+                while (move_done < self.viewport.columns.b) {
                     if (it.glyph()[0] == char_tab and tab_idx == 0) {
                         tab_idx = tab_spaces;
                     }
@@ -654,9 +655,11 @@ pub const WidgetTextEdit = struct {
 
         // the cursor is on the right
         if (self.cursor.pos.a + offset_before_move > self.viewport.columns.b) {
+            std.log.debug("before: {}", .{self.viewport.columns});
             var distance = self.cursor.pos.a + offset_before_move - self.viewport.columns.b;
             self.viewport.columns.a += distance;
             self.viewport.columns.b += distance;
+            std.log.debug("after: {}", .{self.viewport.columns});
         }
     }
 
