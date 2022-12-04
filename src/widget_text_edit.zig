@@ -56,7 +56,7 @@ pub const CursorMove = enum {
     PreviousLine,
     /// RespectPreviousLineIndent replicates previous line indentation on the current one.
     RespectPreviousLineIndent,
-    /// AfterIndentation moves the cursor right until it is not on a space
+    /// AfterIndentation moves the cursor right until it is not on an indentation space
     AfterIndentation,
 };
 

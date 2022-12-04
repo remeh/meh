@@ -699,25 +699,39 @@ pub const App = struct {
                 _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
             },
             c.SDL_MOUSEMOTION => {
+                var mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
                 var widget_pos = self.widget_text_edit_pos;
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
-                self.currentWidgetTextEdit().onMouseMove(sdlMousePosToVec2u(event.motion.x, event.motion.y), widget_pos);
+                self.currentWidgetTextEdit().onMouseMove(mouse_coord, widget_pos);
             },
             c.SDL_MOUSEBUTTONDOWN => {
+                var mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
                 var widget_pos = self.widget_text_edit_pos;
+
+                // on click, see if we should change the editor selection
+                if (self.has_split_view) {
+                    if (mouse_coord.a < self.window_scaled_size.a / 2) {
+                        self.focused_editor = .Left;
+                    } else {
+                        self.focused_editor = .Right;
+                    }
+                }
+
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
-                self.currentWidgetTextEdit().onMouseStartSelection(sdlMousePosToVec2u(event.button.x, event.button.y), widget_pos);
+
+                self.currentWidgetTextEdit().onMouseStartSelection(mouse_coord, widget_pos);
             },
             c.SDL_MOUSEBUTTONUP => {
+                var mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
                 var widget_pos = self.widget_text_edit_pos;
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
-                self.currentWidgetTextEdit().onMouseStopSelection(sdlMousePosToVec2u(event.button.x, event.button.y), widget_pos);
+                self.currentWidgetTextEdit().onMouseStopSelection(mouse_coord, widget_pos);
             },
             else => {},
         }
