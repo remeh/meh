@@ -18,10 +18,13 @@ const Vec2utoi = @import("vec.zig").Vec2utoi;
 pub const EditorError = error{
     NothingToUndo,
     NoSearchResult,
+    NoWordHere,
 };
 
 pub const SearchDirection = enum { Before, After };
 pub const DeleteDirection = enum { Left, Right };
+
+pub const Punctuation = ",./&\"'[|]_{}()-=:;<>*!?@#+~` \t\n";
 
 /// Editor helps editing a Buffer.
 /// Provides UTF8 methods to insert text, remove text, etc.
@@ -302,6 +305,53 @@ pub const Editor = struct {
             i += to_add;
         }
         return insert_pos;
+    }
+
+    /// wordAt returns the word at the given `position`.
+    /// Returns the start and end position of the word in the given line.
+    // TODO(remy): unit test
+    pub fn wordAt(self: Editor, position: Vec2u) !Vec2u {
+        if (position.b > self.buffer.lines.items.len) {
+            return BufferError.OutOfBuffer;
+        }
+
+        var rv = Vec2u{ .a = position.a, .b = position.a };
+        var line = try self.buffer.getLine(position.b);
+
+        // right
+        var it = try UTF8Iterator.init(line.bytes(), position.a);
+        while (true) {
+            if (std.mem.indexOf(u8, Punctuation, it.glyph())) |pos| {
+                if (pos >= 0) {
+                    break;
+                }
+            }
+
+            rv.b += 1;
+
+            if (!it.next()) {
+                break;
+            }
+        }
+        // left
+        it = try UTF8Iterator.init(line.bytes(), position.a);
+        while (true) {
+            var it_pos = it.current_byte;
+            it.prev();
+            if (it_pos == it.current_byte) {
+                break;
+            }
+
+            if (std.mem.indexOf(u8, Punctuation, it.glyph())) |pos| {
+                if (pos >= 0) {
+                    break;
+                }
+            }
+
+            rv.a -= 1;
+        }
+
+        return rv;
     }
 
     /// search looks for the given utf8 text starting from the given position

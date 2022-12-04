@@ -39,8 +39,8 @@ pub const tab_spaces = 4;
 pub const InputMode = enum {
     Command,
     Insert,
-
     Replace,
+    d,
 };
 
 pub const CursorMove = enum {
@@ -804,6 +804,34 @@ pub const WidgetTextEdit = struct {
                     std.log.err("WidgetTextEdit.onTextInput: can't insert utf8 text: {}", .{err});
                 }
             },
+            .d => {
+                switch (txt[0]) {
+                    // delete the word under the cursor
+                    'i' => {
+                        var word_pos = self.editor.wordAt(self.cursor.pos) catch |err| {
+                            std.log.err("WidgetTextEdit.onTextInput: di: {}", .{err});
+                            return true;
+                        };
+                        var cursor_pos = self.editor.deleteChunk(
+                            Vec2u{ .a = word_pos.a, .b = self.cursor.pos.b },
+                            Vec2u{ .a = word_pos.b, .b = self.cursor.pos.b },
+                        ) catch |err| {
+                            std.log.err("WidgetTextEdit.onTextInput: di: can't delete chunk: {}", .{err});
+                            return true;
+                        };
+                        self.setCursorPos(cursor_pos, true);
+                        self.setInputMode(.Insert);
+                    },
+                    // delete the line
+                    'd' => {
+                        self.deleteLine();
+                        self.setInputMode(.Command);
+                    },
+                    else => {
+                        self.setInputMode(.Command);
+                    },
+                }
+            },
             else => {
                 switch (txt[0]) {
                     // movements
@@ -813,6 +841,8 @@ pub const WidgetTextEdit = struct {
                     'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true),
                     'g' => self.moveCursorSpecial(CursorMove.StartOfBuffer, true),
                     'G' => self.moveCursorSpecial(CursorMove.EndOfBuffer, true),
+                    // entering d mode
+                    'd' => self.setInputMode(.d),
                     // start inserting
                     'i' => {
                         self.setInputMode(.Insert);
@@ -863,6 +893,7 @@ pub const WidgetTextEdit = struct {
                                 selected_text.deinit();
                             } else |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't get selected text: {}", .{err});
+                                return true;
                             }
 
                             if (txt[0] == 'Y') {
@@ -878,16 +909,8 @@ pub const WidgetTextEdit = struct {
                         };
                     },
                     // others
-                    'D' => {
-                        if (self.editor.deleteLine(@intCast(usize, self.cursor.pos.b))) {
-                            self.editor.historyEndBlock();
-                            if (self.cursor.pos.b > 0 and self.cursor.pos.b >= self.editor.buffer.lines.items.len) {
-                                self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true);
-                            }
-                            self.validateCursorPosition(true);
-                        } else |err| {
-                            std.log.err("WidgetTextEdit.onTextInput: can't delete line: {}", .{err});
-                        }
+                    'X' => {
+                        self.deleteLine();
                     },
                     'x' => {
                         if (self.selection.state != .Inactive) {
@@ -905,9 +928,11 @@ pub const WidgetTextEdit = struct {
                                 }
                             } else |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't get line while executing 'x' input: {}", .{err});
+                                return true;
                             }
                             self.editor.deleteGlyph(self.cursor.pos, .Right) catch |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
+                                return true;
                             };
                         }
                     },
@@ -1083,6 +1108,18 @@ pub const WidgetTextEdit = struct {
 
     // Text edition methods
     // -------------------
+
+    /// deleteLine deletes the line where is the cursor.
+    // TODO(remy): unit test
+    pub fn deleteLine(self: *WidgetTextEdit) void {
+        if (self.editor.deleteLine(@intCast(usize, self.cursor.pos.b))) {
+            self.editor.historyEndBlock();
+            self.validateCursorPosition(true);
+            self.stopSelection(.Inactive);
+        } else |err| {
+            std.log.err("WidgetTextEdit.deleteLine: dd: can't delete line: {}", .{err});
+        }
+    }
 
     /// buildSelectedText uses the current selection in the WidgetTextEdit to return
     /// the currently selected text.
