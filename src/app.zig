@@ -262,6 +262,11 @@ pub const App = struct {
     // TODO(remy): comment
     pub fn toggleSplit(self: *App) void {
         self.has_split_view = !self.has_split_view;
+
+        if (self.has_split_view) {
+            self.focused_editor = .Right;
+        }
+
         if (!self.has_split_view) {
             self.focused_editor = .Left;
         }
