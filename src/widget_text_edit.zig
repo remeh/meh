@@ -1348,8 +1348,10 @@ pub const WidgetTextEdit = struct {
                         return;
                     };
                     while (true) {
-                        if (std.mem.eql(u8, it.glyph(), string_space) or std.mem.eql(u8, it.glyph(), string_tab)) {
+                        if (std.mem.eql(u8, it.glyph(), string_space)) {
                             self.editor.insertUtf8Text(start_line_pos, string_space) catch {}; // TODO(remy): do something with the error
+                        } else if (std.mem.eql(u8, it.glyph(), string_tab)) {
+                            self.editor.insertUtf8Text(start_line_pos, string_tab) catch {}; // TODO(remy): do something with the error
                         } else {
                             break;
                         }
