@@ -709,7 +709,6 @@ pub const App = struct {
             c.SDL_MOUSEBUTTONDOWN => {
                 var mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
                 var widget_pos = self.widget_text_edit_pos;
-
                 // on click, see if we should change the editor selection
                 if (self.has_split_view) {
                     if (mouse_coord.a < self.window_scaled_size.a / 2) {
@@ -718,11 +717,9 @@ pub const App = struct {
                         self.focused_editor = .Right;
                     }
                 }
-
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
-
                 self.currentWidgetTextEdit().onMouseStartSelection(mouse_coord, widget_pos);
             },
             c.SDL_MOUSEBUTTONUP => {

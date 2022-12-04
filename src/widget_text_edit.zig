@@ -393,7 +393,7 @@ pub const WidgetTextEdit = struct {
                     sdl_renderer,
                     scaler,
                     Vec2u{ .a = draw_pos.a, .b = y_offset },
-                    Vec2u{ .a = draw_pos.a + width, .b = self.one_char_size.b },
+                    Vec2u{ .a = width, .b = self.one_char_size.b },
                     Vec4u{ .a = 220, .b = 220, .c = 220, .d = 20 },
                 );
             }
