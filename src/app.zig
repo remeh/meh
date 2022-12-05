@@ -40,6 +40,13 @@ pub const FontMode = enum {
     HiDPI,
 };
 
+pub const Direction = enum {
+    Up,
+    Down,
+    Left,
+    Right,
+};
+
 /// Main app structure.
 /// The app has three fonts mode:
 ///   * hidpi: using a bigger font but scaled by 0.5, providing the hidpi rendering quality
@@ -566,6 +573,10 @@ pub const App = struct {
                     c.SDLK_BACKSPACE => {
                         self.widget_command.onBackspace();
                     },
+                    c.SDLK_UP => self.widget_command.onArrowKey(.Up),
+                    c.SDLK_DOWN => self.widget_command.onArrowKey(.Down),
+                    c.SDLK_LEFT => self.widget_command.onArrowKey(.Left),
+                    c.SDLK_RIGHT => self.widget_command.onArrowKey(.Right),
                     else => {},
                 }
             },
@@ -652,8 +663,12 @@ pub const App = struct {
                         }
                     },
                     c.SDLK_TAB => {
-                        self.currentWidgetTextEdit().onTab(shift); // TODO(remy): support shift-tab
+                        self.currentWidgetTextEdit().onTab(shift);
                     },
+                    c.SDLK_UP => self.currentWidgetTextEdit().onArrowKey(.Up),
+                    c.SDLK_DOWN => self.currentWidgetTextEdit().onArrowKey(.Down),
+                    c.SDLK_LEFT => self.currentWidgetTextEdit().onArrowKey(.Left),
+                    c.SDLK_RIGHT => self.currentWidgetTextEdit().onArrowKey(.Right),
                     else => {
                         if (ctrl) {
                             // TODO(remy): move to a specific fn

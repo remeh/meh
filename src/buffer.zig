@@ -92,11 +92,11 @@ pub const Buffer = struct {
                     try rv.lines.append(u8slice);
                     // move the cursor in this buffer
                     last_append = i + 1;
-                    // recreate a new line to work with
+                    // recreate a new u8slice to work with for next lines
                     u8slice = U8Slice.initEmpty(allocator);
                 }
             }
-            // append the rest of th read buffer
+            // append the rest of the read buffer
             try u8slice.appendConst(buff[last_append..read]);
         }
 

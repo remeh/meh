@@ -5,6 +5,7 @@ const expect = std.testing.expect;
 const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
 const Colors = @import("colors.zig");
+const Direction = @import("app.zig").Direction;
 const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const Font = @import("font.zig").Font;
@@ -69,6 +70,12 @@ pub const WidgetInput = struct {
         return try self.widget_text_edit.editor.buffer.getLine(0);
     }
 
+    // TODO(remy): comment
+    pub fn onArrowKey(self: *WidgetInput, direction: Direction) void {
+        self.widget_text_edit.onArrowKey(direction);
+    }
+
+    // TODO(remy): comment
     pub fn onTextInput(self: *WidgetInput, txt: []const u8) void {
         _ = self.widget_text_edit.onTextInput(txt);
     }

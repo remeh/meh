@@ -5,6 +5,7 @@ const expect = std.testing.expect;
 const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
 const Colors = @import("colors.zig");
+const Direction = @import("app.zig").Direction;
 const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const Font = @import("font.zig").Font;
@@ -216,6 +217,12 @@ pub const WidgetCommand = struct {
 
     pub fn reset(self: *WidgetCommand) void {
         self.input.reset();
+    }
+
+    /// onArrow is called when an arrow key is pressed to move the cursor.
+    /// hjkl are redirected to this method.
+    pub fn onArrowKey(self: *WidgetCommand, direction: Direction) void {
+        self.input.onArrowKey(direction);
     }
 
     /// countArgs returns how many arguments there currently is in the buff.

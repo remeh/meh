@@ -6,6 +6,7 @@ const App = @import("app.zig").App;
 const Buffer = @import("buffer.zig").Buffer;
 const Colors = @import("colors.zig");
 const Cursor = @import("cursor.zig").Cursor;
+const Direction = @import("app.zig").Direction;
 const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
@@ -630,6 +631,17 @@ pub const WidgetTextEdit = struct {
         return true;
     }
 
+    /// onArrow is called when an arrow key is pressed to move the cursor.
+    /// hjkl are redirected to this method.
+    pub fn onArrowKey(self: *WidgetTextEdit, direction: Direction) void {
+        switch (direction) {
+            .Up => self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true),
+            .Down => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
+            .Left => self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true),
+            .Right => self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true),
+        }
+    }
+
     /// onTextInput is called when the user has pressed a regular key.
     pub fn onTextInput(self: *WidgetTextEdit, txt: []const u8) bool {
         switch (self.input_mode) {
@@ -688,10 +700,10 @@ pub const WidgetTextEdit = struct {
             else => {
                 switch (txt[0]) {
                     // movements
-                    'h' => self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true),
-                    'j' => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
-                    'k' => self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true),
-                    'l' => self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true),
+                    'h' => self.onArrowKey(.Left),
+                    'j' => self.onArrowKey(.Down),
+                    'k' => self.onArrowKey(.Up),
+                    'l' => self.onArrowKey(.Right),
                     'g' => self.moveCursorSpecial(CursorMove.StartOfBuffer, true),
                     'G' => self.moveCursorSpecial(CursorMove.EndOfBuffer, true),
                     'd' => self.setInputMode(.d),
