@@ -647,7 +647,7 @@ pub const WidgetTextEdit = struct {
         switch (self.input_mode) {
             .Insert => {
                 // TODO(remy): selection support
-                if (self.editor.insertUtf8Text(self.cursor.pos, txt)) {
+                if (self.editor.insertUtf8Text(self.cursor.pos, txt, .Input)) {
                     self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
                 } else |err| {
                     std.log.err("WidgetTextEdit.onTextInput: can't insert utf8 text: {}", .{err});
@@ -795,15 +795,14 @@ pub const WidgetTextEdit = struct {
                                 std.log.err("WidgetTextEdit.onTextInput: can't get line while executing 'x' input: {}", .{err});
                                 return true;
                             }
-                            self.editor.deleteGlyph(self.cursor.pos, .Right) catch |err| {
+                            self.editor.deleteGlyph(self.cursor.pos, .Right, .Input) catch |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
                                 return true;
                             };
                         }
                     },
-                    'u' => {
-                        self.undo();
-                    },
+                    'u' => self.undo(),
+                    'U' => self.redo(),
                     'r' => self.input_mode = .Replace, // TODO(remy): finish
                     else => return false,
                 }
@@ -819,7 +818,7 @@ pub const WidgetTextEdit = struct {
             .Insert => {
                 var i: usize = 0;
                 while (i < tab_spaces) : (i += 1) {
-                    self.editor.insertUtf8Text(self.cursor.pos, string_space) catch |err| {
+                    self.editor.insertUtf8Text(self.cursor.pos, string_space, .Input) catch |err| {
                         std.log.err("WidgetTextEdit.onTab: can't insert spaces in insert mode: {}", .{err});
                         return;
                     };
@@ -833,7 +832,7 @@ pub const WidgetTextEdit = struct {
                     if (self.editor.buffer.getLine(pos.b)) |line| {
                         while (i < tab_spaces) : (i += 1) {
                             if (line.size() > 0 and line.data.items[0] == char_space) {
-                                self.editor.deleteGlyph(pos, .Right) catch |err| {
+                                self.editor.deleteGlyph(pos, .Right, .Input) catch |err| {
                                     std.log.err("WidgetTextEdit.onTab: can't remove spaces in command mode: {}", .{err});
                                 };
                             }
@@ -844,7 +843,7 @@ pub const WidgetTextEdit = struct {
                     }
                 } else {
                     while (i < tab_spaces) : (i += 1) {
-                        self.editor.insertUtf8Text(pos, string_space) catch |err| {
+                        self.editor.insertUtf8Text(pos, string_space, .Input) catch |err| {
                             std.log.err("WidgetTextEdit.onTab: can't insert spaces in command mode: {}", .{err});
                         };
                     }
@@ -922,7 +921,7 @@ pub const WidgetTextEdit = struct {
     pub fn onBackspace(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
             .Insert => {
-                self.editor.deleteGlyph(self.cursor.pos, .Left) catch |err| {
+                self.editor.deleteGlyph(self.cursor.pos, .Left, .Input) catch |err| {
                     std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
                 };
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
@@ -968,7 +967,7 @@ pub const WidgetTextEdit = struct {
     /// deleteLine deletes the line where is the cursor.
     // TODO(remy): unit test
     pub fn deleteLine(self: *WidgetTextEdit) void {
-        self.editor.deleteLine(@intCast(usize, self.cursor.pos.b));
+        self.editor.deleteLine(@intCast(usize, self.cursor.pos.b), .Input);
         self.editor.historyEndBlock();
         self.validateCursorPosition(true);
         self.stopSelection(.Inactive);
@@ -1239,9 +1238,9 @@ pub const WidgetTextEdit = struct {
                     };
                     while (true) {
                         if (std.mem.eql(u8, it.glyph(), string_space)) {
-                            self.editor.insertUtf8Text(start_line_pos, string_space) catch {}; // TODO(remy): do something with the error
+                            self.editor.insertUtf8Text(start_line_pos, string_space, .Input) catch {}; // TODO(remy): do something with the error
                         } else if (std.mem.eql(u8, it.glyph(), string_tab)) {
-                            self.editor.insertUtf8Text(start_line_pos, string_tab) catch {}; // TODO(remy): do something with the error
+                            self.editor.insertUtf8Text(start_line_pos, string_tab, .Input) catch {}; // TODO(remy): do something with the error
                         } else {
                             break;
                         }
@@ -1264,15 +1263,15 @@ pub const WidgetTextEdit = struct {
     // TODO(remy): comment
     // TODO(remy): unit test
     pub fn newLine(self: *WidgetTextEdit) void {
-        self.editor.newLine(self.cursor.pos, false) catch |err| {
+        self.editor.newLine(self.cursor.pos, .Input) catch |err| {
             std.log.err("WidgetTextEdit.newLine: {}", .{err});
             return;
         };
-        self.editor.historyEndBlock();
         self.moveCursorSpecial(CursorMove.NextLine, true);
         self.moveCursorSpecial(CursorMove.StartOfLine, true);
         self.moveCursorSpecial(CursorMove.RespectPreviousLineIndent, true);
         self.moveCursorSpecial(CursorMove.AfterIndentation, true);
+        self.editor.historyEndBlock();
     }
 
     // Others
@@ -1313,6 +1312,18 @@ pub const WidgetTextEdit = struct {
     /// undo cancels the previous change.
     pub fn undo(self: *WidgetTextEdit) void {
         if (self.editor.undo()) |pos| {
+            self.setCursorPos(pos, true);
+        } else |err| {
+            if (err != EditorError.NothingToUndo) {
+                std.log.err("WidgetTextEdit.undo: can't undo: {}", .{err});
+            }
+        }
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn redo(self: *WidgetTextEdit) void {
+        if (self.editor.redo()) |pos| {
             self.setCursorPos(pos, true);
         } else |err| {
             if (err != EditorError.NothingToUndo) {

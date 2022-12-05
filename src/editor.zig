@@ -21,18 +21,24 @@ pub const EditorError = error{
     NoWordHere,
 };
 
+pub const Triggerer = enum {
+    Input,
+    Redo,
+};
+
 pub const SearchDirection = enum { Before, After };
 pub const DeleteDirection = enum { Left, Right };
 
 pub const Punctuation = ",./&\"'[|]_{}()-=:;<>*!?@#+~` \t\n";
 
 /// Editor helps editing a Buffer.
-/// Provides UTF8 methods to insert text, remove text, etc.
+/// Provides UTF8 methods to insert text, remove text, history support, etc.
 pub const Editor = struct {
     allocator: std.mem.Allocator,
     buffer: Buffer,
     has_changes_compared_to_disk: bool,
     history: std.ArrayList(Change),
+    history_redo: std.ArrayList(Change),
     history_enabled: bool,
     history_current_block_id: i64,
     prng: std.rand.DefaultPrng,
@@ -46,6 +52,7 @@ pub const Editor = struct {
             .buffer = buffer,
             .has_changes_compared_to_disk = false,
             .history = std.ArrayList(Change).init(allocator),
+            .history_redo = std.ArrayList(Change).init(allocator),
             .history_enabled = true,
             .history_current_block_id = 0,
             .prng = std.rand.DefaultPrng.init(1234),
@@ -54,6 +61,9 @@ pub const Editor = struct {
 
     pub fn deinit(self: *Editor) void {
         for (self.history.items) |change| {
+            change.data.deinit();
+        }
+        for (self.history_redo.items) |change| {
             change.data.deinit();
         }
         self.history.deinit();
@@ -65,24 +75,36 @@ pub const Editor = struct {
 
     /// historyAppend appends a new entry in the history.
     /// If the append fails, the memory is deleted to avoid any leak.
-    fn historyAppend(self: *Editor, change_type: ChangeType, data: U8Slice, pos: Vec2u) void {
+    fn historyAppend(self: *Editor, change_type: ChangeType, data: U8Slice, pos: Vec2u, triggerer: Triggerer) void {
         if (!self.history_enabled) {
             return;
         }
+
+        // on input, we want to clear the redo list because
+        // it doesn't make any sense anymore.
+        if (triggerer == .Input) {
+            var i: usize = 0;
+            while (i < self.history_redo.items.len) : (i += 1) {
+                var change = self.history_redo.pop();
+                change.deinit();
+            }
+        }
+
         self.history.append(Change{
             .block_id = self.history_current_block_id,
             .data = data,
             .pos = pos,
             .type = change_type,
         }) catch |err| {
-            std.log.err("can't append to the history: {any}", .{err});
+            std.log.err("can't append to the history: {}", .{err});
             data.deinit();
         };
 
         self.has_changes_compared_to_disk = true;
     }
 
-    // TODO(remy): comment
+    /// historyEndBlock indicates that next changes won't have to be undo
+    /// at once with the ones having happened before.
     pub fn historyEndBlock(self: *Editor) void {
         self.history_current_block_id = self.prng.random().int(i64);
     }
@@ -93,15 +115,43 @@ pub const Editor = struct {
         if (self.history.items.len == 0 or !self.history_enabled) {
             return EditorError.NothingToUndo;
         }
+
         var change = self.history.pop();
         var t = change.block_id;
-        try History.undo(self, change);
+        try change.undo(self);
+        try self.history_redo.append(change);
         var pos = change.pos;
+
         while (self.history.items.len > 0 and self.history.items[self.history.items.len - 1].block_id == t) {
             change = self.history.pop();
-            try History.undo(self, change);
+            try change.undo(self);
+            try self.history_redo.append(change);
             pos = change.pos;
         }
+
+        self.has_changes_compared_to_disk = true;
+        return pos;
+    }
+
+    pub fn redo(self: *Editor) !Vec2u {
+        if (self.history_redo.items.len == 0 or !self.history_enabled) {
+            return EditorError.NothingToUndo;
+        }
+
+        var change = self.history_redo.pop();
+        var t = change.block_id;
+        try change.redo(self);
+        var pos = change.pos;
+        change.deinit();
+
+        while (self.history_redo.items.len > 0 and self.history_redo.items[self.history_redo.items.len - 1].block_id == t) {
+            change = self.history_redo.pop();
+            try change.redo(self);
+            pos = change.pos;
+            change.deinit();
+        }
+
+        self.historyEndBlock();
         self.has_changes_compared_to_disk = true;
         return pos;
     }
@@ -119,16 +169,15 @@ pub const Editor = struct {
     // ------------
 
     /// deleteLine deletes the given line from the buffer.
-    /// `line_pos` starts with 0
-    pub fn deleteLine(self: *Editor, line_pos: usize) void {
+    /// `line_pos` starts with 0 (i.e. 0 is the first line of the buffer).
+    pub fn deleteLine(self: *Editor, line_pos: usize, triggerer: Triggerer) void {
         if (line_pos < 0 or line_pos >= self.buffer.lines.items.len) {
             std.log.warn("Editor.deleteLine: can't delete line {d}, out of buffer", .{line_pos});
             return;
         }
-
         var deleted_line = self.buffer.lines.orderedRemove(line_pos);
         // history
-        self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2u{ .a = 0, .b = line_pos });
+        self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2u{ .a = 0, .b = line_pos }, triggerer);
     }
 
     /// deleteAfter deletes all glyphs after the given position (included) in the given line.
@@ -177,7 +226,7 @@ pub const Editor = struct {
             // delete only a piece of it
             var j: usize = start_pos.a;
             while (j < end_pos.a) : (j += 1) {
-                try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = start_pos.b }, .Right);
+                try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = start_pos.b }, .Right, .Input);
             }
             return Vec2u{ .a = start_pos.a, .b = start_pos.b };
         }
@@ -194,7 +243,7 @@ pub const Editor = struct {
             // starting line has to be complete deleted
             if (start_pos.a == 0 and i == start_pos.b and (end_pos.b > start_pos.b or end_pos.a == line_size - 1)) {
                 // we have to completely delete the first line
-                self.deleteLine(start_pos.b - line_removed);
+                self.deleteLine(start_pos.b - line_removed, .Input);
                 line_removed += 1;
                 continue;
             }
@@ -204,13 +253,13 @@ pub const Editor = struct {
                 // we have to partially removes data from the first line
                 var j: usize = 0;
                 while (j < line_size - start_pos.a) : (j += 1) {
-                    try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = i - line_removed }, .Right);
+                    try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = i - line_removed }, .Right, .Input);
                 }
             }
 
             // in between lines can be simply removed
             if (i > start_pos.b and i < end_pos.b) {
-                self.deleteLine(i - line_removed);
+                self.deleteLine(i - line_removed, .Input);
                 line_removed += 1;
             }
 
@@ -223,17 +272,17 @@ pub const Editor = struct {
                 var it = try UTF8Iterator.init(line.bytes(), j);
                 while (j < line_size) : (j += 1) {
                     if (it.next()) {
-                        try self.insertUtf8Text(Vec2u{ .a = start_pos.a + k, .b = start_pos.b }, it.glyph());
+                        try self.insertUtf8Text(Vec2u{ .a = start_pos.a + k, .b = start_pos.b }, it.glyph(), .Input);
                     }
                     k += 1;
                 }
 
                 j = 0;
                 while (j < end_pos.a) : (j += 1) {
-                    try self.deleteGlyph(Vec2u{ .a = 0, .b = i - line_removed }, .Right);
+                    try self.deleteGlyph(Vec2u{ .a = 0, .b = i - line_removed }, .Right, .Input);
                 }
 
-                self.deleteLine(i - line_removed);
+                self.deleteLine(i - line_removed, .Input);
                 line_removed += 1;
             }
         }
@@ -245,31 +294,21 @@ pub const Editor = struct {
     // TODO(remy): unit test
     // TODO(remy): direction instead of "above"
     // TODO(remy): what happens on the very last line of the buffer/editor?
-    /// `above` is a special behavior where the new line is created above the current line.
-    pub fn newLine(self: *Editor, pos: Vec2u, above: bool) !void {
-        if (above) {
-            var new_line = U8Slice.initEmpty(self.allocator);
-            self.buffer.lines.insert(pos.b, new_line) catch |err| {
-                std.log.err("can't insert a new line: {}", .{err});
-            };
-            // TODO(remy): history entry
-            self.has_changes_compared_to_disk = true;
-        } else {
-            var line = try self.buffer.getLine(pos.b);
-            var rest = line.data.items[try line.utf8pos(pos.a)..line.size()];
-            var new_line = try U8Slice.initFromSlice(self.allocator, rest);
-            line.data.shrinkAndFree(try line.utf8pos(pos.a));
-            try line.data.append('\n');
-            try self.buffer.lines.insert(pos.b + 1, new_line);
-            // history
-            self.historyAppend(ChangeType.InsertNewLine, undefined, pos);
-        }
+    pub fn newLine(self: *Editor, pos: Vec2u, triggerer: Triggerer) !void {
+        var line = try self.buffer.getLine(pos.b);
+        var rest = line.data.items[try line.utf8pos(pos.a)..line.size()];
+        var new_line = try U8Slice.initFromSlice(self.allocator, rest);
+        line.data.shrinkAndFree(try line.utf8pos(pos.a));
+        try line.data.append('\n');
+        try self.buffer.lines.insert(pos.b + 1, new_line);
+        // history
+        self.historyAppend(ChangeType.InsertNewLine, U8Slice.initEmpty(self.allocator), pos, triggerer);
     }
 
     // TODO(remy): comment
     // TODO(remy): unit test
     /// `txt` must be in utf8.
-    pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8) !void {
+    pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8, triggerer: Triggerer) !void {
         if (self.buffer.lines.items.len == 0) {
             var new_line = U8Slice.initEmpty(self.allocator);
             try self.buffer.lines.append(new_line);
@@ -285,11 +324,11 @@ pub const Editor = struct {
         try line.data.insertSlice(insert_pos, txt);
 
         var utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
-        self.historyAppend(ChangeType.InsertUtf8Char, undefined, utf8_pos);
+        self.historyAppend(ChangeType.InsertUtf8Char, U8Slice.initEmpty(self.allocator), utf8_pos, triggerer);
     }
 
     /// deleteGlyph deletes on glyph from the underlying buffer.
-    pub fn deleteGlyph(self: *Editor, pos: Vec2u, direction: DeleteDirection) !void {
+    pub fn deleteGlyph(self: *Editor, pos: Vec2u, direction: DeleteDirection, triggerer: Triggerer) !void {
         var line = try self.buffer.getLine(pos.b);
         if (direction == .Left and pos.a == 0) {
             // TODO(remy): removing a line.
@@ -310,7 +349,7 @@ pub const Editor = struct {
             }
 
             var utf8_pos = Vec2u{ .a = remove_pos, .b = pos.b };
-            self.historyAppend(ChangeType.DeleteUtf8Char, removed, utf8_pos);
+            self.historyAppend(ChangeType.DeleteUtf8Char, removed, utf8_pos, triggerer);
         }
     }
 
@@ -324,7 +363,7 @@ pub const Editor = struct {
         while (i < txt.data.items.len) {
             // new line
             if (txt.data.items[i] == '\n') {
-                try self.newLine(insert_pos, false);
+                try self.newLine(insert_pos, .Input);
                 insert_pos.a = 0;
                 insert_pos.b += 1;
                 i += 1;
@@ -332,7 +371,7 @@ pub const Editor = struct {
             }
             // not a new line
             var to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
-            try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add]);
+            try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add], .Input);
             insert_pos.a += 1;
             i += to_add;
         }
@@ -496,14 +535,14 @@ test "editor_new_line_and_undo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
-    try editor.newLine(Vec2u{ .a = 3, .b = 1 }, false);
+    try editor.newLine(Vec2u{ .a = 3, .b = 1 }, .Input);
     try expect(editor.buffer.lines.items.len == 4);
     var line = (try editor.buffer.getLine(2)).bytes();
     std.log.debug("{s}", .{line});
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), " a second line\n"));
-    try editor.newLine(Vec2u{ .a = 0, .b = 2 }, false);
+    try editor.newLine(Vec2u{ .a = 0, .b = 2 }, .Input);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "\n"));

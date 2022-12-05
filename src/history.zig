@@ -38,40 +38,64 @@ pub const Change = struct {
     /// depending on the `change_type`, only the first field of the
     /// vector could be used (for instance for a line action).
     pos: Vec2u,
-};
 
-// TODO(remy): comment
-pub const History = struct {
+    pub fn deinit(self: *Change) void {
+        self.data.deinit();
+    }
+
     // TODO(remy): comment
-    pub fn undo(editor: *Editor, change: Change) !void {
-        switch (change.type) {
+    pub fn redo(self: *Change, editor: *Editor) !void {
+        switch (self.type) {
             .InsertNewLine => {
-                var extra = try editor.buffer.getLine(@intCast(u64, change.pos.b + 1));
-                var line = try editor.buffer.getLine(@intCast(u64, change.pos.b));
+                try editor.newLine(self.pos, .Redo);
+            },
+            .DeleteLine => {
+                editor.deleteLine(self.pos.b, .Redo);
+            },
+            .InsertUtf8Char => {
+                try editor.insertUtf8Text(self.pos, self.data.bytes(), .Redo);
+            },
+            .DeleteUtf8Char => {
+                try editor.deleteGlyph(self.pos, .Right, .Redo);
+            },
+        }
+    }
+
+    // TODO(remy): comment
+    /// Returns a change representing the "redo" change to redo something undone.
+    pub fn undo(self: *Change, editor: *Editor) !void {
+        switch (self.type) {
+            .InsertNewLine => {
+                var extra = try editor.buffer.getLine(@intCast(u64, self.pos.b + 1));
+                var line = try editor.buffer.getLine(@intCast(u64, self.pos.b));
                 // remove the \n
                 line.data.shrinkAndFree(line.size() - 1);
                 // append the rest of data
                 try line.data.appendSlice(extra.bytes());
                 // remove the next line which has been appended already
-                var data = editor.buffer.lines.orderedRemove(change.pos.b + 1); // XXX(remy): are we sure with this +1?
+                var data = editor.buffer.lines.orderedRemove(self.pos.b + 1); // XXX(remy): are we sure with this +1?
                 data.deinit();
             },
             .InsertUtf8Char => {
                 // size of the utf8 char
-                var line = try editor.buffer.getLine(change.pos.b);
-                var char_pos = change.pos.a;
-                var utf8_size = try std.unicode.utf8ByteSequenceLength(line.data.items[char_pos]);
-                while (utf8_size > 0) : (utf8_size -= 1) {
+                var line = try editor.buffer.getLine(self.pos.b);
+                var char_pos = self.pos.a;
+                var glyph_size = try std.unicode.utf8ByteSequenceLength(line.data.items[char_pos]);
+                // store it for the redo
+                try self.data.appendConst(line.data.items[char_pos .. char_pos + glyph_size]);
+                while (glyph_size > 0) : (glyph_size -= 1) {
                     _ = line.data.orderedRemove(char_pos);
                 }
             },
             .DeleteUtf8Char => {
-                var line = try editor.buffer.getLine(@intCast(u64, change.pos.b));
-                try line.data.insertSlice(change.pos.a, change.data.bytes());
-                change.data.deinit();
+                var line = try editor.buffer.getLine(@intCast(u64, self.pos.b));
+                try line.data.insertSlice(self.pos.a, self.data.bytes());
             },
             .DeleteLine => {
-                try editor.buffer.lines.insert(change.pos.b, change.data);
+                try editor.buffer.lines.insert(self.pos.b, self.data);
+                // we re-inserted the line into the document, it is not owned
+                // by this change anymore.
+                self.data = U8Slice.initEmpty(editor.allocator);
             },
         }
     }
