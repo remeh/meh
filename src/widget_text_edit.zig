@@ -775,9 +775,8 @@ pub const WidgetTextEdit = struct {
                         };
                     },
                     // others
-                    'E' => {
-                        self.deleteLine();
-                    },
+                    'D' => self.editor.deleteAfter(self.cursor.pos),
+                    'E' => self.deleteLine(),
                     'x' => {
                         if (self.selection.state != .Inactive) {
                             self.deleteSelection();
@@ -969,13 +968,10 @@ pub const WidgetTextEdit = struct {
     /// deleteLine deletes the line where is the cursor.
     // TODO(remy): unit test
     pub fn deleteLine(self: *WidgetTextEdit) void {
-        if (self.editor.deleteLine(@intCast(usize, self.cursor.pos.b))) {
-            self.editor.historyEndBlock();
-            self.validateCursorPosition(true);
-            self.stopSelection(.Inactive);
-        } else |err| {
-            std.log.err("WidgetTextEdit.deleteLine: dd: can't delete line: {}", .{err});
-        }
+        self.editor.deleteLine(@intCast(usize, self.cursor.pos.b));
+        self.editor.historyEndBlock();
+        self.validateCursorPosition(true);
+        self.stopSelection(.Inactive);
     }
 
     /// buildSelectedText uses the current selection in the WidgetTextEdit to return

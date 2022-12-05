@@ -120,14 +120,46 @@ pub const Editor = struct {
 
     /// deleteLine deletes the given line from the buffer.
     /// `line_pos` starts with 0
-    pub fn deleteLine(self: *Editor, line_pos: usize) !void {
+    pub fn deleteLine(self: *Editor, line_pos: usize) void {
         if (line_pos < 0 or line_pos >= self.buffer.lines.items.len) {
-            return BufferError.OutOfBuffer;
+            std.log.warn("Editor.deleteLine: can't delete line {d}, out of buffer", .{line_pos});
+            return;
         }
 
         var deleted_line = self.buffer.lines.orderedRemove(line_pos);
         // history
         self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2u{ .a = 0, .b = line_pos });
+    }
+
+    /// deleteAfter deletes all glyphs after the given position (included) in the given line.
+    /// Does not delete the line return of the line.
+    pub fn deleteAfter(self: *Editor, position: Vec2u) void {
+        if (position.b < 0 or position.b >= self.buffer.lines.items.len) {
+            std.log.warn("Editor.deleteAfter: can't delete data in line {d}, out of buffer", .{position.b});
+            return;
+        }
+
+        var line = self.buffer.getLine(position.b) catch |err| {
+            std.log.err("Editor.deleteAfter: can't get line: {}", .{err});
+            return;
+        };
+
+        var line_size = line.utf8size() catch |err| {
+            std.log.err("Editor.deleteAfter: can't compute line size: {}", .{err});
+            return;
+        };
+
+        var end_position = position;
+        end_position.a = line_size;
+        if (end_position.a > 0 and line.data.items[end_position.a - 1] == '\n') {
+            // we don't want to delete the line return
+            end_position.a -= 1;
+        }
+
+        _ = self.deleteChunk(position, end_position) catch |err| {
+            std.log.err("Editor.deleteAfter: can't delete chunk: {}", .{err});
+            return;
+        };
     }
 
     /// deleteChunk removes chunk of text in lines.
@@ -162,7 +194,7 @@ pub const Editor = struct {
             // starting line has to be complete deleted
             if (start_pos.a == 0 and i == start_pos.b and (end_pos.b > start_pos.b or end_pos.a == line_size - 1)) {
                 // we have to completely delete the first line
-                try self.deleteLine(start_pos.b - line_removed);
+                self.deleteLine(start_pos.b - line_removed);
                 line_removed += 1;
                 continue;
             }
@@ -178,7 +210,7 @@ pub const Editor = struct {
 
             // in between lines can be simply removed
             if (i > start_pos.b and i < end_pos.b) {
-                try self.deleteLine(i - line_removed);
+                self.deleteLine(i - line_removed);
                 line_removed += 1;
             }
 
@@ -201,7 +233,7 @@ pub const Editor = struct {
                     try self.deleteGlyph(Vec2u{ .a = 0, .b = i - line_removed }, .Right);
                 }
 
-                try self.deleteLine(i - line_removed);
+                self.deleteLine(i - line_removed);
                 line_removed += 1;
             }
         }
