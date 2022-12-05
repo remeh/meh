@@ -108,6 +108,15 @@ pub const Buffer = struct {
 
         std.log.debug("Buffer.initFromFile: read file {s}, lines count: {d}", .{ fullpath.bytes(), rv.lines.items.len });
 
+        var size: usize = 0;
+        var length: usize = 0;
+        for (rv.lines.items) |line| {
+            size += line.data.capacity;
+            length += line.data.items.len;
+        }
+        std.log.debug("Capacity: {d} -- {d}KB -- {d}MB", .{ size, size / 1024, size / 1024 / 1024 });
+        std.log.debug("Length: {d} -- {d}KB -- {d}MB", .{ length, length / 1024, length / 1024 / 1024 });
+
         return rv;
     }
 

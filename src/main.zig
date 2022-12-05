@@ -5,8 +5,13 @@ const c = @import("clib.zig").c;
 const App = @import("app.zig").App;
 
 pub fn main() !void {
-    // TODO(remy): should we use a different allocator?
-    var app = try App.init(std.heap.page_allocator);
+    // TODO(remy): configure the allocator properly
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var allocator = gpa.allocator();
+
+    // app
+
+    var app = try App.init(allocator);
     if (std.mem.len(std.os.argv) <= 1) {
         try app.openFile("src/app.zig");
     } else {
@@ -18,4 +23,6 @@ pub fn main() !void {
     try app.mainloop();
 
     app.deinit();
+
+    //    _ = gpa.detectLeaks();
 }

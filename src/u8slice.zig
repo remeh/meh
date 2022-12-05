@@ -200,13 +200,14 @@ pub const U8Slice = struct {
     /// appendConst appends the given string to the u8slice.
     /// This method allocates memory to store the data.
     pub fn appendConst(self: *U8Slice, str: []const u8) !void {
-        try self.data.appendSlice(str);
+        try self.data.ensureTotalCapacityPrecise(self.data.items.len + str.len);
+        self.data.appendSliceAssumeCapacity(str);
     }
 
     /// appendSlice appends the given slice to the current u8slice.
     /// This method allocates memory to store the data.
     pub fn appendSlice(self: *U8Slice, slice: U8Slice) !void {
-        try self.data.appendSlice(slice.bytes());
+        try self.appendConst(slice.bytes());
     }
 
     /// bytes returns the data as a const u8 string.
