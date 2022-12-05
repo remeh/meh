@@ -1147,7 +1147,7 @@ pub const WidgetTextEdit = struct {
             .EndOfLine => {
                 if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
                     if (l.utf8size()) |utf8size| {
-                        if (l.bytes()[l.bytes().len - 1] == char_linereturn) {
+                        if (l.bytes().len > 0 and l.bytes()[l.bytes().len - 1] == char_linereturn) {
                             self.cursor.pos.a = utf8size - 1;
                         } else {
                             self.cursor.pos.a = utf8size;
