@@ -251,6 +251,73 @@ pub const App = struct {
         self.setCurrentFocusedWidgetTextEditIndex(self.textedits.items.len - 1);
     }
 
+    /// close closes the current opened editor/buffer.
+    /// If it's the last one opened, closes the app.
+    // TODO(remy): messagebox to confirm quit
+    // TODO(remy): instead of randomly selecting the previous one, store an order
+    pub fn closeCurrentFile(self: *App) void {
+        if (self.textedits.items.len == 1) {
+            self.quit();
+            return;
+        }
+
+        var text_edit = self.current_widget_text_edit;
+        if (self.has_split_view and self.focused_editor == .Right) {
+            text_edit = self.current_widget_text_edit_alt;
+        }
+
+        // if both the split and the regular view are showing the same file,
+        // we will have to update both.
+        // -------------
+        var change_both: bool = false;
+        if (self.current_widget_text_edit_alt == self.current_widget_text_edit) {
+            change_both = true;
+        }
+        
+        // free resources
+        // -------------
+
+        var widget = self.textedits.orderedRemove(text_edit);
+        widget.deinit();
+
+        // if split view, we may have to update the other index
+        // -------------
+        
+        if (self.has_split_view and self.focused_editor == .Left) {
+            if (self.current_widget_text_edit_alt > text_edit) {
+                self.current_widget_text_edit_alt -= 1;
+            }
+        } else if (self.has_split_view and self.focused_editor == .Right) {
+            if (self.current_widget_text_edit > text_edit) {
+                self.current_widget_text_edit -= 1;
+            }
+        }
+        
+        // decrease the text edit index we're looking at
+        // TODO(remy): this is where we would need some history instead
+        // -------------
+
+        if (text_edit == 0) {
+            text_edit = self.textedits.items.len - 1;
+        } else {
+            text_edit -= 1;
+        }
+        
+        // update what the widget indices
+        // -------------
+
+        if (change_both) {
+            self.current_widget_text_edit = text_edit;
+            self.current_widget_text_edit_alt = text_edit;
+        } else {
+            if (self.has_split_view and self.focused_editor == .Right) {
+                self.current_widget_text_edit_alt = text_edit;
+            } else {
+                self.current_widget_text_edit = text_edit;
+            }
+        }
+    }
+
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
     pub fn currentWidgetTextEdit(self: App) *WidgetTextEdit {

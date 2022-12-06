@@ -144,6 +144,14 @@ pub const WidgetCommand = struct {
             return;
         }
 
+        // close file
+        // ----------
+
+        if (std.mem.eql(u8, command, ":bd")) {
+            app.closeCurrentFile();
+            return;
+        }
+
         // toggle the split
         // ----------------
 
