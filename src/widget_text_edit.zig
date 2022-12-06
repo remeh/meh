@@ -1446,7 +1446,8 @@ test "widget_text_edit isSelected" {
     try expect(widget.isSelected(Vec2u{ .a = 19, .b = 0 })); // outside of the line but still, considered selected and should not crash
 
     try expect(widget.isSelected(Vec2u{ .a = 0, .b = 1 }));
-    try expect(widget.isSelected(Vec2u{ .a = 13, .b = 1 }));
+    try expect(widget.isSelected(Vec2u{ .a = 12, .b = 1 }));
+    try expect(!widget.isSelected(Vec2u{ .a = 13, .b = 1 }));
     try expect(!widget.isSelected(Vec2u{ .a = 14, .b = 1 }));
     try expect(!widget.isSelected(Vec2u{ .a = 0, .b = 2 }));
 

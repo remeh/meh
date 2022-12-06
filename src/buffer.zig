@@ -217,16 +217,36 @@ test "init_empty" {
 
 test "init_from_file" {
     const allocator = std.testing.allocator;
+
+    var working_dir = U8Slice.initEmpty(allocator);
+    defer working_dir.deinit();
+
+    // read cwd
+    var working_path = try std.fs.realpathAlloc(allocator, ".");
+    defer allocator.free(working_path);
+    try working_dir.appendConst(working_path);
+
+    var fullpath = U8Slice.initEmpty(allocator);
+    defer fullpath.deinit();
+
+    try fullpath.appendConst(working_dir.bytes());
+    try fullpath.appendConst("/");
+    var copy = try fullpath.copy();
+    defer copy.deinit();
+
+    try fullpath.appendConst("tests/sample_1");
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
     try expect(buffer.in_ram_only == false);
     try expect(buffer.lines.items.len == 1);
-    try expect(std.mem.eql(u8, buffer.fullpath.bytes(), "tests/sample_1"));
+    try expect(std.mem.eql(u8, buffer.fullpath.bytes(), fullpath.bytes()));
     try expect(std.mem.eql(u8, buffer.lines.items[0].bytes(), "hello world\n"));
     buffer.deinit();
+
+    try copy.appendConst("tests/sample_2");
     buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
     try expect(buffer.in_ram_only == false);
     try expect(buffer.lines.items.len == 3);
-    try expect(std.mem.eql(u8, buffer.fullpath.bytes(), "tests/sample_2"));
+    try expect(std.mem.eql(u8, buffer.fullpath.bytes(), copy.bytes()));
     try expect(std.mem.eql(u8, buffer.lines.items[0].bytes(), "hello world\n"));
     try expect(std.mem.eql(u8, buffer.lines.items[1].bytes(), "and a second line\n"));
     try expect(std.mem.eql(u8, buffer.lines.items[2].bytes(), "and a third"));
