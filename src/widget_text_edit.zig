@@ -45,6 +45,7 @@ pub const InputMode = enum {
     d,
     f,
     F,
+    r,
 };
 
 pub const CursorMove = enum {
@@ -653,6 +654,24 @@ pub const WidgetTextEdit = struct {
                     std.log.err("WidgetTextEdit.onTextInput: can't insert utf8 text: {}", .{err});
                 }
             },
+            .r, .Replace => {
+                self.editor.deleteGlyph(self.cursor.pos, .Right, .Input) catch |err| {
+                    std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'r' input: {}", .{err});
+                    return true;
+                };
+                if (self.editor.insertUtf8Text(self.cursor.pos, txt, .Input)) {
+                    if (self.input_mode == .Replace) {
+                        self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
+                    }
+                } else |err| {
+                    std.log.err("WidgetTextEdit.onTextInput: can't replace utf8 text: {}", .{err});
+                }
+
+                // only one glyph to change in this mode
+                if (self.input_mode == .r) {
+                    self.setInputMode(.Command);
+                }
+            },
             .f, .F => {
                 var direction = SearchDirection.After;
                 if (self.input_mode == .F) {
@@ -709,6 +728,8 @@ pub const WidgetTextEdit = struct {
                     'd' => self.setInputMode(.d),
                     'f' => self.setInputMode(.f),
                     'F' => self.setInputMode(.F),
+                    'r' => self.setInputMode(.r),
+                    'R' => self.setInputMode(.Replace),
                     // start inserting
                     'i' => {
                         self.setInputMode(.Insert);
@@ -803,7 +824,6 @@ pub const WidgetTextEdit = struct {
                     },
                     'u' => self.undo(),
                     'U' => self.redo(),
-                    'r' => self.input_mode = .Replace, // TODO(remy): finish
                     else => return false,
                 }
             },
