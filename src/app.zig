@@ -273,7 +273,7 @@ pub const App = struct {
         if (self.current_widget_text_edit_alt == self.current_widget_text_edit) {
             change_both = true;
         }
-        
+
         // free resources
         // -------------
 
@@ -282,7 +282,7 @@ pub const App = struct {
 
         // if split view, we may have to update the other index
         // -------------
-        
+
         if (self.has_split_view and self.focused_editor == .Left) {
             if (self.current_widget_text_edit_alt > text_edit) {
                 self.current_widget_text_edit_alt -= 1;
@@ -292,7 +292,7 @@ pub const App = struct {
                 self.current_widget_text_edit -= 1;
             }
         }
-        
+
         // decrease the text edit index we're looking at
         // TODO(remy): this is where we would need some history instead
         // -------------
@@ -302,7 +302,7 @@ pub const App = struct {
         } else {
             text_edit -= 1;
         }
-        
+
         // update what the widget indices
         // -------------
 
@@ -666,7 +666,7 @@ pub const App = struct {
                         if (self.widget_lookup.select()) |selected| {
                             if (selected) |entry| {
                                 // we'll try to open that file
-                                self.openFile(entry.fullpath.bytes()) catch |err| {
+                                self.openFile(entry.data.bytes()) catch |err| {
                                     std.log.debug("App.lookupEvents: can't open file: {}", .{err});
                                     return;
                                 };
@@ -678,27 +678,27 @@ pub const App = struct {
                         }
                     },
                     c.SDLK_BACKSPACE => {
-                        self.widget_lookup.onBackspace();
+                        self.widget_lookup.list.onBackspace();
                     },
                     c.SDLK_ESCAPE => {
-                        self.widget_lookup.reset();
+                        self.widget_lookup.list.reset();
                         self.focused_widget = FocusedWidget.Editor;
                     },
                     c.SDLK_n => {
                         if (ctrl) {
-                            self.widget_lookup.next();
+                            self.widget_lookup.list.next();
                         }
                     },
                     c.SDLK_p => {
                         if (ctrl) {
-                            self.widget_lookup.previous();
+                            self.widget_lookup.list.previous();
                         }
                     },
                     else => {},
                 }
             },
             c.SDL_TEXTINPUT => {
-                _ = self.widget_lookup.onTextInput(readTextFromSDLInput(&event.text.text));
+                _ = self.widget_lookup.list.onTextInput(readTextFromSDLInput(&event.text.text));
             },
             else => {},
         }
@@ -754,13 +754,10 @@ pub const App = struct {
                                         self.widget_lookup.setTextEdits(self.textedits) catch |err| {
                                             std.log.err("App.editorEvents: can't set WidgetLookup buffers list: {}", .{err});
                                         };
-                                        self.widget_lookup.filter() catch |err| {
-                                            std.log.err("App.editorEvents: can't run initial filter call: {}", .{err});
-                                        };
                                         if (self.has_split_view and self.focused_editor == .Right) {
-                                            self.widget_lookup.selected_entry_idx = self.current_widget_text_edit_alt;
+                                            self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit_alt;
                                         } else {
-                                            self.widget_lookup.selected_entry_idx = self.current_widget_text_edit;
+                                            self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit;
                                         }
                                     } else {
                                         // scan directory mode
@@ -771,9 +768,6 @@ pub const App = struct {
                                         self.widget_lookup.scanDir() catch |err| {
                                             std.log.err("App.editorEvents: can't list file in WidgetLookup: {}", .{err});
                                             return;
-                                        };
-                                        self.widget_lookup.filter() catch |err| {
-                                            std.log.err("App.editorEvents: can't run initial filter call: {}", .{err});
                                         };
                                     }
                                     self.focused_widget = .Lookup;

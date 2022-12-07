@@ -118,7 +118,13 @@ pub const Cursor = struct {
                     std.log.err("Cursor.posFromWindowPos: can't get last line {d}: {}", .{ rv.b, err });
                     return rv;
                 };
-                rv.a = last_line.size() - 1;
+
+                // happens when there is no content yet the last line of buffer
+                if (last_line.size() > 0) {
+                    rv.a = last_line.size() - 1;
+                } else {
+                    rv.a = 0;
+                }
             } else {
                 rv.b = 0;
                 rv.a = 0;
