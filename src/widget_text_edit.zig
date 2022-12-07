@@ -270,11 +270,45 @@ pub const WidgetTextEdit = struct {
         var y_offset: usize = 0;
         var left_blank_offset: usize = 5;
 
+        // if there is nothing to render, it means we have opened a completely
+        // empty buffer. Still, we want to render a cursor or it looks strange.
+        if (self.editor.buffer.linesCount() == 0) {
+            self.cursor.render(
+                font.sdl_renderer,
+                self.input_mode,
+                scaler,
+                Vec2u{
+                    .a = draw_pos.a + left_blank_offset,
+                    .b = draw_pos.b + y_offset,
+                },
+                one_char_size,
+                focused,
+            );
+
+            return left_blank_offset;
+        }
+
         while (i < self.viewport.lines.b) : (i += 1) {
             if (self.editor.buffer.getLine(i)) |line| {
                 // empty line, just jump a line
 
                 if (line.size() == 0) {
+                    if (self.cursor.pos.b == i) {
+                        // be still have to draw the cursor though. It happens for lines with no \n,
+                        // basically we've just opened a file.
+                        self.cursor.render(
+                            font.sdl_renderer,
+                            self.input_mode,
+                            scaler,
+                            Vec2u{
+                                .a = draw_pos.a + left_blank_offset,
+                                .b = draw_pos.b + y_offset,
+                            },
+                            one_char_size,
+                            focused,
+                        );
+                    }
+
                     y_offset += self.one_char_size.b;
                     continue;
                 }
