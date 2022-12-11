@@ -43,7 +43,6 @@ pub const WidgetList = struct {
     input: WidgetInput,
     label: U8Slice,
     selected_entry_idx: usize,
-    visible_offset: usize,
 
     // Constructors
     // ------------
@@ -56,7 +55,6 @@ pub const WidgetList = struct {
             .input = try WidgetInput.init(allocator),
             .label = U8Slice.initEmpty(allocator),
             .selected_entry_idx = 0,
-            .visible_offset = 0,
         };
     }
 
@@ -100,7 +98,6 @@ pub const WidgetList = struct {
         self.input.reset();
         self.deleteEntries();
         self.selected_entry_idx = 0;
-        self.visible_offset = 0;
         self.label.data.shrinkAndFree(0);
     }
 
@@ -113,7 +110,6 @@ pub const WidgetList = struct {
         } else {
             self.selected_entry_idx += 1;
         }
-        self.visible_offset = 0;
     }
 
     pub fn previous(self: *WidgetList) void {
@@ -158,26 +154,43 @@ pub const WidgetList = struct {
         widget_size: Vec2u,
         one_char_size: Vec2u,
     ) void {
+        const input_height = 50;
+        const sep_margin = 2;
+        // when reaching the bottom of the list, we want to start scrolling before
+        // reaching the last entry.
+        const start_scroll_bottom_offset = 3;
+
         // input
+        // ----
+
         var input_pos = Vec2u{ .a = position.a + 5, .b = position.b + 5 };
-        var input_size = Vec2u{ .a = widget_size.a, .b = 50 };
+        var input_size = Vec2u{ .a = widget_size.a, .b = input_height };
 
         self.input.render(sdl_renderer, font, scaler, input_pos, input_size, one_char_size);
 
         // label below the input / above the list
+        // ----
 
         var label_pos = Vec2u{ .a = position.a, .b = position.b + (one_char_size.b * 2) };
         Draw.text(font, scaler, label_pos, Colors.white, self.label.bytes());
 
         // list the entries
-        // TODO(remy): only list visibles + scroll
+        // ----
 
-        const sep_margin = 8;
         var offset: usize = 0;
-        var idx: usize = 0;
-        for (self.filtered_entries.items) |entry| {
-            var pos = Vec2u{ .a = position.a, .b = position.b + 50 + one_char_size.b + sep_margin + offset };
-            var size = Vec2u{ .a = widget_size.a, .b = one_char_size.b + sep_margin };
+        var visible_entries: usize = (widget_size.b - (input_height + sep_margin)) / (one_char_size.b + sep_margin);
+        var entry_offset: usize = 0;
+
+        // offset what we're looking at if the selected entry would not be visible.
+        if (self.filtered_entries.items.len >= visible_entries and (self.selected_entry_idx + start_scroll_bottom_offset) > visible_entries) {
+            entry_offset = self.selected_entry_idx + 3 - visible_entries;
+        }
+
+        var idx: usize = entry_offset;
+        while (idx < self.filtered_entries.items.len) {
+            var entry = self.filtered_entries.items[idx];
+            var pos = Vec2u{ .a = position.a, .b = position.b + input_height + one_char_size.b + sep_margin + offset };
+            var size = Vec2u{ .a = widget_size.a, .b = one_char_size.b + sep_margin + 1 };
 
             self.renderEntry(
                 sdl_renderer,
@@ -188,8 +201,14 @@ pub const WidgetList = struct {
                 entry,
                 idx == self.selected_entry_idx,
             );
+
             offset += one_char_size.b + sep_margin;
             idx += 1;
+
+            // more entries won't fit, stop drawing them
+            if ((idx + (start_scroll_bottom_offset - 1)) - entry_offset > visible_entries) {
+                break;
+            }
         }
     }
 
@@ -206,7 +225,7 @@ pub const WidgetList = struct {
         // TODO(remy): render an icon or such
 
         if (selected) {
-            Draw.rect(sdl_renderer, scaler, position, size, Colors.white);
+            Draw.rect(sdl_renderer, scaler, Vec2u{ .a = position.a, .b = position.b + 2 }, size, Colors.white);
         }
 
         Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, entry.label.bytes());
