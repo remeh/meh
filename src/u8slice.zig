@@ -37,6 +37,10 @@ pub const UTF8Iterator = struct {
     text: []const u8,
 
     pub fn init(text: []const u8, start_glyph: usize) !UTF8Iterator {
+        if (text.len == 0) {
+            return UTF8IteratorError.GlyphOutOfBuffer;
+        }
+
         var glyph_size: usize = std.unicode.utf8ByteSequenceLength(text[0]) catch {
             return UTF8IteratorError.InvalidByte;
         };

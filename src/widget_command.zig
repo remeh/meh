@@ -9,6 +9,7 @@ const Direction = @import("app.zig").Direction;
 const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const Font = @import("font.zig").Font;
+const Ripgrep = @import("ripgrep.zig").Ripgrep;
 const Scaler = @import("scaler.zig").Scaler;
 const SearchDirection = @import("editor.zig").SearchDirection;
 const U8Slice = @import("u8slice.zig").U8Slice;
@@ -104,9 +105,13 @@ pub const WidgetCommand = struct {
     }
 
     pub fn interpret(self: *WidgetCommand, app: *App) !void {
-        var command = self.getArg(0) catch {
+        var prompt = self.getArg(0);
+
+        if (prompt == null) {
             return;
-        };
+        }
+
+        var command = prompt.?;
 
         // quit
         // ----
@@ -140,7 +145,7 @@ pub const WidgetCommand = struct {
                 app.openFile(f) catch |err| {
                     std.log.err("WidgetCommand.interpret: can't open file: {}", .{err});
                 };
-            } else |_| {}
+            }
             return;
         }
 
@@ -171,14 +176,27 @@ pub const WidgetCommand = struct {
             if (args_count > 1) {
                 var i: usize = 1; // ignore the first one since it's the command
                 while (i < args_count) : (i += 1) {
-                    var arg = try self.getArg(i);
-                    try str.appendConst(" ");
-                    try str.appendConst(arg);
+                    if (self.getArg(i)) |arg| {
+                        try str.appendConst(" ");
+                        try str.appendConst(arg);
+                    }
                 }
             }
 
             var wt = app.currentWidgetTextEdit();
             wt.search(str, SearchDirection.After, true);
+            return;
+        }
+
+        // ripgrep
+        // -------
+
+        if (std.mem.eql(u8, command, ":rg")) {
+            if (self.getArg(1)) |search| {
+                Ripgrep.search(app.allocator, search, app.working_dir.bytes()) catch |err| {
+                    std.log.err("WidgetCommand: can't exec  'rg': {}", .{err});
+                };
+            }
             return;
         }
 
@@ -264,12 +282,14 @@ pub const WidgetCommand = struct {
 
     /// getArg returns the arg at the given position.
     /// Starts at 0, 0 being the command.
-    fn getArg(self: WidgetCommand, idx: usize) ![]const u8 {
+    fn getArg(self: WidgetCommand, idx: usize) ?[]const u8 {
         if (idx > self.countArgs()) {
-            return WidgetCommandError.ArgsOutOfBounds;
+            return null;
         }
 
-        var line = try self.input.text();
+        var line = self.input.text() catch {
+            return null;
+        };
         var buff = line.bytes();
 
         // find the end
@@ -296,7 +316,7 @@ pub const WidgetCommand = struct {
             arg = it.next();
         }
 
-        return WidgetCommandError.ArgsOutOfBounds;
+        return null;
     }
 };
 

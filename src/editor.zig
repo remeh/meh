@@ -29,7 +29,7 @@ pub const Triggerer = enum {
 pub const SearchDirection = enum { Before, After };
 pub const DeleteDirection = enum { Left, Right };
 
-pub const Punctuation = ",./&\"'[|]_{}()-=:;<>*!?@#+~` \t\n";
+pub const Punctuation = ",./&\"'[|]{}()-=:;<>*!?@#+~` \t\n";
 
 /// Editor helps editing a Buffer.
 /// Provides UTF8 methods to insert text, remove text, history support, etc.
