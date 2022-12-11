@@ -747,29 +747,29 @@ pub const App = struct {
                                         self.focused_editor = .Left;
                                     }
                                 },
+                                c.SDLK_k => {
+                                    self.widget_lookup.reset();
+                                    self.widget_lookup.setTextEdits(self.textedits) catch |err| {
+                                        std.log.err("App.editorEvents: can't set WidgetLookup buffers list: {}", .{err});
+                                    };
+                                    if (self.has_split_view and self.focused_editor == .Right) {
+                                        self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit_alt;
+                                    } else {
+                                        self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit;
+                                    }
+                                    self.focused_widget = .Lookup;
+                                },
                                 c.SDLK_p => {
                                     self.widget_lookup.reset();
-                                    if (shift) {
-                                        // opened buffers mode
-                                        self.widget_lookup.setTextEdits(self.textedits) catch |err| {
-                                            std.log.err("App.editorEvents: can't set WidgetLookup buffers list: {}", .{err});
-                                        };
-                                        if (self.has_split_view and self.focused_editor == .Right) {
-                                            self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit_alt;
-                                        } else {
-                                            self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit;
-                                        }
-                                    } else {
-                                        // scan directory mode
-                                        self.widget_lookup.setFilepath(self.working_dir) catch |err| {
-                                            std.log.err("App.editorEvents: can't set WidgetLookup filepath: {}", .{err});
-                                            return;
-                                        };
-                                        self.widget_lookup.scanDir() catch |err| {
-                                            std.log.err("App.editorEvents: can't list file in WidgetLookup: {}", .{err});
-                                            return;
-                                        };
-                                    }
+                                    // scan directory mode
+                                    self.widget_lookup.setFilepath(self.working_dir) catch |err| {
+                                        std.log.err("App.editorEvents: can't set WidgetLookup filepath: {}", .{err});
+                                        return;
+                                    };
+                                    self.widget_lookup.scanDir() catch |err| {
+                                        std.log.err("App.editorEvents: can't list file in WidgetLookup: {}", .{err});
+                                        return;
+                                    };
                                     self.focused_widget = .Lookup;
                                 },
                                 else => _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),
