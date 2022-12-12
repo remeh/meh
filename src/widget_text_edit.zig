@@ -726,7 +726,7 @@ pub const WidgetTextEdit = struct {
                 switch (txt[0]) {
                     // delete the word under the cursor
                     'i' => {
-                        var word_pos = self.editor.wordAt(self.cursor.pos) catch |err| {
+                        var word_pos = self.editor.wordPosAt(self.cursor.pos) catch |err| {
                             std.log.err("WidgetTextEdit.onTextInput: di: {}", .{err});
                             return true;
                         };

@@ -1,5 +1,17 @@
 const std = @import("std");
 
+const U8Slice = @import("u8slice.zig").U8Slice;
+
+pub const RipgrepResults = struct {
+    alocator: std.mem.Allocator,
+    results: std.ArrayList(U8Slice),
+
+    pub fn deinit(self: *RipgrepResults) void {
+        self.results.deinit();
+        self.allocator.free(self.results);
+    }
+};
+
 pub const Ripgrep = struct {
     pub fn search(allocator: std.mem.Allocator, pattern: []const u8, cwd: []const u8) !void {
         var args = std.ArrayList([]const u8).init(allocator);

@@ -379,10 +379,10 @@ pub const Editor = struct {
         return insert_pos;
     }
 
-    /// wordAt returns the word at the given `position`.
+    /// wordPosAt returns the start and end in the line of the word at the given `position`.
     /// Returns the start and end position of the word in the given line.
     // TODO(remy): unit test
-    pub fn wordAt(self: Editor, position: Vec2u) !Vec2u {
+    pub fn wordPosAt(self: Editor, position: Vec2u) !Vec2u {
         if (position.b > self.buffer.lines.items.len) {
             return BufferError.OutOfBuffer;
         }
@@ -424,6 +424,20 @@ pub const Editor = struct {
         }
 
         return rv;
+    }
+
+    /// wordAt returns the current word under the cursor.
+    /// It returns it as a part of the managed line, the memory
+    /// is owned by the WidgetTextEdit and should not be freed by
+    /// the caller.
+    pub fn wordAt(self: Editor, position: Vec2u) ![]const u8 {
+        var pos = try self.wordPosAt(position);
+        if (pos.a == pos.b) {
+            return EditorError.NoWordHere;
+        }
+
+        var line = try self.buffer.getLine(position.b);
+        return line.bytes()[pos.a..pos.b];
     }
 
     /// findGlyphInLine returns next or previous position of the given glyph (starting at
