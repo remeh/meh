@@ -12,6 +12,7 @@ const WidgetInput = @import("widget_input.zig").WidgetInput;
 const WidgetList = @import("widget_list.zig").WidgetList;
 const WidgetListEntry = @import("widget_list.zig").WidgetListEntry;
 const WidgetListEntryType = @import("widget_list.zig").WidgetListEntryType;
+const WidgetListFilterType = @import("widget_list.zig").WidgetListFilterType;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
 pub const WidgetLookup = struct {
@@ -29,7 +30,7 @@ pub const WidgetLookup = struct {
         return WidgetLookup{
             .allocator = allocator,
             .current_path = current_path,
-            .list = try WidgetList.init(allocator),
+            .list = try WidgetList.init(allocator, WidgetListFilterType.Label),
         };
     }
 
@@ -45,8 +46,8 @@ pub const WidgetLookup = struct {
         self.list.reset();
     }
 
-    /// The given `filepath` isn't owned by the WidgetLookup (a copy is created
-    /// because it will modify it).
+    /// The given `filepath` isn't owned by the WidgetLookup, it creates a copy instead
+    /// because it has to mutate it.
     pub fn setFilepath(self: *WidgetLookup, filepath: U8Slice) !void {
         self.current_path.deinit();
         self.current_path = try U8Slice.initFromSlice(self.allocator, filepath.bytes());
@@ -89,6 +90,7 @@ pub const WidgetLookup = struct {
         try self.list.entries.append(WidgetListEntry{
             .label = try U8Slice.initFromSlice(self.allocator, ".."),
             .data = try U8Slice.initFromSlice(self.allocator, ".."),
+            .data_int = 0, // unused
             .type = .Directory,
         });
 
@@ -110,6 +112,7 @@ pub const WidgetLookup = struct {
                     try self.list.entries.append(WidgetListEntry{
                         .label = try U8Slice.initFromSlice(self.allocator, entry.name),
                         .data = fullpath,
+                        .data_int = 0, // unused
                         .type = t,
                     });
                 },
@@ -132,6 +135,7 @@ pub const WidgetLookup = struct {
             try self.list.entries.append(WidgetListEntry{
                 .label = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
                 .data = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
+                .data_int = 0, // unused
                 .type = .File,
             });
         }

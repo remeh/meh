@@ -7,10 +7,12 @@ const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Font = @import("font.zig").Font;
+const RipgrepResults = @import("ripgrep.zig").RipgrepResults;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
 const WidgetLookup = @import("widget_lookup.zig").WidgetLookup;
+const WidgetRipgrep = @import("widget_ripgrep.zig").WidgetRipgrep;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
 const Vec2f = @import("vec.zig").Vec2f;
@@ -27,6 +29,7 @@ pub const FocusedWidget = enum {
     Editor,
     Command,
     Lookup,
+    Ripgrep,
 };
 
 pub const FocusedEditor = enum {
@@ -57,6 +60,7 @@ pub const App = struct {
     allocator: std.mem.Allocator,
     widget_command: WidgetCommand,
     widget_lookup: WidgetLookup,
+    widget_ripgrep: WidgetRipgrep,
     textedits: std.ArrayList(WidgetTextEdit),
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
@@ -172,6 +176,7 @@ pub const App = struct {
             .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
             .widget_command = try WidgetCommand.init(allocator),
             .widget_lookup = try WidgetLookup.init(allocator),
+            .widget_ripgrep = try WidgetRipgrep.init(allocator),
             .current_widget_text_edit = 0,
             .current_widget_text_edit_alt = 0,
             .has_split_view = false,
@@ -199,6 +204,9 @@ pub const App = struct {
             self.textedits.items[i].deinit();
         }
         self.textedits.deinit();
+        self.widget_command.deinit();
+        self.widget_lookup.deinit();
+        self.widget_ripgrep.deinit();
 
         self.font_lowdpi.deinit();
         self.font_lowdpibigfont.deinit();
@@ -348,6 +356,24 @@ pub const App = struct {
         }
     }
 
+    // TODO(remy): comment
+    pub fn openRipgrepResults(self: *App, results: RipgrepResults) void {
+        if (results.stdout.len == 0) {
+            // TODO(remy): no results
+            std.log.debug("App.openRipgrepResults: no results!", .{});
+            return;
+        }
+        
+        defer results.deinit();
+        
+        self.widget_ripgrep.setResults(results) catch |err| {
+            std.log.err("App.openRipgrepResults: {}", .{err});
+        };
+        
+        std.log.debug("focused", .{});
+        self.focused_widget = .Ripgrep;
+    }
+
     pub fn increaseFont(self: *App) void {
         var font = Font.init(self.allocator, self.sdl_renderer, "./res/UbuntuMono-Regular.ttf", self.current_font.font_size + 2) catch |err| {
             std.log.err("App.increaseFont: can't load temporary font: {}", .{err});
@@ -444,6 +470,15 @@ pub const App = struct {
                 one_char_size,
             ),
             .Lookup => self.widget_lookup.render(
+                self.sdl_renderer,
+                self.current_font,
+                scaler,
+                self.window_scaled_size, // used for the overlay
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.1) },
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.8) },
+                one_char_size,
+            ),
+            .Ripgrep => self.widget_ripgrep.render(
                 self.sdl_renderer,
                 self.current_font,
                 scaler,
@@ -594,6 +629,10 @@ pub const App = struct {
                         self.lookupEvents(event);
                         to_render = true;
                     },
+                    .Ripgrep => {
+                        self.ripgrepEvents(event);
+                        to_render = true;
+                    },
                 }
 
                 // the focus widget changed, trigger an immedate repaint
@@ -626,11 +665,11 @@ pub const App = struct {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
                     c.SDLK_RETURN => {
+                        self.focused_widget = FocusedWidget.Editor;
                         self.widget_command.interpret(self) catch |err| {
                             std.log.err("App.commandEvents: can't start interpert: {}", .{err});
                             return;
                         };
-                        self.focused_widget = FocusedWidget.Editor;
                         self.widget_command.reset();
                     },
                     c.SDLK_ESCAPE => {
@@ -649,6 +688,52 @@ pub const App = struct {
             },
             c.SDL_TEXTINPUT => {
                 _ = self.widget_command.onTextInput(readTextFromSDLInput(&event.text.text));
+            },
+            else => {},
+        }
+    }
+
+    fn ripgrepEvents(self: *App, event: c.SDL_Event) void {
+        var input_state = c.SDL_GetKeyboardState(null);
+        var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
+        //        var shift: bool = input_state[c.SDL_SCANCODE_LSHIFT] == 1 or input_state[c.SDL_SCANCODE_RSHIFT] == 1;
+        //        var cmd: bool = input_state[c.SDL_SCANCODE_LGUI] == 1 or input_state[c.SDL_SCANCODE_RGUI] == 1;
+        switch (event.type) {
+            c.SDL_KEYDOWN => {
+                switch (event.key.keysym.sym) {
+                    c.SDLK_RETURN => {
+                        if (self.widget_ripgrep.select()) |selected| {
+                            if (selected) |entry| {
+                                std.log.debug("implement: {}", .{entry});
+                                // leave the widget
+                                // self.focused_widget = FocusedWidget.Editor;
+                            }
+                        } else |err| {
+                            std.log.err("App.ripgrepEvents: can't select current entry: {}", .{err});
+                        }
+                    },
+                    c.SDLK_BACKSPACE => {
+                        self.widget_ripgrep.list.onBackspace();
+                    },
+                    c.SDLK_ESCAPE => {
+                        self.widget_ripgrep.list.reset();
+                        self.focused_widget = FocusedWidget.Editor;
+                    },
+                    c.SDLK_n => {
+                        if (ctrl) {
+                            self.widget_ripgrep.list.next();
+                        }
+                    },
+                    c.SDLK_p => {
+                        if (ctrl) {
+                            self.widget_ripgrep.list.previous();
+                        }
+                    },
+                    else => {},
+                }
+            },
+            c.SDL_TEXTINPUT => {
+                _ = self.widget_ripgrep.list.onTextInput(readTextFromSDLInput(&event.text.text));
             },
             else => {},
         }

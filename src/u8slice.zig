@@ -178,8 +178,8 @@ pub const U8Slice = struct {
 
     /// copy creates a new U8Slice copying the data of the current one.
     /// The returned U8Slice is owned by the caller.
-    pub fn copy(self: U8Slice) !U8Slice {
-        var rv = initEmpty(self.allocator);
+    pub fn copy(self: U8Slice, allocator: std.mem.Allocator) !U8Slice {
+        var rv = initEmpty(allocator);
         try rv.appendConst(self.bytes());
         return rv;
     }

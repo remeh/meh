@@ -231,7 +231,7 @@ test "init_from_file" {
 
     try fullpath.appendConst(working_dir.bytes());
     try fullpath.appendConst("/");
-    var copy = try fullpath.copy();
+    var copy = try fullpath.copy(allocator);
     defer copy.deinit();
 
     try fullpath.appendConst("tests/sample_1");

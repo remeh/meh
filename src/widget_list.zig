@@ -18,7 +18,17 @@ const Vec4u = @import("vec.zig").Vec4u;
 const WidgetInput = @import("widget_input.zig").WidgetInput;
 const Insert = @import("widget_text_edit.zig").Insert;
 
-pub const WidgetListEntryType = enum { File, Directory };
+pub const WidgetListEntryType = enum {
+    File,
+    Directory,
+    Ripgrep,
+};
+
+pub const WidgetListFilterType = enum {
+    Label,
+    Data,
+    LabelAndData,
+};
 
 /// Entry is an entry in the WidgetList.
 /// `filename` and `fullpath` are owned by the WidgetListEntry, use `deinit()` to release
@@ -26,6 +36,7 @@ pub const WidgetListEntryType = enum { File, Directory };
 pub const WidgetListEntry = struct {
     label: U8Slice,
     data: U8Slice,
+    data_int: i64,
     type: WidgetListEntryType,
 
     pub fn deinit(self: *WidgetListEntry) void {
@@ -40,18 +51,19 @@ pub const WidgetList = struct {
     /// Slices in `filtered_entries` are pointing to values in `entries`, they
     /// should not be freed.
     filtered_entries: std.ArrayList(WidgetListEntry),
+    filter_type: WidgetListFilterType,
     input: WidgetInput,
     label: U8Slice,
     selected_entry_idx: usize,
-
     // Constructors
     // ------------
 
-    pub fn init(allocator: std.mem.Allocator) !WidgetList {
+    pub fn init(allocator: std.mem.Allocator, filter_type: WidgetListFilterType) !WidgetList {
         return WidgetList{
             .allocator = allocator,
             .entries = std.ArrayList(WidgetListEntry).init(allocator),
             .filtered_entries = std.ArrayList(WidgetListEntry).init(allocator),
+            .filter_type = filter_type,
             .input = try WidgetInput.init(allocator),
             .label = U8Slice.initEmpty(allocator),
             .selected_entry_idx = 0,
@@ -134,7 +146,12 @@ pub const WidgetList = struct {
         for (self.entries.items) |entry| {
             var add = (entered_filter.len == 0);
             if (entered_filter.len > 0) {
-                if (std.mem.containsAtLeast(u8, entry.label.bytes(), 1, entered_filter)) {
+                if ((self.filter_type == .Label or self.filter_type == .LabelAndData) and
+                    std.mem.containsAtLeast(u8, entry.label.bytes(), 1, entered_filter)) {
+                    add = true;
+                }
+                if ((self.filter_type == .Data or self.filter_type == .LabelAndData) and
+                    std.mem.containsAtLeast(u8, entry.data.bytes(), 1, entered_filter)) {
                     add = true;
                 }
             }

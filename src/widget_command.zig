@@ -195,15 +195,20 @@ pub const WidgetCommand = struct {
             if (self.countArgs() == 1) {
                 var text_edit = app.currentWidgetTextEdit();
                 var word = try text_edit.editor.wordAt(text_edit.cursor.pos);
-                Ripgrep.search(app.allocator, word, app.working_dir.bytes()) catch |err| {
+                var results = Ripgrep.search(app.allocator, word, app.working_dir.bytes()) catch |err| {
                     std.log.err("WidgetCommand: can't exec  'rg {s}': {}", .{ word, err });
+                    return;
                 };
+                app.openRipgrepResults(results);
                 return;
             }
             if (self.getArg(1)) |search| {
-                Ripgrep.search(app.allocator, search, app.working_dir.bytes()) catch |err| {
+                var results = Ripgrep.search(app.allocator, search, app.working_dir.bytes()) catch |err| {
                     std.log.err("WidgetCommand: can't exec  'rg {s}': {}", .{ search, err });
+                    return;
                 };
+                app.openRipgrepResults(results);
+                return;
             }
             return;
         }
