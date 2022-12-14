@@ -341,6 +341,12 @@ pub const Editor = struct {
             } else {
                 remove_pos = try line.utf8pos(pos.a);
             }
+
+            if (remove_pos >= line.data.items.len) {
+                std.log.err("Editor.deleteGlyph: trying to remove glyph at byte pos: {d} while line has byte length: {d}", .{ remove_pos, line.data.items.len });
+                return BufferError.OutOfBuffer;
+            }
+
             // how many bytes to remove
             var to_remove: u3 = try std.unicode.utf8ByteSequenceLength(line.data.items[remove_pos]);
             var removed = U8Slice.initEmpty(self.allocator);

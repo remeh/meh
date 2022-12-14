@@ -139,7 +139,7 @@ pub const WidgetList = struct {
 
         // TODO(remy): compute visible_offset
     }
-    
+
     pub fn nextPage(self: *WidgetList) void {
         if (self.filtered_entries.items.len < 1) {
             return;
