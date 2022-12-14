@@ -2,6 +2,7 @@ const std = @import("std");
 const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
+const Scaler = @import("scaler.zig").Scaler;
 const Vec4u = @import("vec.zig").Vec4u;
 const Vec2u = @import("vec.zig").Vec2u;
 const U8Slice = @import("u8slice.zig").U8Slice;
@@ -217,15 +218,24 @@ pub const Font = struct {
 
             if (it.glyph()[0] == char_tab) {
                 x_offset += self.font_size * 2;
-                continue;
+            } else {
+                self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, color, it.glyph());
+                x_offset += self.font_size / 2;
             }
-
-            self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, color, it.glyph());
-            x_offset += self.font_size / 2;
 
             if (!it.next()) {
                 break;
             }
         }
+    }
+
+    /// textPixelSize returns how many pixel are needed to draw the given text on one line.
+    pub fn textPixelSize(self: Font, scaler: Scaler, text: []const u8) usize {
+        if (text.len == 0) {
+            return 0;
+        }
+        var unscaled = @divTrunc(self.font_size, 2) * text.len;
+        var scaled = @floatToInt(usize, @divTrunc(@intToFloat(f32, unscaled), scaler.scale));
+        return scaled;
     }
 };
