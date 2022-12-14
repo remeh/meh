@@ -730,6 +730,16 @@ pub const App = struct {
                             self.widget_ripgrep.list.previous();
                         }
                     },
+                    c.SDLK_u => {
+                        if (ctrl) {
+                            self.widget_ripgrep.list.previousPage();
+                        }
+                    },
+                    c.SDLK_d => {
+                        if (ctrl) {
+                            self.widget_ripgrep.list.nextPage();
+                        }
+                    },
                     else => {},
                 }
             },
@@ -778,6 +788,16 @@ pub const App = struct {
                     c.SDLK_p => {
                         if (ctrl) {
                             self.widget_lookup.list.previous();
+                        }
+                    },
+                    c.SDLK_u => {
+                        if (ctrl) {
+                            self.widget_lookup.list.previousPage();
+                        }
+                    },
+                    c.SDLK_d => {
+                        if (ctrl) {
+                            self.widget_lookup.list.nextPage();
                         }
                     },
                     else => {},

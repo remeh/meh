@@ -45,6 +45,8 @@ pub const WidgetListEntry = struct {
     }
 };
 
+const page_jump: usize = 15;
+
 pub const WidgetList = struct {
     allocator: std.mem.Allocator,
     entries: std.ArrayList(WidgetListEntry),
@@ -136,6 +138,26 @@ pub const WidgetList = struct {
         }
 
         // TODO(remy): compute visible_offset
+    }
+    
+    pub fn nextPage(self: *WidgetList) void {
+        if (self.filtered_entries.items.len < 1) {
+            return;
+        }
+
+        self.selected_entry_idx = @min(self.selected_entry_idx + page_jump, self.filtered_entries.items.len - 1);
+    }
+
+    pub fn previousPage(self: *WidgetList) void {
+        if (self.filtered_entries.items.len < 1) {
+            return;
+        }
+
+        if (self.selected_entry_idx < page_jump) {
+            self.selected_entry_idx = 0;
+        } else {
+            self.selected_entry_idx -= page_jump;
+        }
     }
 
     /// filter filters the `entries` list using what's available in the `input`.
