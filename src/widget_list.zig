@@ -12,6 +12,7 @@ const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
 const SearchDirection = @import("editor.zig").SearchDirection;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
@@ -57,6 +58,9 @@ pub const WidgetList = struct {
     input: WidgetInput,
     label: U8Slice,
     selected_entry_idx: usize,
+    // when moving left/right because of long lines, how many glyphs we should offset with
+    x_offset: usize,
+
     // Constructors
     // ------------
 
@@ -69,6 +73,7 @@ pub const WidgetList = struct {
             .input = try WidgetInput.init(allocator),
             .label = U8Slice.initEmpty(allocator),
             .selected_entry_idx = 0,
+            .x_offset = 0,
         };
     }
 
@@ -113,6 +118,7 @@ pub const WidgetList = struct {
         self.deleteEntries();
         self.selected_entry_idx = 0;
         self.label.data.shrinkAndFree(0);
+        self.x_offset = 0;
     }
 
     pub fn next(self: *WidgetList) void {
@@ -157,6 +163,16 @@ pub const WidgetList = struct {
             self.selected_entry_idx = 0;
         } else {
             self.selected_entry_idx -= page_jump;
+        }
+    }
+
+    pub fn right(self: *WidgetList) void {
+        self.x_offset += 1;
+    }
+
+    pub fn left(self: *WidgetList) void {
+        if (self.x_offset > 0) {
+            self.x_offset -= 1;
         }
     }
 
@@ -267,16 +283,51 @@ pub const WidgetList = struct {
             Draw.rect(sdl_renderer, scaler, Vec2u{ .a = position.a, .b = position.b + 2 }, size, Colors.white);
         }
 
+        // maximum amount if visible glyph
+        var total_visible_glyph_count = @divTrunc(scaler.Scaleu(size.a), @divTrunc(font.font_size, 2)) - 1;
+        std.log.debug("visible glyph count: {d}", .{total_visible_glyph_count});
+
         switch (entry.type) {
             .Ripgrep => {
-                var filename = std.fmt.allocPrint(self.allocator, "{s}:{d}", .{ entry.data.bytes(), entry.data_int }) catch |err| {
+                var filename = std.fmt.allocPrint(self.allocator, "{s}:{d}  ", .{ entry.data.bytes(), entry.data_int }) catch |err| {
                     std.log.err("WidgetList.renderEntry: can't create filename with line number string: {}", .{err});
                     return;
                 };
                 var filename_size = font.textPixelSize(scaler, filename);
 
                 Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, filename);
-                Draw.text(font, scaler, Vec2u{ .a = position.a + 5 + filename_size + font.font_size, .b = position.b + 3 }, Colors.white, entry.label.bytes());
+
+                var content = entry.label.bytes();
+
+                // compute what's the space left for the result content
+
+                var content_visible_glyph_count: usize = 0;
+                if (total_visible_glyph_count > filename.len) {
+                    content_visible_glyph_count = total_visible_glyph_count - filename.len;
+                } else {
+                    std.log.warn("WidgetList.renderEntry: no space left to draw the content", .{});
+                    return;
+                }
+
+                // if everything fits, just draw it
+                if (content.len < content_visible_glyph_count) {
+                    Draw.text(font, scaler, Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 3 }, Colors.white, content);
+                } else {
+                    var it = UTF8Iterator.init(content, self.x_offset) catch |err| {
+                        std.log.err("WidgetList.renderEntry: can't create an UTF8Iterator: {}", .{err});
+                        return;
+                    };
+
+                    var start_bytes_offset = it.current_byte;
+                    var glyphs_count: usize = 1;
+                    while (it.next()) {
+                        glyphs_count += 1;
+                        if (!it.next() or glyphs_count > content_visible_glyph_count) {
+                            break;
+                        }
+                    }
+                    Draw.text(font, scaler, Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 3 }, Colors.white, content[start_bytes_offset..it.current_byte]);
+                }
 
                 self.allocator.free(filename); // TODO(remy): maybe consider using an ArenaAllocator here.
             },

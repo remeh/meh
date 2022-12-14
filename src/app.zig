@@ -148,6 +148,12 @@ pub const App = struct {
             return AppError.CantInit;
         }
 
+        // immediately give it the focus
+
+        c.SDL_RaiseWindow(sdl_window);
+
+        // create the renderer
+
         var sdl_renderer: ?*c.SDL_Renderer = c.SDL_CreateRenderer(sdl_window, -1, c.SDL_RENDERER_ACCELERATED);
         if (sdl_renderer == null) {
             std.log.err("App.init: can't create an SDL Renderer.", .{});
@@ -705,6 +711,7 @@ pub const App = struct {
                                     std.log.debug("App.lookupEvents: can't open file: {}", .{err});
                                     return;
                                 };
+                                self.render();
                                 self.currentWidgetTextEdit().goToLine(@intCast(usize, entry.data_int), true);
                                 // leave the widget
                                 self.focused_widget = FocusedWidget.Editor;
@@ -739,6 +746,12 @@ pub const App = struct {
                         if (ctrl) {
                             self.widget_ripgrep.list.nextPage();
                         }
+                    },
+                    c.SDLK_LEFT => {
+                        self.widget_ripgrep.list.left();
+                    },
+                    c.SDLK_RIGHT => {
+                        self.widget_ripgrep.list.right();
                     },
                     else => {},
                 }
@@ -799,6 +812,12 @@ pub const App = struct {
                         if (ctrl) {
                             self.widget_lookup.list.nextPage();
                         }
+                    },
+                    c.SDLK_LEFT => {
+                        self.widget_ripgrep.list.left();
+                    },
+                    c.SDLK_RIGHT => {
+                        self.widget_ripgrep.list.right();
                     },
                     else => {},
                 }

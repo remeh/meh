@@ -62,8 +62,6 @@ pub const UTF8Iterator = struct {
         return rv;
     }
 
-    //
-
     /// Compare it.current_byte or it.current_glyph before and after the call
     /// to make sure a move happened.
     pub fn prev(self: *UTF8Iterator) void {
