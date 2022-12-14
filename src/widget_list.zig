@@ -147,11 +147,13 @@ pub const WidgetList = struct {
             var add = (entered_filter.len == 0);
             if (entered_filter.len > 0) {
                 if ((self.filter_type == .Label or self.filter_type == .LabelAndData) and
-                    std.mem.containsAtLeast(u8, entry.label.bytes(), 1, entered_filter)) {
+                    std.mem.containsAtLeast(u8, entry.label.bytes(), 1, entered_filter))
+                {
                     add = true;
                 }
                 if ((self.filter_type == .Data or self.filter_type == .LabelAndData) and
-                    std.mem.containsAtLeast(u8, entry.data.bytes(), 1, entered_filter)) {
+                    std.mem.containsAtLeast(u8, entry.data.bytes(), 1, entered_filter))
+                {
                     add = true;
                 }
             }
@@ -230,7 +232,7 @@ pub const WidgetList = struct {
     }
 
     pub fn renderEntry(
-        _: *WidgetList,
+        self: *WidgetList,
         sdl_renderer: *c.SDL_Renderer,
         font: Font,
         scaler: Scaler,
@@ -239,13 +241,25 @@ pub const WidgetList = struct {
         entry: WidgetListEntry,
         selected: bool,
     ) void {
-        // TODO(remy): render an icon or such
-
         if (selected) {
             Draw.rect(sdl_renderer, scaler, Vec2u{ .a = position.a, .b = position.b + 2 }, size, Colors.white);
         }
 
-        Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, entry.label.bytes());
+        switch (entry.type) {
+            .Ripgrep => {
+                var filename = std.fmt.allocPrint(self.allocator, "{s}:{d}", .{ entry.data.bytes(), entry.data_int }) catch |err| {
+                    std.log.err("WidgetList.renderEntry: can't create filename with line number string: {}", .{err});
+                    return;
+                };
+                var filename_size = font.textPixelSize(scaler, filename);
+
+                Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, filename);
+                Draw.text(font, scaler, Vec2u{ .a = position.a + 5 + filename_size + font.font_size, .b = position.b + 3 }, Colors.white, entry.label.bytes());
+
+                self.allocator.free(filename); // TODO(remy): maybe consider using an ArenaAllocator here.
+            },
+            else => Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, entry.label.bytes()),
+        }
     }
 
     pub fn sortEntriesByLabel(self: *WidgetList) void {

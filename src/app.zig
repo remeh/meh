@@ -363,14 +363,11 @@ pub const App = struct {
             std.log.debug("App.openRipgrepResults: no results!", .{});
             return;
         }
-        
-        defer results.deinit();
-        
+
         self.widget_ripgrep.setResults(results) catch |err| {
             std.log.err("App.openRipgrepResults: {}", .{err});
         };
-        
-        std.log.debug("focused", .{});
+
         self.focused_widget = .Ripgrep;
     }
 
@@ -704,9 +701,13 @@ pub const App = struct {
                     c.SDLK_RETURN => {
                         if (self.widget_ripgrep.select()) |selected| {
                             if (selected) |entry| {
-                                std.log.debug("implement: {}", .{entry});
+                                self.openFile(entry.data.bytes()) catch |err| {
+                                    std.log.debug("App.lookupEvents: can't open file: {}", .{err});
+                                    return;
+                                };
+                                self.currentWidgetTextEdit().goToLine(@intCast(usize, entry.data_int), true);
                                 // leave the widget
-                                // self.focused_widget = FocusedWidget.Editor;
+                                self.focused_widget = FocusedWidget.Editor;
                             }
                         } else |err| {
                             std.log.err("App.ripgrepEvents: can't select current entry: {}", .{err});
@@ -856,6 +857,10 @@ pub const App = struct {
                                         return;
                                     };
                                     self.focused_widget = .Lookup;
+                                },
+                                c.SDLK_r => {
+                                    // re-open ripgrep results, but do not reset the widget
+                                    self.focused_widget = .Ripgrep;
                                 },
                                 else => _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),
                             }

@@ -11,7 +11,7 @@ pub const RipgrepError = error{
 pub const RipgrepResults = struct {
     allocator: std.mem.Allocator,
     stdout: []u8,
-    
+
     pub fn iterator(self: RipgrepResults, allocator: std.mem.Allocator) RipgrepResultsIterator {
         return RipgrepResultsIterator{
             .allocator = allocator,
@@ -39,7 +39,7 @@ pub const RipgrepResult = struct {
 pub const RipgrepResultsIterator = struct {
     allocator: std.mem.Allocator,
     it: TokenIterator(u8),
-    
+
     pub fn next(self: *RipgrepResultsIterator) ?RipgrepResult {
         if (self.it.next()) |line| {
             // using an utf8iterator to support filename with utf8 glyphs,
@@ -50,14 +50,14 @@ pub const RipgrepResultsIterator = struct {
                 std.log.err("RipgrepResultsIterator.next: can't create an utf8 iterator: {}", .{err});
                 return null;
             };
-            
+
             var start_idx: usize = 0;
             var idx: usize = 0;
             var token: usize = 0;
             var filename = U8Slice.initEmpty(self.allocator);
             var content = U8Slice.initEmpty(self.allocator);
             var line_number: usize = 0;
-            
+
             while (true) {
                 if (it.glyph()[0] == ':') {
                     switch (token) {
@@ -70,7 +70,7 @@ pub const RipgrepResultsIterator = struct {
                                 std.log.err("RipgrepResultsIterator: can't appendConst the filename: {}", .{err});
                                 return null;
                             };
-                            start_idx = idx+1;
+                            start_idx = idx + 1;
                         },
                         // line number
                         // -----------
@@ -81,12 +81,12 @@ pub const RipgrepResultsIterator = struct {
                                 std.log.err("RipgrepResultsIterator: filename can't appendConst: {}", .{err});
                                 return null;
                             };
-                            start_idx = idx+1;
+                            start_idx = idx + 1;
                         },
                         // col number and the rest is content
                         // ----------
                         2 => {
-                            start_idx = idx+1;
+                            start_idx = idx + 1;
                             content.appendConst(line[start_idx..line.len]) catch |err| {
                                 filename.deinit();
                                 content.deinit();
@@ -104,7 +104,7 @@ pub const RipgrepResultsIterator = struct {
 
                     token += 1;
                 }
-            
+
                 if (!it.next()) {
                     break;
                 }
@@ -129,8 +129,6 @@ pub const Ripgrep = struct {
         try args.append("rg");
         try args.append("--vimgrep");
         try args.append(pattern);
-        
-        std.log.debug("cwd: {s}", .{cwd});
 
         // FIXME(remy): this has a bug in the stdlib, if within the `exec` call
         // the spawn call succeed, but collecting the output doesn't, it doesn't
@@ -141,7 +139,7 @@ pub const Ripgrep = struct {
             .allocator = allocator,
             .argv = args.items,
             .cwd = cwd,
-            .max_output_bytes = 25*1024*1024,
+            .max_output_bytes = 25 * 1024 * 1024,
         });
         errdefer {
             allocator.free(result.stderr);
@@ -150,7 +148,7 @@ pub const Ripgrep = struct {
 
         // do not free the stdout, it will be owned by the RipgrepResults
         defer allocator.free(result.stderr);
-        
+
         return RipgrepResults{
             .allocator = allocator,
             .stdout = result.stdout,
