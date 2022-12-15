@@ -196,15 +196,15 @@ pub const WidgetCommand = struct {
                 var text_edit = app.currentWidgetTextEdit();
                 var word = try text_edit.editor.wordAt(text_edit.cursor.pos);
                 var results = Ripgrep.search(app.allocator, word, app.working_dir.bytes()) catch |err| {
-                    std.log.err("WidgetCommand: can't exec  'rg {s}': {}", .{ word, err });
+                    std.log.err("WidgetCommand: can't exec 'rg {s}': {}", .{ word, err });
                     return;
                 };
                 app.openRipgrepResults(results);
                 return;
             }
-            if (self.getArg(1)) |search| {
-                var results = Ripgrep.search(app.allocator, search, app.working_dir.bytes()) catch |err| {
-                    std.log.err("WidgetCommand: can't exec  'rg {s}': {}", .{ search, err });
+            if (self.rest(1)) |parameters| {
+                var results = Ripgrep.search(app.allocator, parameters, app.working_dir.bytes()) catch |err| {
+                    std.log.err("WidgetCommand: can't exec 'rg {s}': {}", .{ parameters, err });
                     return;
                 };
                 app.openRipgrepResults(results);
@@ -266,6 +266,7 @@ pub const WidgetCommand = struct {
 
     /// countArgs returns how many arguments there currently is in the buff.
     /// The first one (the command) is part of this total.
+    // TODO(remy): unit test
     fn countArgs(self: WidgetCommand) usize {
         var rv: usize = 1;
         var i: usize = 0;
@@ -295,6 +296,7 @@ pub const WidgetCommand = struct {
 
     /// getArg returns the arg at the given position.
     /// Starts at 0, 0 being the command.
+    // TODO(remy): unit test
     fn getArg(self: WidgetCommand, idx: usize) ?[]const u8 {
         if (idx > self.countArgs()) {
             return null;
@@ -314,7 +316,7 @@ pub const WidgetCommand = struct {
         }
 
         var arg: ?[]const u8 = undefined;
-        var it = std.mem.split(u8, buff[0..size], " ");
+        var it = std.mem.split(u8, buff[0..size], " "); // TODO(remy): use tokenize instead
         var i: usize = 0;
         arg = it.first();
         while (arg != null) {
@@ -330,6 +332,33 @@ pub const WidgetCommand = struct {
         }
 
         return null;
+    }
+
+    /// rest returns the rest of the input starting at the given parameter,
+    /// useful to feed it to an external tool such as ripgrep or fd.
+    // TODO(remy): unit test
+    fn rest(self: WidgetCommand, idx: usize) ?[]const u8 {
+        if (idx > self.countArgs()) {
+            return null;
+        }
+
+        var line = self.input.text() catch {
+            return null;
+        };
+        var buff = line.bytes();
+
+        var i: usize = 0;
+        var n_count: usize = 0;
+        while (i < buff.len) : (i += 1) {
+            if (buff[i] == ' ') {
+                n_count += 1;
+                if (n_count == idx) {
+                    return buff[i + 1 ..];
+                }
+            }
+        }
+
+        return buff[i..];
     }
 };
 

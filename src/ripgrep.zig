@@ -5,6 +5,7 @@ const U8Slice = @import("u8slice.zig").U8Slice;
 const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 
 pub const RipgrepError = error{
+    NoSearchPattern,
     TooManyResults,
 };
 
@@ -122,13 +123,15 @@ pub const RipgrepResultsIterator = struct {
 };
 
 pub const Ripgrep = struct {
-    pub fn search(allocator: std.mem.Allocator, pattern: []const u8, cwd: []const u8) !RipgrepResults {
+    pub fn search(allocator: std.mem.Allocator, parameters: []const u8, cwd: []const u8) !RipgrepResults {
         var args = std.ArrayList([]const u8).init(allocator);
         defer args.deinit();
 
+        std.log.debug("({s})", .{parameters});
+
         try args.append("rg");
         try args.append("--vimgrep");
-        try args.append(pattern);
+        try args.append(parameters);
 
         // FIXME(remy): this has a bug in the stdlib, if within the `exec` call
         // the spawn call succeed, but collecting the output doesn't, it doesn't
