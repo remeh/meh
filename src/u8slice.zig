@@ -94,7 +94,7 @@ pub const UTF8Iterator = struct {
     /// Returns true if there is data left, return false if there is none (but still
     /// increase the value a last time).
     pub fn next(self: *UTF8Iterator) bool {
-        if (self.text.len == self.current_byte + self.current_glyph_size) {
+        if (self.text.len <= self.current_byte + self.current_glyph_size) {
             self.current_byte += 1;
             self.current_glyph += self.current_glyph_size;
             self.current_glyph_size = 1;

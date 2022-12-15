@@ -727,13 +727,13 @@ pub const App = struct {
                         self.widget_ripgrep.list.reset();
                         self.focused_widget = FocusedWidget.Editor;
                     },
-                    c.SDLK_n => {
-                        if (ctrl) {
+                    c.SDLK_n, c.SDLK_DOWN => {
+                        if (ctrl or event.key.keysym.sym == c.SDLK_DOWN) {
                             self.widget_ripgrep.list.next();
                         }
                     },
-                    c.SDLK_p => {
-                        if (ctrl) {
+                    c.SDLK_p, c.SDLK_UP => {
+                        if (ctrl or event.key.keysym.sym == c.SDLK_UP) {
                             self.widget_ripgrep.list.previous();
                         }
                     },

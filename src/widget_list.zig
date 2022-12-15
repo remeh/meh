@@ -200,6 +200,7 @@ pub const WidgetList = struct {
             }
         }
         self.selected_entry_idx = 0;
+        self.x_offset = 0;
     }
 
     pub fn render(
@@ -285,7 +286,6 @@ pub const WidgetList = struct {
 
         // maximum amount if visible glyph
         var total_visible_glyph_count = @divTrunc(scaler.Scaleu(size.a), @divTrunc(font.font_size, 2)) - 1;
-        std.log.debug("visible glyph count: {d}", .{total_visible_glyph_count});
 
         switch (entry.type) {
             .Ripgrep => {
@@ -309,23 +309,18 @@ pub const WidgetList = struct {
                     return;
                 }
 
-                // if everything fits, just draw it
-                if (content.len < content_visible_glyph_count) {
-                    Draw.text(font, scaler, Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 3 }, Colors.white, content);
-                } else {
-                    var it = UTF8Iterator.init(content, self.x_offset) catch |err| {
-                        std.log.err("WidgetList.renderEntry: can't create an UTF8Iterator: {}", .{err});
-                        return;
-                    };
+                var it = UTF8Iterator.init(content, self.x_offset) catch |err| {
+                    std.log.err("WidgetList.renderEntry: can't create an UTF8Iterator: {}", .{err});
+                    return;
+                };
 
-                    var start_bytes_offset = it.current_byte;
-                    var glyphs_count: usize = 1;
-                    while (it.next()) {
-                        glyphs_count += 1;
-                        if (!it.next() or glyphs_count > content_visible_glyph_count) {
-                            break;
-                        }
-                    }
+                var start_bytes_offset = it.current_byte;
+                var glyphs_count: usize = 0;
+                while (glyphs_count <= content_visible_glyph_count and it.next()) {
+                    glyphs_count += 1;
+                }
+
+                if (glyphs_count > 0) {
                     Draw.text(font, scaler, Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 3 }, Colors.white, content[start_bytes_offset..it.current_byte]);
                 }
 
