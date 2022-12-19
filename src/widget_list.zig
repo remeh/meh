@@ -321,10 +321,11 @@ pub const WidgetList = struct {
                 }
 
                 if (glyphs_count > 0) {
-                    Draw.text(font,
+                    Draw.text(
+                        font,
                         scaler,
                         Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 3 },
-                        content_visible_glyph_count*font.font_size/2,
+                        content_visible_glyph_count * font.font_size / 2,
                         Colors.white,
                         content[start_bytes_offset..it.current_byte],
                     );
@@ -340,7 +341,8 @@ pub const WidgetList = struct {
                     return;
                 };
 
-                Draw.text(font,
+                Draw.text(
+                    font,
                     scaler,
                     Vec2u{ .a = position.a + 5, .b = position.b + 3 },
                     size.a,

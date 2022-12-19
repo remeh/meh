@@ -346,9 +346,11 @@ pub const Editor = struct {
     /// deleteGlyph deletes on glyph from the underlying buffer.
     pub fn deleteGlyph(self: *Editor, pos: Vec2u, direction: DeleteDirection, triggerer: Triggerer) !void {
         var line = try self.buffer.getLine(pos.b);
-        if (direction == .Left and pos.a == 0 and pos.b != 0) {
-            // TODO(remy): removing a line.
-            std.log.debug("TODO(remy): removing a line", .{});
+        if (direction == .Left and pos.a == 0) {
+            if (pos.b != 0) {
+                // TODO(remy): removing a line.
+                std.log.debug("TODO(remy): removing a line", .{});
+            }
         } else {
             var remove_pos: usize = 0;
             if (direction == .Left) {

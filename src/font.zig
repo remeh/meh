@@ -223,7 +223,7 @@ pub const Font = struct {
                 self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, color, it.glyph());
                 x_offset += self.font_size / 2;
             }
-            
+
             if (max_width > 0 and x_offset >= max_width) {
                 break;
             }
