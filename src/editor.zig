@@ -29,7 +29,7 @@ pub const Triggerer = enum {
 pub const SearchDirection = enum { Before, After };
 pub const DeleteDirection = enum { Left, Right };
 
-pub const Punctuation = ",./&\"'[|]{}()-=:;<>*!?@#+~` \t\n";
+pub const punctuation = ",./&\"'[|]{}()-=:;<>*!?@#+~` \t\n";
 
 /// Editor helps editing a Buffer.
 /// Provides UTF8 methods to insert text, remove text, history support, etc.
@@ -399,7 +399,7 @@ pub const Editor = struct {
         // right
         var it = try UTF8Iterator.init(line.bytes(), position.a);
         while (true) {
-            if (std.mem.indexOf(u8, Punctuation, it.glyph())) |pos| {
+            if (std.mem.indexOf(u8, punctuation, it.glyph())) |pos| {
                 if (pos >= 0) {
                     break;
                 }
@@ -420,7 +420,7 @@ pub const Editor = struct {
                 break;
             }
 
-            if (std.mem.indexOf(u8, Punctuation, it.glyph())) |pos| {
+            if (std.mem.indexOf(u8, punctuation, it.glyph())) |pos| {
                 if (pos >= 0) {
                     break;
                 }

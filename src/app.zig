@@ -420,7 +420,7 @@ pub const App = struct {
 
             var widget_text_edit = &self.textedits.items[self.current_widget_text_edit];
 
-            Draw.text(self.current_font, scaler, Vec2u{ .a = 2, .b = 2 }, Colors.white, widget_text_edit.editor.buffer.fullpath.bytes());
+            Draw.text(self.current_font, scaler, Vec2u{ .a = 2, .b = 2 }, widget_size.a, Colors.white, widget_text_edit.editor.buffer.fullpath.bytes());
 
             widget_text_edit.render(
                 self.sdl_renderer,
@@ -446,7 +446,7 @@ pub const App = struct {
 
                 var widget_text_edit_alt = &self.textedits.items[self.current_widget_text_edit_alt];
 
-                Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a, .b = 2 }, Colors.white, widget_text_edit_alt.editor.buffer.fullpath.bytes());
+                Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a, .b = 2 }, widget_size.a, Colors.white, widget_text_edit_alt.editor.buffer.fullpath.bytes());
 
                 widget_text_edit_alt.render(
                     self.sdl_renderer,

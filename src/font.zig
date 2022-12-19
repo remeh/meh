@@ -204,7 +204,8 @@ pub const Font = struct {
     }
 
     /// drawText draws the given text at the given position, position being in window coordinates.
-    pub fn drawText(self: Font, position: Vec2u, color: Vec4u, text: []const u8) void {
+    /// If `max_width` > 0, stops drawing when it has been reached.
+    pub fn drawText(self: Font, position: Vec2u, max_width: usize, color: Vec4u, text: []const u8) void {
         var x_offset: usize = 0;
         var it = UTF8Iterator.init(text, 0) catch |err| {
             std.log.err("Font.drawText: {}", .{err});
@@ -221,6 +222,10 @@ pub const Font = struct {
             } else {
                 self.drawGlyph(Vec2u{ .a = position.a + x_offset, .b = position.b }, color, it.glyph());
                 x_offset += self.font_size / 2;
+            }
+            
+            if (max_width > 0 and x_offset >= max_width) {
+                break;
             }
 
             if (!it.next()) {

@@ -73,13 +73,14 @@ pub const Draw = struct {
         );
     }
 
-    pub fn text(font: Font, scaler: Scaler, position: Vec2u, color: Vec4u, str: []const u8) void {
+    pub fn text(font: Font, scaler: Scaler, position: Vec2u, max_width: usize, color: Vec4u, str: []const u8) void {
         if (str.len == 0) {
             return;
         }
 
         var scaled_pos = scaler.Scale2u(position);
-        font.drawText(scaled_pos, color, str);
+        var scaled_max_width = scaler.Scaleu(max_width);
+        font.drawText(scaled_pos, scaled_max_width, color, str);
     }
 
     /// glyph draws the given glyph.

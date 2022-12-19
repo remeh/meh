@@ -33,7 +33,6 @@ const string_tab = @import("u8slice.zig").string_tab;
 
 // TODO(remy): where should we define this?
 // TODO(remy): comment
-// TODO(remy): comment
 pub const glyph_offset_before_move = 5;
 // TODO(remy): comment
 pub const tab_spaces = 4;
@@ -228,7 +227,7 @@ pub const WidgetTextEdit = struct {
                 text_color = Colors.white;
             }
 
-            Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset }, text_color, cbuff);
+            Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset }, 0, text_color, cbuff);
 
             if (i == self.cursor.pos.b) {
                 Draw.fillRect(

@@ -230,7 +230,7 @@ pub const WidgetList = struct {
         // ----
 
         var label_pos = Vec2u{ .a = position.a, .b = position.b + (one_char_size.b * 2) };
-        Draw.text(font, scaler, label_pos, Colors.white, self.label.bytes());
+        Draw.text(font, scaler, label_pos, widget_size.a, Colors.white, self.label.bytes());
 
         // list the entries
         // ----
@@ -295,7 +295,7 @@ pub const WidgetList = struct {
                 };
                 var filename_size = font.textPixelSize(scaler, filename);
 
-                Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, filename);
+                Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, size.a, Colors.white, filename);
 
                 var content = entry.label.bytes();
 
@@ -321,12 +321,18 @@ pub const WidgetList = struct {
                 }
 
                 if (glyphs_count > 0) {
-                    Draw.text(font, scaler, Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 3 }, Colors.white, content[start_bytes_offset..it.current_byte]);
+                    Draw.text(font,
+                        scaler,
+                        Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 3 },
+                        content_visible_glyph_count*font.font_size/2,
+                        Colors.white,
+                        content[start_bytes_offset..it.current_byte],
+                    );
                 }
 
                 self.allocator.free(filename); // TODO(remy): maybe consider using an ArenaAllocator here.
             },
-            else => Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, Colors.white, entry.label.bytes()),
+            else => Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, size.a, Colors.white, entry.label.bytes()),
         }
     }
 
