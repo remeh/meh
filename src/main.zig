@@ -12,12 +12,15 @@ pub fn main() !void {
     // app
 
     var app = try App.init(allocator);
-    if (std.mem.len(std.os.argv) <= 1) {
+    if (std.os.argv.len <= 1) {
         try app.openFile("src/app.zig");
     } else {
-        var arg = std.os.argv[1];
-        var len = std.mem.len(arg);
-        try app.openFile(arg[0..len]);
+        var i: usize = 1;
+        while (i < std.os.argv.len) : (i += 1) {
+            var arg = std.os.argv[i];
+            var len = std.mem.len(arg);
+            try app.openFile(arg[0..len]);
+        }
     }
     errdefer app.deinit();
     try app.mainloop();

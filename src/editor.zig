@@ -215,6 +215,7 @@ pub const Editor = struct {
     /// deleteChunk removes chunk of text in lines.
     /// `start_pos` and `end_pos` are in glyph.
     /// Returns the new cursor position.
+    // TODO(remy): unit test
     pub fn deleteChunk(self: *Editor, start_pos: Vec2u, end_pos: Vec2u) !Vec2u {
         if (start_pos.b < 0 or end_pos.b >= self.buffer.lines.items.len) {
             return BufferError.OutOfBuffer;
