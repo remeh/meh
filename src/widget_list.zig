@@ -332,7 +332,22 @@ pub const WidgetList = struct {
 
                 self.allocator.free(filename); // TODO(remy): maybe consider using an ArenaAllocator here.
             },
-            else => Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, size.a, Colors.white, entry.label.bytes()),
+            else => {
+                var content = entry.label.bytes();
+
+                var it = UTF8Iterator.init(content, self.x_offset) catch |err| {
+                    std.log.err("WidgetList.renderEntry: can't create an UTF8Iterator: {}", .{err});
+                    return;
+                };
+
+                Draw.text(font,
+                    scaler,
+                    Vec2u{ .a = position.a + 5, .b = position.b + 3 },
+                    size.a,
+                    Colors.white,
+                    content[it.current_byte..],
+                );
+            },
         }
     }
 

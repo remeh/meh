@@ -793,13 +793,13 @@ pub const App = struct {
                         self.widget_lookup.list.reset();
                         self.focused_widget = FocusedWidget.Editor;
                     },
-                    c.SDLK_n => {
-                        if (ctrl) {
+                    c.SDLK_n, c.SDLK_DOWN => {
+                        if (ctrl or event.key.keysym.sym == c.SDLK_DOWN) {
                             self.widget_lookup.list.next();
                         }
                     },
-                    c.SDLK_p => {
-                        if (ctrl) {
+                    c.SDLK_p, c.SDLK_UP => {
+                        if (ctrl or event.key.keysym.sym == c.SDLK_UP) {
                             self.widget_lookup.list.previous();
                         }
                     },
@@ -814,10 +814,10 @@ pub const App = struct {
                         }
                     },
                     c.SDLK_LEFT => {
-                        self.widget_ripgrep.list.left();
+                        self.widget_lookup.list.left();
                     },
                     c.SDLK_RIGHT => {
-                        self.widget_ripgrep.list.right();
+                        self.widget_lookup.list.right();
                     },
                     else => {},
                 }
