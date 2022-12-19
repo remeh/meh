@@ -255,7 +255,6 @@ pub const Editor = struct {
 
             // starting line has to be completely cleaned
             if (i == start_pos.b and start_pos.a == 0 and (end_pos.b > start_pos.b or end_pos.a == line_size - 1)) {
-                std.log.debug("deleted start line {d}", .{i});
                 self.deleteLine(i - line_removed, .Input);
                 line_removed += 1;
                 continue;
@@ -263,7 +262,6 @@ pub const Editor = struct {
 
             // starting line only has a chunk to remove
             if (i == start_pos.b and start_pos.a > 0) {
-                std.log.debug("deleted {d} chars on line {d}", .{ line_size - start_pos.a, i - line_removed });
                 // we have to partially removes data from the first line
                 var j: usize = 0;
                 while (j < line_size - start_pos.a) : (j += 1) {
@@ -273,7 +271,6 @@ pub const Editor = struct {
 
             // in between lines can be simply removed
             if (i > start_pos.b and i < end_pos.b) {
-                std.log.debug("deleted middle line {d}", .{i - line_removed});
                 self.deleteLine(i - line_removed, .Input);
                 line_removed += 1;
                 continue;
@@ -282,7 +279,6 @@ pub const Editor = struct {
             if (i == end_pos.b) {
                 // last line has to be completely removed
                 if (end_pos.a == line_size - 1) {
-                    std.log.debug("last line {d} deleted", .{end_pos.b - line_removed});
                     self.deleteLine(end_pos.b - line_removed, .Input);
                     line_removed += 1;
                     continue;
@@ -291,13 +287,11 @@ pub const Editor = struct {
                 // last line has only a part of it which is removed
                 // first, remove that chunk
                 var j: usize = 0;
-                std.log.debug("delete {d} glyphs", .{end_pos.a});
                 while (j < end_pos.a) : (j += 1) {
                     try self.deleteGlyph(Vec2u{ .a = 0, .b = end_pos.b - line_removed }, .Right, .Input);
                 }
 
                 if (start_pos.a > 0) {
-                    std.log.debug("insert text '{s}'", .{line.bytes()});
                     // then, copy what's left on top of the cursor
                     try self.insertUtf8Text(Vec2u{ .a = start_pos.a, .b = start_pos.b }, line.bytes(), .Input);
 
@@ -345,7 +339,7 @@ pub const Editor = struct {
 
         var utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
 
-        self.historyAppend(ChangeType.InsertUtf8Char, try U8Slice.initFromSlice(self.allocator, txt), utf8_pos, triggerer);
+        self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), utf8_pos, triggerer);
     }
 
     /// deleteGlyph deletes on glyph from the underlying buffer.
@@ -376,7 +370,7 @@ pub const Editor = struct {
             }
 
             var utf8_pos = Vec2u{ .a = remove_pos, .b = pos.b };
-            self.historyAppend(ChangeType.DeleteUtf8Char, removed, utf8_pos, triggerer);
+            self.historyAppend(ChangeType.DeleteGlyph, removed, utf8_pos, triggerer);
         }
     }
 

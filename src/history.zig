@@ -6,16 +6,16 @@ const Vec2u = @import("vec.zig").Vec2u;
 
 // TODO(remy): comment
 pub const ChangeType = enum {
-    /// `DeleteUtf8Char` is the action of having removed a character in a line.
+    /// `DeleteGlyph` is the action of having removed a character in a line.
     /// The vector `pos` contains the position of the removed character
     /// before it was removed. This pos is in utf8.
     /// Deleted utf8 is available in `data`.
-    DeleteUtf8Char,
-    /// `InsertUtf8Char` is the action of inserting an utf8 character in a line.
+    DeleteGlyph,
+    /// `InsertUtf8Text` is the action of inserting an utf8 character in a line.
     /// The vector `pos` contains the position of the inserted character
     /// the position it is inserted. This pos is in utf8.
     /// There is no data in `data`.
-    InsertUtf8Char,
+    InsertUtf8Text,
     /// `DeleteLine` is the action of a completely deleted line.
     /// The vector `pos` contains the line at which it was before deletion.
     /// Deleted line is available in `data`.
@@ -52,10 +52,10 @@ pub const Change = struct {
             .DeleteLine => {
                 editor.deleteLine(self.pos.b, .Redo);
             },
-            .InsertUtf8Char => {
+            .InsertUtf8Text => {
                 try editor.insertUtf8Text(self.pos, self.data.bytes(), .Redo);
             },
-            .DeleteUtf8Char => {
+            .DeleteGlyph => {
                 try editor.deleteGlyph(self.pos, .Right, .Redo);
             },
         }
@@ -75,14 +75,14 @@ pub const Change = struct {
                 var data = editor.buffer.lines.orderedRemove(self.pos.b + 1); // XXX(remy): are we sure with this +1?
                 data.deinit();
             },
-            .InsertUtf8Char => {
+            .InsertUtf8Text => {
                 var line = try editor.buffer.getLine(self.pos.b);
                 var i: usize = 0;
                 while (i < self.data.size()) : (i += 1) {
                     _ = line.data.orderedRemove(self.pos.a);
                 }
             },
-            .DeleteUtf8Char => {
+            .DeleteGlyph => {
                 var line = try editor.buffer.getLine(@intCast(u64, self.pos.b));
                 try line.data.insertSlice(self.pos.a, self.data.bytes());
             },
