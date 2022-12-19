@@ -62,7 +62,6 @@ pub const Change = struct {
     }
 
     // TODO(remy): comment
-    /// Returns a change representing the "redo" change to redo something undone.
     pub fn undo(self: *Change, editor: *Editor) !void {
         switch (self.type) {
             .InsertNewLine => {
@@ -77,14 +76,10 @@ pub const Change = struct {
                 data.deinit();
             },
             .InsertUtf8Char => {
-                // size of the utf8 char
                 var line = try editor.buffer.getLine(self.pos.b);
-                var char_pos = self.pos.a;
-                var glyph_size = try std.unicode.utf8ByteSequenceLength(line.data.items[char_pos]);
-                // store it for the redo
-                try self.data.appendConst(line.data.items[char_pos .. char_pos + glyph_size]);
-                while (glyph_size > 0) : (glyph_size -= 1) {
-                    _ = line.data.orderedRemove(char_pos);
+                var i: usize = 0;
+                while (i < self.data.size()) : (i += 1) {
+                    _ = line.data.orderedRemove(self.pos.a);
                 }
             },
             .DeleteUtf8Char => {

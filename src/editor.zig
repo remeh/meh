@@ -232,25 +232,38 @@ pub const Editor = struct {
             return Vec2u{ .a = start_pos.a, .b = start_pos.b };
         }
 
-        // multiple lines to delete
-        // ------------------------
+        // only full lines are selected, we want to delete
+        // all of them completely
+        // -----------------------------------------------
 
-        var i: usize = 0;
+        if (start_pos.a == 0 and end_pos.a == 0) {
+            var i: usize = start_pos.b;
+            while (i < end_pos.b) : (i += 1) {
+                self.deleteLine(start_pos.b, .Input);
+            }
+            return Vec2u{ .a = start_pos.a, .b = start_pos.b };
+        }
+
+        // multiple lines to deal with
+        // ---------------------------
+
+        var i: usize = start_pos.b;
         var line_removed: usize = 0;
         while (i <= end_pos.b) : (i += 1) {
             var line = try self.buffer.getLine(i - line_removed);
             var line_size = try line.utf8size();
 
-            // starting line has to be complete deleted
-            if (start_pos.a == 0 and i == start_pos.b and (end_pos.b > start_pos.b or end_pos.a == line_size - 1)) {
-                // we have to completely delete the first line
-                self.deleteLine(start_pos.b - line_removed, .Input);
+            // starting line has to be completely cleaned
+            if (i == start_pos.b and start_pos.a == 0 and (end_pos.b > start_pos.b or end_pos.a == line_size - 1)) {
+                std.log.debug("deleted start line {d}", .{i});
+                self.deleteLine(i - line_removed, .Input);
                 line_removed += 1;
                 continue;
             }
 
             // starting line only has a chunk to remove
-            if (start_pos.a > 0 and i == start_pos.b) {
+            if (i == start_pos.b and start_pos.a > 0) {
+                std.log.debug("deleted {d} chars on line {d}", .{ line_size - start_pos.a, i - line_removed });
                 // we have to partially removes data from the first line
                 var j: usize = 0;
                 while (j < line_size - start_pos.a) : (j += 1) {
@@ -260,31 +273,37 @@ pub const Editor = struct {
 
             // in between lines can be simply removed
             if (i > start_pos.b and i < end_pos.b) {
+                std.log.debug("deleted middle line {d}", .{i - line_removed});
                 self.deleteLine(i - line_removed, .Input);
                 line_removed += 1;
+                continue;
             }
 
-            // ending line only has a chunk to remove, we have to take all what's left on the end
-            // line, and put it on the cursor position
-            if (i == end_pos.b and end_pos.a > 0 and end_pos.a < line_size) {
-                var j: usize = end_pos.a - 1;
-                var k: usize = 0;
-
-                var it = try UTF8Iterator.init(line.bytes(), j);
-                while (j < line_size) : (j += 1) {
-                    if (it.next()) {
-                        try self.insertUtf8Text(Vec2u{ .a = start_pos.a + k, .b = start_pos.b }, it.glyph(), .Input);
-                    }
-                    k += 1;
+            if (i == end_pos.b) {
+                // last line has to be completely removed
+                if (end_pos.a == line_size - 1) {
+                    std.log.debug("last line {d} deleted", .{end_pos.b - line_removed});
+                    self.deleteLine(end_pos.b - line_removed, .Input);
+                    line_removed += 1;
+                    continue;
                 }
 
-                j = 0;
+                // last line has only a part of it which is removed
+                // first, remove that chunk
+                var j: usize = 0;
+                std.log.debug("delete {d} glyphs", .{end_pos.a});
                 while (j < end_pos.a) : (j += 1) {
-                    try self.deleteGlyph(Vec2u{ .a = 0, .b = i - line_removed }, .Right, .Input);
+                    try self.deleteGlyph(Vec2u{ .a = 0, .b = end_pos.b - line_removed }, .Right, .Input);
                 }
 
-                self.deleteLine(i - line_removed, .Input);
-                line_removed += 1;
+                if (start_pos.a > 0) {
+                    std.log.debug("insert text '{s}'", .{line.bytes()});
+                    // then, copy what's left on top of the cursor
+                    try self.insertUtf8Text(Vec2u{ .a = start_pos.a, .b = start_pos.b }, line.bytes(), .Input);
+
+                    // remove the line we copied data from
+                    self.deleteLine(end_pos.b - line_removed, .Input);
+                }
             }
         }
 
@@ -325,13 +344,14 @@ pub const Editor = struct {
         try line.data.insertSlice(insert_pos, txt);
 
         var utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
-        self.historyAppend(ChangeType.InsertUtf8Char, U8Slice.initEmpty(self.allocator), utf8_pos, triggerer);
+
+        self.historyAppend(ChangeType.InsertUtf8Char, try U8Slice.initFromSlice(self.allocator, txt), utf8_pos, triggerer);
     }
 
     /// deleteGlyph deletes on glyph from the underlying buffer.
     pub fn deleteGlyph(self: *Editor, pos: Vec2u, direction: DeleteDirection, triggerer: Triggerer) !void {
         var line = try self.buffer.getLine(pos.b);
-        if (direction == .Left and pos.a == 0) {
+        if (direction == .Left and pos.a == 0 and pos.b != 0) {
             // TODO(remy): removing a line.
             std.log.debug("TODO(remy): removing a line", .{});
         } else {
