@@ -158,7 +158,7 @@ pub const WidgetLookup = struct {
         Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Vec4u{ .a = 20, .b = 20, .c = 20, .d = 130 });
         Draw.fillRect(sdl_renderer, scaler, position, widget_size, Vec4u{ .a = 20, .b = 20, .c = 20, .d = 230 });
 
-        // list widge
+        // list widget
 
         self.list.render(
             sdl_renderer,

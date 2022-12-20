@@ -11,7 +11,9 @@ const RipgrepResults = @import("ripgrep.zig").RipgrepResults;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
+const WidgetCommandError = @import("widget_command.zig").WidgetCommandError;
 const WidgetLookup = @import("widget_lookup.zig").WidgetLookup;
+const WidgetMessageBox = @import("widget_messagebox.zig").WidgetMessageBox;
 const WidgetRipgrep = @import("widget_ripgrep.zig").WidgetRipgrep;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
@@ -30,6 +32,7 @@ pub const FocusedWidget = enum {
     Command,
     Lookup,
     Ripgrep,
+    MessageBox,
 };
 
 pub const FocusedEditor = enum {
@@ -60,6 +63,7 @@ pub const App = struct {
     allocator: std.mem.Allocator,
     widget_command: WidgetCommand,
     widget_lookup: WidgetLookup,
+    widget_messagebox: WidgetMessageBox,
     widget_ripgrep: WidgetRipgrep,
     textedits: std.ArrayList(WidgetTextEdit),
     sdl_window: *c.SDL_Window,
@@ -182,6 +186,7 @@ pub const App = struct {
             .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
             .widget_command = try WidgetCommand.init(allocator),
             .widget_lookup = try WidgetLookup.init(allocator),
+            .widget_messagebox = WidgetMessageBox.init(allocator),
             .widget_ripgrep = try WidgetRipgrep.init(allocator),
             .current_widget_text_edit = 0,
             .current_widget_text_edit_alt = 0,
@@ -365,8 +370,11 @@ pub const App = struct {
     // TODO(remy): comment
     pub fn openRipgrepResults(self: *App, results: RipgrepResults) void {
         if (results.stdout.len == 0) {
-            // TODO(remy): no results
-            std.log.debug("App.openRipgrepResults: no results!", .{});
+            self.widget_messagebox.set("No results!", .RipgrepNoResults) catch |err| {
+                std.log.err("App.openRipgrepResults: can't show message box: {}", .{err});
+                return;
+            };
+            self.focused_widget = .MessageBox;
             return;
         }
 
@@ -468,7 +476,16 @@ pub const App = struct {
                 self.current_font,
                 scaler,
                 self.window_scaled_size, // used for the overlay
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = 50 },
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.1) },
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = 50 },
+                one_char_size,
+            ),
+            .MessageBox => self.widget_messagebox.render(
+                self.sdl_renderer,
+                self.current_font,
+                scaler,
+                self.window_scaled_size, // used for the overlay
+                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.1) },
                 Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = 50 },
                 one_char_size,
             ),
@@ -636,6 +653,9 @@ pub const App = struct {
                         self.ripgrepEvents(event);
                         to_render = true;
                     },
+                    .MessageBox => {
+                        self.messageBoxEvents(event);
+                    },
                 }
 
                 // the focus widget changed, trigger an immedate repaint
@@ -670,7 +690,15 @@ pub const App = struct {
                     c.SDLK_RETURN => {
                         self.focused_widget = FocusedWidget.Editor;
                         self.widget_command.interpret(self) catch |err| {
-                            std.log.err("App.commandEvents: can't start interpert: {}", .{err});
+                            if (err == WidgetCommandError.UnknownCommand) {
+                                self.widget_messagebox.set("Unknown command.", .UnknownCommand) catch |set_err| {
+                                    std.log.err("App.commandEvents: can't show messagebox error: {}", .{set_err});
+                                    return;
+                                };
+                                self.focused_widget = .MessageBox;
+                                return;
+                            }
+                            std.log.err("App.commandEvents: can't interpret: {}", .{err});
                             return;
                         };
                         self.widget_command.reset();
@@ -696,11 +724,26 @@ pub const App = struct {
         }
     }
 
+    fn messageBoxEvents(self: *App, event: c.SDL_Event) void {
+        switch (event.type) {
+            c.SDL_KEYDOWN => {
+                switch (event.key.keysym.sym) {
+                    c.SDLK_RETURN => {
+                        self.focused_widget = .Editor;
+                    },
+                    c.SDLK_ESCAPE => {
+                        self.focused_widget = .Editor;
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+
     fn ripgrepEvents(self: *App, event: c.SDL_Event) void {
         var input_state = c.SDL_GetKeyboardState(null);
         var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
-        //        var shift: bool = input_state[c.SDL_SCANCODE_LSHIFT] == 1 or input_state[c.SDL_SCANCODE_RSHIFT] == 1;
-        //        var cmd: bool = input_state[c.SDL_SCANCODE_LGUI] == 1 or input_state[c.SDL_SCANCODE_RGUI] == 1;
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {

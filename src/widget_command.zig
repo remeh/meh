@@ -22,8 +22,9 @@ const Insert = @import("widget_text_edit.zig").Insert;
 
 const char_space = @import("u8slice.zig").char_space;
 
-const WidgetCommandError = error{
+pub const WidgetCommandError = error{
     ArgsOutOfBounds,
+    UnknownCommand,
 };
 
 // TODO(remy): comment
@@ -246,12 +247,13 @@ pub const WidgetCommand = struct {
             if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
                 var wt = app.currentWidgetTextEdit();
                 wt.goToLine(line_number, true);
-            } else |err| {
-                std.log.warn("WidgetCommand.interpret: can't read line number: {}", .{err});
+            } else |_| {
+                // it's not a number, let's continue
             }
         }
 
         self.input.reset();
+        return WidgetCommandError.UnknownCommand;
     }
 
     pub fn reset(self: *WidgetCommand) void {
