@@ -247,6 +247,7 @@ pub const WidgetCommand = struct {
             if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
                 var wt = app.currentWidgetTextEdit();
                 wt.goToLine(line_number, true);
+                return;
             } else |_| {
                 // it's not a number, let's continue
             }
