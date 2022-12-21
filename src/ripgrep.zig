@@ -127,8 +127,6 @@ pub const Ripgrep = struct {
         var args = std.ArrayList([]const u8).init(allocator);
         defer args.deinit();
 
-        std.log.debug("({s})", .{parameters});
-
         try args.append("rg");
         try args.append("--vimgrep");
         try args.append(parameters);

@@ -69,6 +69,8 @@ pub const WidgetRipgrep = struct {
         self.list.reset();
 
         var it = results.iterator(self.allocator);
+        defer results.deinit();
+
         while (it.next()) |result| {
             // no need to free the data in result as it will be managed
             // by the WidgetListEntry.

@@ -78,6 +78,7 @@ pub const Editor = struct {
     /// If the append fails, the memory is deleted to avoid any leak.
     fn historyAppend(self: *Editor, change_type: ChangeType, data: U8Slice, pos: Vec2u, triggerer: Triggerer) void {
         if (!self.history_enabled) {
+            data.deinit();
             return;
         }
 

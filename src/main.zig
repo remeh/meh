@@ -6,7 +6,9 @@ const App = @import("app.zig").App;
 
 pub fn main() !void {
     // TODO(remy): configure the allocator properly
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .stack_trace_frames = 8,
+    }){};
     var allocator = gpa.allocator();
 
     // app
@@ -27,5 +29,5 @@ pub fn main() !void {
 
     app.deinit();
 
-    //    _ = gpa.detectLeaks();
+    _ = gpa.detectLeaks();
 }

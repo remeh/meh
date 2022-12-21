@@ -217,8 +217,8 @@ pub const App = struct {
         self.textedits.deinit();
         self.widget_command.deinit();
         self.widget_lookup.deinit();
+        self.widget_messagebox.deinit();
         self.widget_ripgrep.deinit();
-
         self.font_lowdpi.deinit();
         self.font_lowdpibigfont.deinit();
         self.font_hidpi.deinit();
@@ -247,14 +247,12 @@ pub const App = struct {
         // make sure that the provided filepath is absolute
         var path = try std.fs.realpathAlloc(self.allocator, filepath);
         defer self.allocator.free(path);
-        var fullpath = U8Slice.initEmpty(self.allocator);
-        try fullpath.appendConst(path);
 
         // first, loop through all buffers to see if it's already opened or not
         var idx: usize = 0;
         for (self.textedits.items) |textedit| {
             // already opened, just switch to it
-            if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), fullpath.bytes())) {
+            if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), path)) {
                 self.setCurrentFocusedWidgetTextEditIndex(idx);
                 return;
             }
@@ -262,7 +260,7 @@ pub const App = struct {
         }
 
         // open the buffer, create an editor
-        var buffer = try Buffer.initFromFile(self.allocator, fullpath.bytes());
+        var buffer = try Buffer.initFromFile(self.allocator, path);
         var editor = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
         try self.textedits.append(editor);
 
