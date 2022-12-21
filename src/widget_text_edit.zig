@@ -1251,7 +1251,6 @@ pub const WidgetTextEdit = struct {
                 self.moveCursor(Vec2i{ .a = 0, .b = -1 }, scroll);
                 scrolled = scroll;
             },
-            // TODO(remy): unit test
             .AfterIndentation => {
                 if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
                     if (line.size() == 0) {
@@ -1454,6 +1453,23 @@ test "widget_text_edit moveCursorSpecial" {
     // the buffer of one extra char.
     try expect(widget.cursor.pos.a == 11);
     try expect(widget.cursor.pos.b == 2);
+
+    widget.deinit();
+
+    buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+
+    widget.cursor.pos = Vec2u{ .a = 0, .b = 5 };
+    widget.moveCursorSpecial(CursorMove.AfterIndentation, true);
+    try expect(widget.cursor.pos.a == 4);
+
+    widget.cursor.pos = Vec2u{ .a = 0, .b = 6 };
+    widget.moveCursorSpecial(CursorMove.AfterIndentation, true);
+    try expect(widget.cursor.pos.a == 1);
+
+    widget.cursor.pos = Vec2u{ .a = 0, .b = 7 };
+    widget.moveCursorSpecial(CursorMove.AfterIndentation, true);
+    try expect(widget.cursor.pos.a == 0);
 
     widget.deinit();
 }
