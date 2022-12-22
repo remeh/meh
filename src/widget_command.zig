@@ -3,22 +3,17 @@ const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
-const Buffer = @import("buffer.zig").Buffer;
-const Colors = @import("colors.zig");
 const Direction = @import("app.zig").Direction;
 const Draw = @import("draw.zig").Draw;
-const Editor = @import("editor.zig").Editor;
 const Font = @import("font.zig").Font;
 const Ripgrep = @import("ripgrep.zig").Ripgrep;
 const Scaler = @import("scaler.zig").Scaler;
 const SearchDirection = @import("editor.zig").SearchDirection;
 const U8Slice = @import("u8slice.zig").U8Slice;
-const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 const WidgetInput = @import("widget_input.zig").WidgetInput;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
-const Insert = @import("widget_text_edit.zig").Insert;
 
 const char_space = @import("u8slice.zig").char_space;
 
@@ -27,7 +22,7 @@ pub const WidgetCommandError = error{
     UnknownCommand,
 };
 
-// TODO(remy): comment
+/// WidgetCommand is used to input commands to interpret or execute.
 pub const WidgetCommand = struct {
     allocator: std.mem.Allocator,
     input: WidgetInput,
@@ -268,7 +263,6 @@ pub const WidgetCommand = struct {
 
     /// countArgs returns how many arguments there currently is in the buff.
     /// The first one (the command) is part of this total.
-    // TODO(remy): unit test
     fn countArgs(self: WidgetCommand) usize {
         var rv: usize = 1;
         var i: usize = 0;
@@ -298,7 +292,6 @@ pub const WidgetCommand = struct {
 
     /// getArg returns the arg at the given position.
     /// Starts at 0, 0 being the command.
-    // TODO(remy): unit test
     fn getArg(self: WidgetCommand, idx: usize) ?[]const u8 {
         if (idx > self.countArgs()) {
             return null;
@@ -338,7 +331,6 @@ pub const WidgetCommand = struct {
 
     /// rest returns the rest of the input starting at the given parameter,
     /// useful to feed it to an external tool such as ripgrep or fd.
-    // TODO(remy): unit test
     fn rest(self: WidgetCommand, idx: usize) ?[]const u8 {
         if (idx > self.countArgs()) {
             return null;
@@ -364,4 +356,51 @@ pub const WidgetCommand = struct {
     }
 };
 
-// TODO(remy): unit tests
+test "widget_command count args" {
+    const allocator = std.testing.allocator;
+    var command = try WidgetCommand.init(allocator);
+    defer command.deinit();
+
+    command.onTextInput("command to👻 run");
+    try expect(std.mem.eql(u8, (try command.input.text()).bytes(), "command to👻 run"));
+
+    try expect(command.countArgs() == 3);
+}
+
+test "widget_command args" {
+    const allocator = std.testing.allocator;
+    var command = try WidgetCommand.init(allocator);
+    defer command.deinit();
+
+    command.onTextInput("command to👻 run");
+    try expect(std.mem.eql(u8, (try command.input.text()).bytes(), "command to👻 run"));
+
+    var arg = command.getArg(0);
+    try expect(arg != null);
+    try expect(std.mem.eql(u8, arg.?, "command"));
+
+    arg = command.getArg(1);
+    try expect(arg != null);
+    try expect(std.mem.eql(u8, arg.?, "to👻"));
+
+    arg = command.getArg(2);
+    try expect(arg != null);
+    try expect(std.mem.eql(u8, arg.?, "run"));
+}
+
+test "widget_command rest" {
+    const allocator = std.testing.allocator;
+    var command = try WidgetCommand.init(allocator);
+    defer command.deinit();
+
+    command.onTextInput("command to👻 run");
+    try expect(std.mem.eql(u8, (try command.input.text()).bytes(), "command to👻 run"));
+
+    var params = command.rest(1);
+    try expect(params != null);
+    try expect(std.mem.eql(u8, params.?, "to👻 run"));
+
+    params = command.rest(2);
+    try expect(params != null);
+    try expect(std.mem.eql(u8, params.?, "run"));
+}
