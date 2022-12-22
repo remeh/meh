@@ -12,8 +12,7 @@ const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 
 pub const WidgetMessageBoxType = enum {
-    RipgrepNoResults,
-    UnknownCommand,
+    Error,
 };
 
 pub const WidgetMessageBox = struct {

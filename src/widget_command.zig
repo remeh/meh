@@ -138,8 +138,7 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":o")) {
             if (self.countArgs() < 2) {
-                // TODO(remy): report errors in the app instead of in console
-                std.log.err("WidgetCommand.interpret: not enough arguments for 'o'", .{});
+                app.showMessageBoxError("Not enough argument for 'o'.");
                 return;
             }
             if (self.getArg(1)) |f| {

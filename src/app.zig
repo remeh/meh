@@ -368,11 +368,7 @@ pub const App = struct {
     // TODO(remy): comment
     pub fn openRipgrepResults(self: *App, results: RipgrepResults) void {
         if (results.stdout.len == 0) {
-            self.widget_messagebox.set("No results!", .RipgrepNoResults) catch |err| {
-                std.log.err("App.openRipgrepResults: can't show message box: {}", .{err});
-                return;
-            };
-            self.focused_widget = .MessageBox;
+            self.showMessageBoxError("No results.");
             return;
         }
 
@@ -587,6 +583,14 @@ pub const App = struct {
         self.is_running = false;
     }
 
+    pub fn showMessageBoxError(self: *App, label: []const u8) void {
+        self.widget_messagebox.set(label, .Error) catch |err| {
+            std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
+            return;
+        };
+        self.focused_widget = .MessageBox;
+    }
+
     /// onWindowResized is called when the windows has just been resized.
     fn onWindowResized(self: *App) void {
         self.refreshWindowPixelSize();
@@ -689,11 +693,7 @@ pub const App = struct {
                         self.focused_widget = FocusedWidget.Editor;
                         self.widget_command.interpret(self) catch |err| {
                             if (err == WidgetCommandError.UnknownCommand) {
-                                self.widget_messagebox.set("Unknown command.", .UnknownCommand) catch |set_err| {
-                                    std.log.err("App.commandEvents: can't show messagebox error: {}", .{set_err});
-                                    return;
-                                };
-                                self.focused_widget = .MessageBox;
+                                self.showMessageBoxError("Unknown command.");
                                 return;
                             }
                             std.log.err("App.commandEvents: can't interpret: {}", .{err});
