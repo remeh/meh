@@ -405,7 +405,6 @@ pub const Editor = struct {
 
     /// wordPosAt returns the start and end in the line of the word at the given `position`.
     /// Returns the start and end position of the word in the given line.
-    // TODO(remy): unit test
     pub fn wordPosAt(self: Editor, position: Vec2u) !Vec2u {
         if (position.b > self.buffer.lines.items.len) {
             return BufferError.OutOfBuffer;
@@ -648,5 +647,43 @@ test "editor_delete_utf8_char_and_undo" {
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "îôûñé👻"));
     _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "🎃àéîôûñé👻"));
+    editor.deinit();
+}
+
+test "editor word_pos_at" {
+    const allocator = std.testing.allocator;
+    var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+
+    var pos = try editor.wordPosAt(Vec2u{ .a = 16, .b = 3 });
+    try expect(pos.a == 14);
+    try expect(pos.b == 24);
+
+    pos = try editor.wordPosAt(Vec2u{ .a = 12, .b = 2 });
+    try expect(pos.a == 10);
+    try expect(pos.b == 13);
+
+    pos = try editor.wordPosAt(Vec2u{ .a = 0, .b = 11 });
+    try expect(pos.a == 0);
+    try expect(pos.b == 5);
+
+    editor.deinit();
+}
+
+test "editor word_pos" {
+    const allocator = std.testing.allocator;
+    var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+
+    var str = try editor.wordAt(Vec2u{ .a = 16, .b = 3 });
+    try expect(std.mem.eql(u8, str, "continuing"));
+
+    str = try editor.wordAt(Vec2u{ .a = 12, .b = 2 });
+    try expect(std.mem.eql(u8, str, "one"));
+
+    str = try editor.wordAt(Vec2u{ .a = 0, .b = 11 });
+    try expect(std.mem.eql(u8, str, "there"));
+
+    str = try editor.wordAt(Vec2u{ .a = 53, .b = 2 });
+    try expect(std.mem.eql(u8, str, "weird"));
+
     editor.deinit();
 }
