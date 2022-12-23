@@ -113,7 +113,7 @@ pub const WidgetTextEdit = struct {
     // Constructors
     // ------------
 
-    // TODO(remy): comment
+    /// initWithBuffer inits a WidgetTextEdit to edit the given buffer.
     pub fn initWithBuffer(allocator: std.mem.Allocator, buffer: Buffer) WidgetTextEdit {
         return WidgetTextEdit{
             .allocator = allocator,
@@ -671,8 +671,25 @@ pub const WidgetTextEdit = struct {
         switch (direction) {
             .Up => self.moveCursor(Vec2i{ .a = 0, .b = -1 }, true),
             .Down => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
-            .Left => self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true),
-            .Right => self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true),
+            .Left => {
+                self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+                self.cursor.max_last_col_pos = self.cursor.pos.a;
+            },
+            .Right => {
+                self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
+                self.cursor.max_last_col_pos = self.cursor.pos.a;
+            },
+        }
+
+        // restore the column on up/down movement
+        if (direction == .Up or direction == .Down) {
+            var col = @max(self.cursor.max_last_col_pos, self.cursor.pos.a);
+            self.cursor.max_last_col_pos = col;
+
+            if (self.cursor.pos.a < col) {
+                self.setCursorPos(Vec2u{ .a = col, .b = self.cursor.pos.b }, false);
+                self.validateCursorPosition(true);
+            }
         }
     }
 
