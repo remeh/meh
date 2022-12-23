@@ -331,7 +331,7 @@ pub const WidgetList = struct {
                     );
                 }
 
-                self.allocator.free(filename); // TODO(remy): maybe consider using an ArenaAllocator here.
+                self.allocator.free(filename);
             },
             else => {
                 var content = entry.label.bytes();

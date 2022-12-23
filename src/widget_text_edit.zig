@@ -50,8 +50,6 @@ pub const InputMode = enum {
 pub const CursorMove = enum {
     EndOfLine,
     StartOfLine,
-    EndOfWord,
-    StartOfWord,
     StartOfBuffer,
     EndOfBuffer,
     NextSpace,
@@ -780,7 +778,8 @@ pub const WidgetTextEdit = struct {
                     'F' => self.setInputMode(.F),
                     'r' => self.setInputMode(.r),
                     'R' => self.setInputMode(.Replace),
-                    // start inserting
+                    'b' => self.moveCursorSpecial(CursorMove.PreviousSpace, true),
+                    'e' => self.moveCursorSpecial(CursorMove.NextSpace, true), // start inserting
                     'i' => {
                         self.setInputMode(.Insert);
                         self.validateCursorPosition(true);
@@ -882,7 +881,7 @@ pub const WidgetTextEdit = struct {
     }
 
     /// onTab is called when the user has pressed the Tab key.
-    // TODO(remy): support untabbing selection
+    // TODO(remy): support un/tabbing selections
     pub fn onTab(self: *WidgetTextEdit, shift: bool) void {
         switch (self.input_mode) {
             .Insert => {
@@ -1240,12 +1239,6 @@ pub const WidgetTextEdit = struct {
                 self.cursor.pos.a = 0;
                 self.cursor.max_last_col_pos = 0;
             },
-            .EndOfWord => {
-                std.log.debug("moveCursorSpecial.StartOfWord: implement me!", .{}); // TODO(remy): implement
-            },
-            .StartOfWord => {
-                std.log.debug("moveCursorSpecial.StartOfWord: implement me!", .{}); // TODO(remy): implement
-            },
             .StartOfBuffer => {
                 self.cursor.pos.a = 0;
                 self.cursor.pos.b = 0;
@@ -1256,11 +1249,20 @@ pub const WidgetTextEdit = struct {
                 self.moveCursorSpecial(CursorMove.EndOfLine, scroll);
                 scrolled = scroll;
             },
+            // TODO(remy): unit test
             .NextSpace => {
-                std.log.debug("moveCursorSpecial.NextSpace: implement me!", .{}); // TODO(remy): implement
+                if (self.editor.findGlyphInLine(self.cursor.pos, " ", SearchDirection.After)) |new_pos| {
+                    self.setCursorPos(new_pos, true);
+                } else |err| {
+                    std.log.err("WidgetTextEdit.moveCursorSpecial.NextSpace: {}", .{err});
+                }
             },
             .PreviousSpace => {
-                std.log.debug("moveCursorSpecial.PreviousSpace: implement me!", .{});
+                if (self.editor.findGlyphInLine(self.cursor.pos, " ", SearchDirection.Before)) |new_pos| {
+                    self.setCursorPos(new_pos, true);
+                } else |err| {
+                    std.log.err("WidgetTextEdit.moveCursorSpecial.NextSpace: {}", .{err});
+                }
             },
             .NextLine => {
                 self.moveCursor(Vec2i{ .a = 0, .b = 1 }, scroll);
@@ -1392,8 +1394,7 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
+    /// redo reapplies a change previously undone.
     pub fn redo(self: *WidgetTextEdit) void {
         if (self.editor.redo()) |pos| {
             self.setCursorPos(pos, true);

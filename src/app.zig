@@ -913,6 +913,9 @@ pub const App = struct {
                             // TODO(remy): move to a specific fn
                             switch (event.key.keysym.sym) {
                                 c.SDLK_j => {
+                                    if (!self.has_split_view) {
+                                        return;
+                                    }
                                     if (self.focused_editor == .Left) {
                                         self.focused_editor = .Right;
                                     } else {
