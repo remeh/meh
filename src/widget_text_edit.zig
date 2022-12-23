@@ -1238,6 +1238,7 @@ pub const WidgetTextEdit = struct {
             },
             .StartOfLine => {
                 self.cursor.pos.a = 0;
+                self.cursor.max_last_col_pos = 0;
             },
             .EndOfWord => {
                 std.log.debug("moveCursorSpecial.StartOfWord: implement me!", .{}); // TODO(remy): implement
@@ -1248,6 +1249,7 @@ pub const WidgetTextEdit = struct {
             .StartOfBuffer => {
                 self.cursor.pos.a = 0;
                 self.cursor.pos.b = 0;
+                self.cursor.max_last_col_pos = 0;
             },
             .EndOfBuffer => {
                 self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
@@ -1262,10 +1264,12 @@ pub const WidgetTextEdit = struct {
             },
             .NextLine => {
                 self.moveCursor(Vec2i{ .a = 0, .b = 1 }, scroll);
+                self.cursor.max_last_col_pos = 0;
                 scrolled = scroll;
             },
             .PreviousLine => {
                 self.moveCursor(Vec2i{ .a = 0, .b = -1 }, scroll);
+                self.cursor.max_last_col_pos = 0;
                 scrolled = scroll;
             },
             .AfterIndentation => {
@@ -1291,7 +1295,6 @@ pub const WidgetTextEdit = struct {
                     self.moveCursor(Vec2i{ .a = @intCast(i64, i), .b = 0 }, true);
                 } else |_| {} // TODO(remy): do something with the error
             },
-            // TODO(remy): unit test
             .RespectPreviousLineIndent => {
                 if (self.cursor.pos.b == 0) {
                     return;
@@ -1476,6 +1479,8 @@ test "widget_text_edit moveCursorSpecial" {
     buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
     widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
 
+    // AfterIndentation
+
     widget.cursor.pos = Vec2u{ .a = 0, .b = 5 };
     widget.moveCursorSpecial(CursorMove.AfterIndentation, true);
     try expect(widget.cursor.pos.a == 4);
@@ -1487,6 +1492,21 @@ test "widget_text_edit moveCursorSpecial" {
     widget.cursor.pos = Vec2u{ .a = 0, .b = 7 };
     widget.moveCursorSpecial(CursorMove.AfterIndentation, true);
     try expect(widget.cursor.pos.a == 0);
+
+    // RespectPreviousLineIndent
+
+    var line = try widget.editor.buffer.getLine(7);
+    try expect(line.bytes()[0] == '\n');
+    widget.cursor.pos = Vec2u{ .a = 0, .b = 7 };
+    widget.moveCursorSpecial(CursorMove.RespectPreviousLineIndent, true);
+    try expect(widget.cursor.pos.a == 0);
+    try expect(line.bytes()[0] == '\t');
+
+    widget.cursor.pos = Vec2u{ .a = 0, .b = 6 };
+    widget.moveCursorSpecial(CursorMove.RespectPreviousLineIndent, true);
+    line = try widget.editor.buffer.getLine(6);
+    try expect(widget.cursor.pos.a == 0);
+    try expect(std.mem.eql(u8, line.bytes()[0..6], "    \tO"));
 
     widget.deinit();
 }

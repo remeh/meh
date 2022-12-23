@@ -20,7 +20,7 @@ pub const UTF8IteratorError = error{
 
 /// UTF8Iterator helps you iterate through an UTF8 text.
 /// Usage is:
-///     var it = UTF8Iterator("my utf8 text", 0); // 0 is the position in bytes you want to start in the text
+///     var it = UTF8Iterator("my utf8 text", 0); // 0 is the position in glyph you want to start in the text
 ///     while (true) {
 ///         // here you can use it.glyph() to get the current glyph
 ///         // or it.current_glyph_size to get its size in bytes

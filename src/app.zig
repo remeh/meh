@@ -242,7 +242,6 @@ pub const App = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
-    // TODO(remy): should switch to an already opened buffer
     pub fn openFile(self: *App, filepath: []const u8) !void {
         // make sure that the provided filepath is absolute
         var path = try std.fs.realpathAlloc(self.allocator, filepath);
@@ -335,6 +334,7 @@ pub const App = struct {
         }
     }
 
+    /// currentWidgetTextEdit returns the currently focused WidgetTextEdit.
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
     pub fn currentWidgetTextEdit(self: App) *WidgetTextEdit {
@@ -344,6 +344,8 @@ pub const App = struct {
         return &self.textedits.items[self.current_widget_text_edit];
     }
 
+    /// setCurrentFocusedWidgetTextEditIndex is used to set the active WidgetTextEdit index (the
+    /// right of the left one).
     fn setCurrentFocusedWidgetTextEditIndex(self: *App, index: usize) void {
         if (self.has_split_view and self.focused_editor == .Right) {
             self.current_widget_text_edit_alt = index;
@@ -352,7 +354,7 @@ pub const App = struct {
         }
     }
 
-    // TODO(remy): comment
+    /// toggleSplit closes and opens the split view.
     pub fn toggleSplit(self: *App) void {
         self.has_split_view = !self.has_split_view;
 
@@ -365,7 +367,7 @@ pub const App = struct {
         }
     }
 
-    // TODO(remy): comment
+    /// openRipgrepResults opens the WidgetRipgrep with the given results if there are any.
     pub fn openRipgrepResults(self: *App, results: RipgrepResults) void {
         if (results.stdout.len == 0) {
             self.showMessageBoxError("No results.");
@@ -583,6 +585,7 @@ pub const App = struct {
         self.is_running = false;
     }
 
+    /// showMessageBoxError displays a small error message closable with Escape or Return.
     pub fn showMessageBoxError(self: *App, label: []const u8) void {
         self.widget_messagebox.set(label, .Error) catch |err| {
             std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
@@ -684,6 +687,9 @@ pub const App = struct {
 
         c.SDL_StopTextInput();
     }
+
+    // Widgets events handling
+    // -----------------------
 
     fn commandEvents(self: *App, event: c.SDL_Event) void {
         switch (event.type) {

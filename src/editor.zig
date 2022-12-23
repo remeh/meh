@@ -216,7 +216,6 @@ pub const Editor = struct {
     /// deleteChunk removes chunk of text in lines.
     /// `start_pos` and `end_pos` are in glyph.
     /// Returns the new cursor position.
-    // TODO(remy): unit test
     pub fn deleteChunk(self: *Editor, start_pos: Vec2u, end_pos: Vec2u) !Vec2u {
         if (start_pos.b < 0 or end_pos.b >= self.buffer.lines.items.len) {
             return BufferError.OutOfBuffer;
@@ -306,10 +305,8 @@ pub const Editor = struct {
         return Vec2u{ .a = start_pos.a, .b = start_pos.b };
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
-    // TODO(remy): direction instead of "above"
-    // TODO(remy): what happens on the very last line of the buffer/editor?
+    /// newLine creates a new line at the given position. Inserting the new line char to the current
+    /// line and inserting a new line (U8Slice) in the buffer.
     pub fn newLine(self: *Editor, pos: Vec2u, triggerer: Triggerer) !void {
         var line = try self.buffer.getLine(pos.b);
         var rest = line.data.items[try line.utf8pos(pos.a)..line.size()];
@@ -321,9 +318,7 @@ pub const Editor = struct {
         self.historyAppend(ChangeType.InsertNewLine, U8Slice.initEmpty(self.allocator), pos, triggerer);
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
-    /// `txt` must be in utf8.
+    /// insertUtf8Text inserts the given UTF8 `text` at the given position.
     pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8, triggerer: Triggerer) !void {
         if (self.buffer.lines.items.len == 0) {
             var new_line = U8Slice.initEmpty(self.allocator);
@@ -381,7 +376,6 @@ pub const Editor = struct {
     /// paste pastes the content of `txt` at the given `position` in the buffer.
     /// Returns a position (in glyph) representing the end position after having
     /// pasted the `txt` content.
-    // TODO(remy): unit test
     pub fn paste(self: *Editor, position: Vec2u, txt: U8Slice) !Vec2u {
         var i: usize = 0;
         var insert_pos = position;
@@ -569,7 +563,28 @@ pub const Editor = struct {
     }
 };
 
-test "editor_new_line_and_undo" {
+test "editor insert utf8 and undo/redo" {
+    const allocator = std.testing.allocator;
+    var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+
+    try editor.insertUtf8Text(Vec2u{ .a = 0, .b = 9 }, "this is a test", .Input);
+    var line = try editor.buffer.getLine(9);
+    try expect(std.mem.eql(u8, line.bytes(), "this is a test\n"));
+
+    var cursor = try editor.undo();
+    try expect(cursor.a == 0);
+    try expect(cursor.b == 9);
+    try expect(std.mem.eql(u8, line.bytes(), "\n"));
+
+    cursor = try editor.redo();
+    try expect(cursor.a == 0);
+    try expect(cursor.b == 9);
+    try expect(std.mem.eql(u8, line.bytes(), "this is a test\n"));
+
+    editor.deinit();
+}
+
+test "editor new_line and undo/redo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
@@ -589,10 +604,15 @@ test "editor_new_line_and_undo" {
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and a second line\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "and a third"));
+    _ = try editor.redo();
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(3)).bytes(), " a second line\n"));
     editor.deinit();
 }
 
-test "editor_delete_line_and_undo" {
+test "editor delete_line and undo/redo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
@@ -606,10 +626,13 @@ test "editor_delete_line_and_undo" {
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and a second line\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(2)).bytes(), "and a third"));
     try expect(editor.buffer.lines.items.len == 3);
+    _ = try editor.redo();
+    try expect(editor.buffer.lines.items.len == 1);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "and a third"));
     editor.deinit();
 }
 
-test "editor_delete_char_and_undo" {
+test "editor delete_glyph and undo/redo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
@@ -634,16 +657,24 @@ test "editor_delete_char_and_undo" {
     _ = editor.undo() catch |err| {
         try expect(err == EditorError.NothingToUndo);
     };
+
+    _ = try editor.redo();
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "hello ld\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).*.bytes(), "and a third"));
     editor.deinit();
 }
 
-test "editor_delete_utf8_char_and_undo" {
+test "editor delete_glyph utf8 and undo/redo" {
     const allocator = std.testing.allocator;
     var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_3"));
     try expect(editor.buffer.lines.items.len == 1);
     try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right, .Input);
     try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right, .Input);
     try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right, .Input);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "îôûñé👻"));
+    _ = try editor.undo();
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "🎃àéîôûñé👻"));
+    _ = try editor.redo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "îôûñé👻"));
     _ = try editor.undo();
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).*.bytes(), "🎃àéîôûñé👻"));
@@ -684,6 +715,92 @@ test "editor word_pos" {
 
     str = try editor.wordAt(Vec2u{ .a = 53, .b = 2 });
     try expect(std.mem.eql(u8, str, "weird"));
+
+    editor.deinit();
+}
+
+test "editor delete_chunk" {
+    const allocator = std.testing.allocator;
+    var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+
+    // complete first line, complete second, chunk of the third
+    // -----------
+
+    try expect(editor.buffer.linesCount() == 12);
+    var cursor = try editor.deleteChunk(Vec2u{ .a = 0, .b = 1 }, Vec2u{ .a = 11, .b = 3 });
+    try expect(cursor.a == 0);
+    try expect(cursor.b == 1);
+    try expect(editor.buffer.linesCount() == 10);
+    var line = try editor.buffer.getLine(1);
+    try expect(std.mem.eql(u8, line.bytes()[0..5], "is co"));
+    editor.deinit();
+
+    // chunk within a line
+    // ------------
+
+    editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    try expect(editor.buffer.linesCount() == 12);
+
+    // start of a line
+
+    cursor = try editor.deleteChunk(Vec2u{ .a = 0, .b = 3 }, Vec2u{ .a = 6, .b = 3 });
+    try expect(cursor.a == 0);
+    try expect(cursor.b == 3);
+    try expect(editor.buffer.linesCount() == 12);
+    line = try editor.buffer.getLine(3);
+    try expect(std.mem.eql(u8, line.bytes()[0..4], "this"));
+
+    // middle of a line
+
+    cursor = try editor.deleteChunk(Vec2u{ .a = 5, .b = 6 }, Vec2u{ .a = 9, .b = 6 });
+    try expect(cursor.a == 5);
+    try expect(cursor.b == 6);
+    try expect(editor.buffer.linesCount() == 12);
+    line = try editor.buffer.getLine(6);
+    try expect(std.mem.eql(u8, line.bytes()[0..8], "\tOne for"));
+
+    // end of a line
+
+    cursor = try editor.deleteChunk(Vec2u{ .a = 24, .b = 5 }, Vec2u{ .a = 29, .b = 5 });
+    try expect(cursor.a == 24);
+    try expect(cursor.b == 5);
+    try expect(editor.buffer.linesCount() == 12);
+    line = try editor.buffer.getLine(5);
+    try expect(std.mem.eql(u8, line.bytes(), "    Four spaces for this\n"));
+
+    editor.deinit();
+}
+
+test "editor paste and undo/redo" {
+    const allocator = std.testing.allocator;
+    var editor = Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+
+    var text = try U8Slice.initFromSlice(allocator, "text 👻 copied\nwith return line");
+    defer text.deinit();
+
+    try expect(editor.buffer.linesCount() == 12);
+
+    var cursor = try editor.paste(Vec2u{ .a = 0, .b = 9 }, text);
+    try expect(editor.buffer.linesCount() == 13);
+    try expect(cursor.a == 16);
+    try expect(cursor.b == 10);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(9)).*.bytes(), "text 👻 copied\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(10)).*.bytes(), "with return line\n"));
+    _ = try editor.undo();
+    try expect(editor.buffer.linesCount() == 12);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(9)).*.bytes(), "\n"));
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(10)).*.bytes(), "\n"));
+
+    // in the middle of a line
+    var second_text = try U8Slice.initFromSlice(allocator, "👻 text 👻");
+    defer second_text.deinit();
+    cursor = try editor.paste(Vec2u{ .a = 8, .b = 6 }, second_text);
+    try expect(cursor.a == (8 + 8));
+    try expect(cursor.b == 6);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(6)).*.bytes(), "\tOne tab👻 text 👻 for this one.\n"));
+    _ = try editor.undo();
+    try expect(editor.buffer.linesCount() == 12);
+    try expect(std.mem.eql(u8, (try editor.buffer.getLine(6)).*.bytes(), "\tOne tab for this one.\n"));
 
     editor.deinit();
 }
