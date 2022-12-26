@@ -76,7 +76,7 @@ pub const Buffer = struct {
         var i: usize = 0;
         var last_append: usize = 0;
 
-        // TODO(remy): refactor me
+        // TODO(remy): refactor
         // TODO(remy): what about performances? test with different block_size on large files
         while (read == block_size) {
             i = 0;

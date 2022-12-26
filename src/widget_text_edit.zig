@@ -285,7 +285,7 @@ pub const WidgetTextEdit = struct {
             return left_blank_offset;
         }
 
-        while (i < self.viewport.lines.b) : (i += 1) {
+        while (i < self.viewport.lines.b and i < self.editor.buffer.linesCount()) : (i += 1) {
             if (self.editor.buffer.getLine(i)) |line| {
                 // empty line, just jump a line
 
@@ -430,8 +430,8 @@ pub const WidgetTextEdit = struct {
                 }
 
                 y_offset += self.one_char_size.b;
-            } else |_| {
-                // TODO(remy): do something with the error
+            } else |err| {
+                std.log.err("WidgetTextEdit.renderLines: error while rendering lines: {}", .{err});
             }
         }
 
@@ -685,7 +685,7 @@ pub const WidgetTextEdit = struct {
             self.cursor.max_last_col_pos = col;
 
             if (self.cursor.pos.a < col) {
-                self.setCursorPos(Vec2u{ .a = col, .b = self.cursor.pos.b }, false);
+                self.moveCursor(Vec2i{ .a = @intCast(i64, col - self.cursor.pos.a), .b = 0 }, false);
                 self.validateCursorPosition(true);
             }
         }
@@ -695,7 +695,6 @@ pub const WidgetTextEdit = struct {
     pub fn onTextInput(self: *WidgetTextEdit, txt: []const u8) bool {
         switch (self.input_mode) {
             .Insert => {
-                // TODO(remy): selection support
                 if (self.editor.insertUtf8Text(self.cursor.pos, txt, .Input)) {
                     self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
                 } else |err| {
@@ -779,7 +778,8 @@ pub const WidgetTextEdit = struct {
                     'r' => self.setInputMode(.r),
                     'R' => self.setInputMode(.Replace),
                     'b' => self.moveCursorSpecial(CursorMove.PreviousSpace, true),
-                    'e' => self.moveCursorSpecial(CursorMove.NextSpace, true), // start inserting
+                    'e' => self.moveCursorSpecial(CursorMove.NextSpace, true),
+                    // start inserting
                     'i' => {
                         self.setInputMode(.Insert);
                         self.validateCursorPosition(true);
@@ -1215,8 +1215,7 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
+    /// moveCursorSpecial applies a special movement to the cursor. See the enum `CursorMove`.
     pub fn moveCursorSpecial(self: *WidgetTextEdit, move: CursorMove, scroll: bool) void {
         var scrolled = false;
         switch (move) {
@@ -1257,6 +1256,7 @@ pub const WidgetTextEdit = struct {
                     std.log.err("WidgetTextEdit.moveCursorSpecial.NextSpace: {}", .{err});
                 }
             },
+            // TODO(remy): unit test
             .PreviousSpace => {
                 if (self.editor.findGlyphInLine(self.cursor.pos, " ", SearchDirection.Before)) |new_pos| {
                     self.setCursorPos(new_pos, true);
@@ -1351,19 +1351,12 @@ pub const WidgetTextEdit = struct {
     // Others
     // ------
 
-    // TODO(remy): comment
+    /// setInputMode switches to the given input_mode.
+    /// Stops selection if any and if entering in Insert mode.
     pub fn setInputMode(self: *WidgetTextEdit, input_mode: InputMode) void {
         if (input_mode == .Insert) {
             // stop any selection
             self.stopSelection(.Inactive);
-
-            // there is a edge case when entering insert mode while on the very last
-            // char of the document.
-            if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
-                if (line.utf8size()) |utf8size| {
-                    if (self.cursor.pos.a == utf8size) {}
-                } else |_| {}
-            } else |_| {}
         }
         self.input_mode = input_mode;
     }
