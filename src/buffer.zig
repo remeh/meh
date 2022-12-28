@@ -120,9 +120,7 @@ pub const Buffer = struct {
         return rv;
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
-    // FIXME(remy): implement should probably be in another file fs.zig
+    /// writeOnDisk stores the buffer data in the file (in `fullpath`).
     pub fn writeOnDisk(self: *Buffer) !void {
         if (self.in_ram_only) {
             return;
@@ -180,8 +178,7 @@ pub const Buffer = struct {
 
     /// longestLine returns the size of the longest line in the lines visible
     /// between the given interval.
-    // TODO(remy): unit test
-    pub fn longestLine(self: *Buffer, line_start: usize, line_end: usize) usize {
+    pub fn longestLine(self: *Buffer, line_start: usize, line_end: usize) !usize {
         if (line_start >= self.lines.items.len) {
             return 0;
         }
@@ -192,7 +189,8 @@ pub const Buffer = struct {
         while (i < line_end) : (i += 1) {
             if (i < self.lines.items.len) {
                 if (self.getLine(i)) |line| {
-                    rv = @max(line.size(), rv);
+                    var utf8size = try line.utf8size();
+                    rv = @max(utf8size, rv);
                 } else |_| {}
             }
         }
@@ -206,7 +204,7 @@ pub const Buffer = struct {
     }
 };
 
-test "init_empty" {
+test "buffer init_empty" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initEmpty(allocator);
     try expect(buffer.lines.items.len == 1);
@@ -215,7 +213,7 @@ test "init_empty" {
     buffer.deinit();
 }
 
-test "init_from_file" {
+test "buffer init_from_file" {
     const allocator = std.testing.allocator;
 
     var working_dir = U8Slice.initEmpty(allocator);
@@ -251,4 +249,54 @@ test "init_from_file" {
     try expect(std.mem.eql(u8, buffer.lines.items[1].bytes(), "and a second line\n"));
     try expect(std.mem.eql(u8, buffer.lines.items[2].bytes(), "and a third"));
     buffer.deinit();
+}
+
+test "buffer longest_line" {
+    const allocator = std.testing.allocator;
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
+    try std.testing.expectEqual(buffer.longestLine(0, buffer.lines.items.len), 12);
+    buffer.deinit();
+    buffer = try Buffer.initFromFile(allocator, "tests/sample_3");
+    try std.testing.expectEqual(buffer.longestLine(0, buffer.lines.items.len), 9);
+    buffer.deinit();
+    buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    try std.testing.expectEqual(buffer.longestLine(3, 5), 71);
+    buffer.deinit();
+}
+
+test "buffer write_file" {
+    const allocator = std.testing.allocator;
+    var buffer_first = try Buffer.initFromFile(allocator, "tests/sample_5");
+
+    // read it and write it in a different file
+    var buffer_second = try Buffer.initFromFile(allocator, "tests/sample_5");
+    buffer_second.fullpath.deinit();
+    buffer_second.fullpath = try U8Slice.initFromSlice(allocator, "tests/sample_5_test");
+    try buffer_second.writeOnDisk();
+
+    // close it, read the newly created file
+    buffer_second.deinit();
+    buffer_second = try Buffer.initFromFile(allocator, "tests/sample_5_test");
+
+    // validate that it contains the correct data
+    try std.testing.expectEqual(buffer_first.lines.items.len, buffer_second.lines.items.len);
+
+    var i: usize = 0;
+    while (i < buffer_first.lines.items.len) : (i += 1) {
+        var left_line = buffer_first.getLine(i) catch {
+            try expect(true == false);
+            return;
+        };
+        var right_line = buffer_second.getLine(i) catch {
+            try expect(true == false);
+            return;
+        };
+        try std.testing.expectEqualBytes(left_line.bytes(), right_line.bytes());
+    }
+
+    // remove the temporary file
+    try std.fs.deleteFileAbsolute(buffer_second.fullpath.bytes());
+
+    buffer_first.deinit();
+    buffer_second.deinit();
 }

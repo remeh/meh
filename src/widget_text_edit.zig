@@ -1107,7 +1107,11 @@ pub const WidgetTextEdit = struct {
         }
 
         // +5 here to allow some space on the window right border and the text
-        const longest_visible_line = self.editor.buffer.longestLine(self.viewport.lines.a, self.viewport.lines.b) + 5;
+        var longest_visible_line = self.editor.buffer.longestLine(self.viewport.lines.a, self.viewport.lines.b) catch |err| {
+            std.log.err("WidgetTextEdit.moveViewport: can't get longest line: {}", .{err});
+            return;
+        };
+        longest_visible_line += 5;
 
         // columns
 

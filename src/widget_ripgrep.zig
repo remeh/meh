@@ -56,7 +56,6 @@ pub const WidgetRipgrep = struct {
     /// It's *not* caller responsibility to free the Entry object.
     pub fn select(self: *WidgetRipgrep) !?WidgetListEntry {
         if (try self.list.select()) |entry| {
-            // TODO(remy): implement
             return entry;
         }
         return null;
