@@ -43,6 +43,9 @@ pub const Cursor = struct {
     /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
     // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     pub fn render(_: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u, focused: bool) void {
+        var color = Colors.white;
+        color.d = 180;
+
         if (!focused) {
             Draw.rect(
                 sdl_renderer,
@@ -88,7 +91,7 @@ pub const Cursor = struct {
                         .b = draw_pos.b,
                     },
                     Vec2u{ .a = one_char_size.a, .b = one_char_size.b },
-                    Colors.white,
+                    color,
                 );
             },
         }

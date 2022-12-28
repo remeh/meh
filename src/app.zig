@@ -771,7 +771,6 @@ pub const App = struct {
                         self.widget_ripgrep.list.onBackspace();
                     },
                     c.SDLK_ESCAPE => {
-                        self.widget_ripgrep.list.reset();
                         self.focused_widget = FocusedWidget.Editor;
                     },
                     c.SDLK_n, c.SDLK_DOWN => {
