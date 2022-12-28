@@ -595,7 +595,7 @@ pub const WidgetTextEdit = struct {
         {
             self.setCursorPos(self.selection.initial, false);
             // make sure the position is on text
-            self.validateCursorPosition(true);
+            self.validateCursorPos(true);
             // selection inactive
             self.selection.state = .Inactive;
             // enter insert mode
@@ -686,7 +686,7 @@ pub const WidgetTextEdit = struct {
 
             if (self.cursor.pos.a < col) {
                 self.moveCursor(Vec2i{ .a = @intCast(i64, col - self.cursor.pos.a), .b = 0 }, false);
-                self.validateCursorPosition(true);
+                self.validateCursorPos(true);
             }
         }
     }
@@ -782,7 +782,7 @@ pub const WidgetTextEdit = struct {
                     // start inserting
                     'i' => {
                         self.setInputMode(.Insert);
-                        self.validateCursorPosition(true);
+                        self.validateCursorPos(true);
                     },
                     'I' => {
                         self.moveCursorSpecial(CursorMove.StartOfLine, true);
@@ -921,7 +921,7 @@ pub const WidgetTextEdit = struct {
         }
 
         // make sure the cursor is on a viable position.
-        self.validateCursorPosition(true);
+        self.validateCursorPos(true);
     }
 
     /// onMouseWheel is called when the user is using the wheel of the mouse.
@@ -1013,7 +1013,7 @@ pub const WidgetTextEdit = struct {
         // move the mouse on the click
         var cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
         self.setCursorPos(cursor_pos, false);
-        self.validateCursorPosition(true);
+        self.validateCursorPos(true);
 
         // use the position (which may have been corrected) as the selection start position
         self.startSelection(self.cursor.pos, .MouseSelection);
@@ -1038,7 +1038,7 @@ pub const WidgetTextEdit = struct {
     pub fn deleteLine(self: *WidgetTextEdit) void {
         self.editor.deleteLine(@intCast(usize, self.cursor.pos.b), .Input);
         self.editor.historyEndBlock();
-        self.validateCursorPosition(true);
+        self.validateCursorPos(true);
         self.stopSelection(.Inactive);
     }
 
@@ -1133,7 +1133,7 @@ pub const WidgetTextEdit = struct {
     /// moveCursor moves the cursor in the current WidgetTextEdit view.
     /// Values passed in `move` are in glyph.
     /// If you want to make sure the cursor is on a valid position, consider
-    /// using `validateCursorPosition`.
+    /// using `validateCursorPos`.
     pub fn moveCursor(self: *WidgetTextEdit, move: Vec2i, scroll: bool) void {
         var cursor_pos = Vec2utoi(self.cursor.pos);
         var line: *U8Slice = undefined;
@@ -1173,15 +1173,14 @@ pub const WidgetTextEdit = struct {
             }
         }
 
-        self.validateCursorPosition(scroll);
+        self.validateCursorPos(scroll);
         if (self.selection.state == .KeyboardSelection) {
             self.updateSelection(self.cursor.pos);
         }
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
-    pub fn validateCursorPosition(self: *WidgetTextEdit, scroll: bool) void {
+    /// validateCursorPos validates that the cursor is on a valid position, moves the cursor if it is not the case.
+    pub fn validateCursorPos(self: *WidgetTextEdit, scroll: bool) void {
         if (self.cursor.pos.b >= self.editor.buffer.lines.items.len and self.editor.buffer.lines.items.len > 0) {
             self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
         }
@@ -1331,7 +1330,7 @@ pub const WidgetTextEdit = struct {
         }
 
         // make sure the cursor is on a valid position
-        self.validateCursorPosition(scroll and !scrolled);
+        self.validateCursorPos(scroll and !scrolled);
     }
 
     // TODO(remy): comment
@@ -1373,7 +1372,7 @@ pub const WidgetTextEdit = struct {
         }
 
         self.setCursorPos(pos, false); // no need to scroll here, we'll do it next function call
-        self.validateCursorPosition(scroll);
+        self.validateCursorPos(scroll);
     }
 
     /// undo cancels the previous change.
@@ -1602,6 +1601,39 @@ test "widget_text_edit scrollToCursor" {
     try expect(widget.viewport.columns.b == 5);
     try expect(widget.viewport.lines.a == 0);
     try expect(widget.viewport.lines.b == 5);
+
+    widget.deinit();
+}
+
+test "widget_text_edit validate_cursor_pos" {
+    const allocator = std.testing.allocator;
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+
+    widget.setCursorPos(Vec2u{ .a = 3, .b = 4 }, true);
+    widget.validateCursorPos(true);
+    try expect(widget.cursor.pos.a == 3);
+    try expect(widget.cursor.pos.b == 4);
+
+    widget.setCursorPos(Vec2u{ .a = 54, .b = 2 }, true);
+    widget.validateCursorPos(true);
+    try expect(widget.cursor.pos.a == 54);
+    try expect(widget.cursor.pos.b == 2);
+
+    widget.setCursorPos(Vec2u{ .a = 200, .b = 6 }, true);
+    widget.validateCursorPos(true);
+    try expect(widget.cursor.pos.a == 22);
+    try expect(widget.cursor.pos.b == 6);
+
+    widget.setCursorPos(Vec2u{ .a = 200, .b = 5 }, true);
+    widget.validateCursorPos(true);
+    try expect(widget.cursor.pos.a == 29);
+    try expect(widget.cursor.pos.b == 5);
+
+    widget.setCursorPos(Vec2u{ .a = 200, .b = 9 }, true);
+    widget.validateCursorPos(true);
+    try expect(widget.cursor.pos.a == 0);
+    try expect(widget.cursor.pos.b == 9);
 
     widget.deinit();
 }
