@@ -234,6 +234,12 @@ pub const U8Slice = struct {
         return bytes_pos;
     }
 
+    /// reset resets the content of the U8Slice to not contain anything.
+    pub fn reset(self: *U8Slice) void {
+        self.data.deinit();
+        self.data = std.ArrayList(u8).init(self.allocator);
+    }
+
     /// deinit releases memory used by the U8Slice.
     pub fn deinit(self: U8Slice) void {
         self.data.deinit();
@@ -444,4 +450,14 @@ test "iterator utf8" {
     try expect(it.current_glyph == 8);
     try expect(it.current_glyph_size == 4);
     try expect(std.mem.eql(u8, it.glyph(), "👻"));
+}
+
+test "u8slice reset" {
+    const allocator = std.testing.allocator;
+    var str = try U8Slice.initFromSlice(allocator, "hello world");
+    try std.testing.expectEqual(str.bytes().len, 11);
+    str.reset();
+    try std.testing.expectEqual(str.bytes().len, 0);
+    try expect(std.mem.eql(u8, str.bytes(), ""));
+    str.deinit();
 }

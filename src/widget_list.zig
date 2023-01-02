@@ -22,7 +22,7 @@ const Insert = @import("widget_text_edit.zig").Insert;
 pub const WidgetListEntryType = enum {
     File,
     Directory,
-    Ripgrep,
+    SearchResult,
 };
 
 pub const WidgetListFilterType = enum {
@@ -38,6 +38,7 @@ pub const WidgetListEntry = struct {
     label: U8Slice,
     data: U8Slice,
     data_int: i64,
+
     type: WidgetListEntryType,
 
     pub fn deinit(self: *WidgetListEntry) void {
@@ -288,8 +289,9 @@ pub const WidgetList = struct {
         var total_visible_glyph_count = @divTrunc(scaler.Scaleu(size.a), @divTrunc(font.font_size, 2)) - 1;
 
         switch (entry.type) {
-            .Ripgrep => {
-                var filename = std.fmt.allocPrint(self.allocator, "{s}:{d}  ", .{ entry.data.bytes(), entry.data_int }) catch |err| {
+            .SearchResult => {
+                var base = std.fs.path.basename(entry.data.bytes());
+                var filename = std.fmt.allocPrint(self.allocator, "{s}:{d}  ", .{ base, entry.data_int }) catch |err| {
                     std.log.err("WidgetList.renderEntry: can't create filename with line number string: {}", .{err});
                     return;
                 };
