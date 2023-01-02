@@ -21,7 +21,7 @@ pub const Cursor = struct {
     /// pos is the position in glyph.
     /// Use UTF8Iterator if you need help moving in a line per glyph.
     pos: Vec2u,
-    /// last_col_pos is used to remember last column max position to re-use
+    /// max_last_col_pos is used to remember last column max position to re-use
     /// it while moving up / down in lines.
     max_last_col_pos: usize,
 
