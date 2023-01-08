@@ -41,6 +41,7 @@ pub const Buffer = struct {
     /// initFromFile creates a buffer, reads data from the given fullpath
     /// and copies it in the Buffer instance.
     /// initFromFile calls `trackLineReturnPositions` to start tracking the line returns.
+    // TODO(remy): some refactoring (see `peekLine`) would be nice here.
     pub fn initFromFile(allocator: std.mem.Allocator, filepath: []const u8) !Buffer {
         // make sure that the provided fullpath is absolute
         var path = try std.fs.realpathAlloc(allocator, filepath);
@@ -106,16 +107,12 @@ pub const Buffer = struct {
             try rv.lines.append(u8slice);
         }
 
-        std.log.debug("Buffer.initFromFile: read file {s}, lines count: {d}", .{ fullpath.bytes(), rv.lines.items.len });
-
         var size: usize = 0;
         var length: usize = 0;
         for (rv.lines.items) |line| {
             size += line.data.capacity;
             length += line.data.items.len;
         }
-        std.log.debug("Capacity: {d} -- {d}KB -- {d}MB", .{ size, size / 1024, size / 1024 / 1024 });
-        std.log.debug("Length: {d} -- {d}KB -- {d}MB", .{ length, length / 1024, length / 1024 / 1024 });
 
         return rv;
     }
@@ -144,7 +141,6 @@ pub const Buffer = struct {
 
         try buf_writer.flush();
         self.in_ram_only = false;
-        std.log.debug("Buffer.writeOnDisk: write file {s}, bytes written: {d}", .{ self.fullpath.bytes(), bytes_written });
     }
 
     pub fn deinit(self: *Buffer) void {
@@ -202,7 +198,70 @@ pub const Buffer = struct {
     pub fn linesCount(self: Buffer) usize {
         return self.lines.items.len;
     }
+
+    /// fulltext returns all the text of the buffer in one U8Slice.
+    /// Callers has to manage the U8Slice memory.
+    // TODO(remy): add line_start and line_end
+    // TODO(remy): test
+    pub fn fulltext(self: Buffer) !U8Slice {
+        var rv = U8Slice.initEmpty(self.allocator);
+        for (self.lines.items) |line| {
+            try rv.appendConst(line.bytes());
+        }
+        return rv;
+    }
 };
+
+// TODO(remy): comment
+pub fn peekLine(allocator: std.mem.Allocator, filepath: []const u8, line: usize) !U8Slice {
+    // make sure that the provided fullpath is absolute
+    var path = try std.fs.realpathAlloc(allocator, filepath);
+    defer allocator.free(path);
+    var fullpath = U8Slice.initEmpty(allocator);
+    try fullpath.appendConst(path);
+    defer fullpath.deinit();
+
+    var file = try std.fs.cwd().openFile(filepath, .{});
+    defer file.close();
+
+    const block_size = 4096;
+    var slice: [4096]u8 = undefined;
+    var buff = &slice;
+    var read: usize = block_size;
+
+    var buf_reader = std.io.bufferedReader(file.reader());
+    var rv = U8Slice.initEmpty(allocator);
+    errdefer rv.deinit();
+
+    var i: usize = 0;
+    var current_line: usize = 0;
+    var line_offset: usize = 0;
+
+    while (read == block_size) {
+        i = 0;
+        line_offset = 0;
+        read = try buf_reader.reader().read(buff);
+
+        while (i < read) : (i += 1) {
+            if (buff[i] == '\n') {
+                if (current_line == line) {
+                    // append the data left until the \n with the \n included
+                    try rv.appendConst(buff[line_offset .. i + 1]); // allocate the data in an u8slice
+                }
+                // move the cursor in this buffer
+                line_offset = i + 1;
+                current_line += 1;
+            }
+        }
+
+        // append the rest of the read buffer if part of peeked line.
+        if (current_line == line) {
+            try rv.appendConst(buff[line_start..read]);
+        }
+    }
+
+    return rv;
+}
 
 test "buffer init_empty" {
     const allocator = std.testing.allocator;
@@ -218,7 +277,6 @@ test "buffer init_from_file" {
 
     var working_dir = U8Slice.initEmpty(allocator);
     defer working_dir.deinit();
-
     // read cwd
     var working_path = try std.fs.realpathAlloc(allocator, ".");
     defer allocator.free(working_path);
@@ -291,7 +349,7 @@ test "buffer write_file" {
             try expect(true == false);
             return;
         };
-        try std.testing.expectEqualBytes(left_line.bytes(), right_line.bytes());
+        try std.testing.expectEqualSlices(u8, left_line.bytes(), right_line.bytes());
     }
 
     // remove the temporary file
@@ -299,4 +357,17 @@ test "buffer write_file" {
 
     buffer_first.deinit();
     buffer_second.deinit();
+}
+
+test "peekLine" {
+    const allocator = std.testing.allocator;
+    var line = try peekLine(allocator, "tests/sample_5", 3);
+    try std.testing.expectEqualSlices(u8, line.bytes(), "while this is continuing, this fourth line doesn't have much.\n");
+    line.deinit();
+    line = try peekLine(allocator, "tests/sample_5", 0);
+    try std.testing.expectEqualSlices(u8, line.bytes(), "\tthis is a line which is 👻\n");
+    line.deinit();
+    line = try peekLine(allocator, "tests/sample_5", 11);
+    try std.testing.expectEqualSlices(u8, line.bytes(), "there 4 (four) empty lines before this one.");
+    line.deinit();
 }

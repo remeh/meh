@@ -4,6 +4,7 @@ const c = @import("clib.zig").c;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const Font = @import("font.zig").Font;
+const LSPPosition = @import("lsp.zig").LSPPosition;
 const RipgrepResults = @import("ripgrep.zig").RipgrepResults;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
@@ -15,7 +16,9 @@ const WidgetListEntry = @import("widget_list.zig").WidgetListEntry;
 const WidgetListEntryType = @import("widget_list.zig").WidgetListEntryType;
 const WidgetListFilterType = @import("widget_list.zig").WidgetListFilterType;
 
-pub const WidgetRipgrep = struct {
+const peekLine = @import("buffer.zig").peekLine;
+
+pub const WidgetSearchResults = struct {
     allocator: std.mem.Allocator,
     displayed_search: U8Slice,
     list: WidgetList,
@@ -23,15 +26,15 @@ pub const WidgetRipgrep = struct {
     // Constructors
     // ------------
 
-    pub fn init(allocator: std.mem.Allocator) !WidgetRipgrep {
-        return WidgetRipgrep{
+    pub fn init(allocator: std.mem.Allocator) !WidgetSearchResults {
+        return WidgetSearchResults{
             .allocator = allocator,
             .displayed_search = U8Slice.initEmpty(allocator),
             .list = try WidgetList.init(allocator, WidgetListFilterType.LabelAndData),
         };
     }
 
-    pub fn deinit(self: *WidgetRipgrep) void {
+    pub fn deinit(self: *WidgetSearchResults) void {
         self.list.deinit();
         self.displayed_search.deinit();
     }
@@ -39,13 +42,13 @@ pub const WidgetRipgrep = struct {
     // Methods
     // -------
 
-    pub fn reset(self: *WidgetRipgrep) void {
+    pub fn reset(self: *WidgetSearchResults) void {
         self.list.reset();
         self.results.deinit();
     }
 
     /// setDisplayedSearch clones `search` and doesn't managed the given one.
-    pub fn setDisplayedSearch(self: *WidgetRipgrep, search: U8Slice) !void {
+    pub fn setDisplayedSearch(self: *WidgetSearchResults, search: U8Slice) !void {
         self.displayed_search.deinit();
         self.displayed_search = try search.copy(self.allocator);
         // remove all entries
@@ -54,17 +57,17 @@ pub const WidgetRipgrep = struct {
 
     /// select returns the selected Entry if any.
     /// It's *not* caller responsibility to free the Entry object.
-    pub fn select(self: *WidgetRipgrep) !?WidgetListEntry {
+    pub fn select(self: *WidgetSearchResults) !?WidgetListEntry {
         if (try self.list.select()) |entry| {
             return entry;
         }
         return null;
     }
 
-    /// setResults creates all entries in the widget_list. The given `results` is not
-    /// owned by the WidgetRipgrep, no needs to free its resources as we copy the
+    /// setRipgrepResults creates all entries in the widget_list. The given `results` is now
+    /// owned by the WidgetSearchResults, no needs to free its resources as we copy the
     /// values in the WidgetListEntries.
-    pub fn setResults(self: *WidgetRipgrep, results: RipgrepResults) !void {
+    pub fn setRipgrepResults(self: *WidgetSearchResults, results: RipgrepResults) !void {
         self.list.reset();
 
         var it = results.iterator(self.allocator);
@@ -77,7 +80,25 @@ pub const WidgetRipgrep = struct {
                 .label = result.content,
                 .data = result.filename,
                 .data_int = @intCast(i64, result.line_number),
-                .type = .Ripgrep,
+                .type = .SearchResult,
+            });
+        }
+
+        try self.list.filter();
+    }
+
+    /// setLspReferences creates all entries in the widget list using LSPPositions data.
+    /// The given `references` are _NOT_ owned by the WidgetSearchResults (copies are created).
+    pub fn setLspReferences(self: *WidgetSearchResults, references: std.ArrayList(LSPPosition)) !void {
+        self.list.reset();
+
+        for (references.items) |reference| {
+            var line = try peekLine(self.allocator, reference.filepath.bytes(), reference.start.b);
+            try self.list.entries.append(WidgetListEntry{
+                .label = line,
+                .data = try U8Slice.initFromSlice(self.allocator, reference.filepath.bytes()),
+                .data_int = @intCast(i64, reference.start.b),
+                .type = .SearchResult,
             });
         }
 
@@ -85,7 +106,7 @@ pub const WidgetRipgrep = struct {
     }
 
     pub fn render(
-        self: *WidgetRipgrep,
+        self: *WidgetSearchResults,
         sdl_renderer: *c.SDL_Renderer,
         font: Font,
         scaler: Scaler,
@@ -112,8 +133,8 @@ pub const WidgetRipgrep = struct {
     }
 };
 
-test "WidgetRipgrep init/deinit" {
+test "WidgetSearchResults init/deinit" {
     // track leaks
-    var rv = try WidgetRipgrep.init(std.testing.allocator);
+    var rv = try WidgetSearchResults.init(std.testing.allocator);
     rv.deinit();
 }

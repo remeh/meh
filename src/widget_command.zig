@@ -133,7 +133,7 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":o")) {
             if (self.countArgs() < 2) {
-                app.showMessageBoxError("Not enough argument for 'o'.");
+                app.showMessageBoxError("Not enough argument for 'o'.", .{});
                 return;
             }
             if (self.getArg(1)) |f| {
@@ -204,6 +204,33 @@ pub const WidgetCommand = struct {
                 };
                 app.openRipgrepResults(results);
                 return;
+            }
+            return;
+        }
+
+        // lsp commands
+        // ------------
+
+        if (std.mem.eql(u8, command, ":ref")) {
+            if (app.lsp) |lsp| {
+                lsp.references(&(app.currentWidgetTextEdit().editor.buffer), app.currentWidgetTextEdit().cursor.pos) catch |err| {
+                    std.log.err("WidgetCommand: can't exec ':ref': {}", .{err});
+                    return;
+                };
+            } else {
+                app.showMessageBoxError("LSP not initialized.", .{});
+            }
+            return;
+        }
+
+        if (std.mem.eql(u8, command, ":def")) {
+            if (app.lsp) |lsp| {
+                lsp.definition(&(app.currentWidgetTextEdit().editor.buffer), app.currentWidgetTextEdit().cursor.pos) catch |err| {
+                    std.log.err("WidgetCommand: can't exec ':def': {}", .{err});
+                    return;
+                };
+            } else {
+                app.showMessageBoxError("LSP not initialized.", .{});
             }
             return;
         }

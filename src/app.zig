@@ -7,6 +7,10 @@ const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const ImVec2 = @import("vec.zig").ImVec2;
 const Font = @import("font.zig").Font;
+const LSP = @import("lsp.zig").LSP;
+const LSPError = @import("lsp.zig").LSPError;
+const LSPResponse = @import("lsp.zig").LSPResponse;
+const peekLine = @import("buffer.zig").peekLine;
 const RipgrepResults = @import("ripgrep.zig").RipgrepResults;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
@@ -14,7 +18,7 @@ const WidgetCommand = @import("widget_command.zig").WidgetCommand;
 const WidgetCommandError = @import("widget_command.zig").WidgetCommandError;
 const WidgetLookup = @import("widget_lookup.zig").WidgetLookup;
 const WidgetMessageBox = @import("widget_messagebox.zig").WidgetMessageBox;
-const WidgetRipgrep = @import("widget_ripgrep.zig").WidgetRipgrep;
+const WidgetSearchResults = @import("widget_search_results.zig").WidgetSearchResults;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
 const Vec2f = @import("vec.zig").Vec2f;
@@ -31,8 +35,8 @@ pub const FocusedWidget = enum {
     Editor,
     Command,
     Lookup,
-    Ripgrep,
     MessageBox,
+    SearchResults,
 };
 
 pub const FocusedEditor = enum {
@@ -64,7 +68,7 @@ pub const App = struct {
     widget_command: WidgetCommand,
     widget_lookup: WidgetLookup,
     widget_messagebox: WidgetMessageBox,
-    widget_ripgrep: WidgetRipgrep,
+    widget_search_results: WidgetSearchResults,
     textedits: std.ArrayList(WidgetTextEdit),
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
@@ -87,6 +91,9 @@ pub const App = struct {
     /// surface and the window size.
     window_scaling: f32,
 
+    // lsp
+    lsp: ?*LSP,
+
     // TODO(remy): comment
     // TODO(remy): tests
     font_lowdpi: Font,
@@ -106,7 +113,7 @@ pub const App = struct {
     /// opened WidgetTextEdits/editors/buffers.
     current_widget_text_edit: usize,
 
-    /// curent_widget_text_edit_tab is the selected textedit in the second
+    /// curent_widget_text_edit_alt is the selected textedit in the second
     /// editor.
     current_widget_text_edit_alt: usize,
 
@@ -187,12 +194,13 @@ pub const App = struct {
             .widget_command = try WidgetCommand.init(allocator),
             .widget_lookup = try WidgetLookup.init(allocator),
             .widget_messagebox = WidgetMessageBox.init(allocator),
-            .widget_ripgrep = try WidgetRipgrep.init(allocator),
+            .widget_search_results = try WidgetSearchResults.init(allocator),
             .current_widget_text_edit = 0,
             .current_widget_text_edit_alt = 0,
             .has_split_view = false,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
+            .lsp = null,
             .sdl_window = sdl_window.?,
             .font_custom = undefined,
             .font_lowdpi = font_lowdpi,
@@ -214,14 +222,19 @@ pub const App = struct {
         while (i < self.textedits.items.len) : (i += 1) {
             self.textedits.items[i].deinit();
         }
+
         self.textedits.deinit();
         self.widget_command.deinit();
         self.widget_lookup.deinit();
         self.widget_messagebox.deinit();
-        self.widget_ripgrep.deinit();
+        self.widget_search_results.deinit();
         self.font_lowdpi.deinit();
         self.font_lowdpibigfont.deinit();
         self.font_hidpi.deinit();
+
+        if (self.lsp) |lsp| {
+            lsp.deinit();
+        }
 
         self.working_dir.deinit();
 
@@ -262,6 +275,19 @@ pub const App = struct {
         var buffer = try Buffer.initFromFile(self.allocator, path);
         var editor = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
         try self.textedits.append(editor);
+
+        self.startLSPClient(path) catch |err| {
+            std.log.err("App.openFile: can't start an LSP client: {}", .{err});
+        };
+
+        if (self.lsp) |lsp| {
+            lsp.initialized() catch |err| {
+                std.log.err("App.openFile: can't send initialized to the LSP server: {}", .{err});
+            };
+            lsp.openFile(&buffer) catch |err| {
+                std.log.err("App.openFile: can't send openFile to the LSP server: {}", .{err});
+            };
+        }
 
         // immediately switch to this buffer
         self.setCurrentFocusedWidgetTextEditIndex(self.textedits.items.len - 1);
@@ -334,6 +360,29 @@ pub const App = struct {
         }
     }
 
+    /// startLSPClient identifies and starts an LSP server if none has been spawned for the
+    /// given file.
+    pub fn startLSPClient(self: *App, fullpath: []const u8) !void {
+        if (self.lsp != null) {
+            return;
+        }
+
+        std.log.debug("App.startLSPClient: starting an LSP client for {s}", .{fullpath});
+
+        var extension = std.fs.path.extension(fullpath);
+        var lsp_server = LSP.serverFromExtension(extension) catch |err| {
+            if (err != LSPError.UnknownExtension) {
+                std.log.err("App.startLSPClient: can't start an LSP server: {}", .{err});
+            }
+            return;
+        };
+
+        self.lsp = try LSP.init(self.allocator, lsp_server, extension[1..], self.working_dir.bytes());
+        if (self.lsp) |lsp| {
+            try lsp.initialize();
+        }
+    }
+
     /// currentWidgetTextEdit returns the currently focused WidgetTextEdit.
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
@@ -367,18 +416,18 @@ pub const App = struct {
         }
     }
 
-    /// openRipgrepResults opens the WidgetRipgrep with the given results if there are any.
+    /// openRipgrepResults opens the WidgetSearchResults with the given results if there are any.
     pub fn openRipgrepResults(self: *App, results: RipgrepResults) void {
         if (results.stdout.len == 0) {
-            self.showMessageBoxError("No results.");
+            self.showMessageBoxError("No results.", .{});
             return;
         }
 
-        self.widget_ripgrep.setResults(results) catch |err| {
+        self.widget_search_results.setRipgrepResults(results) catch |err| {
             std.log.err("App.openRipgrepResults: {}", .{err});
         };
 
-        self.focused_widget = .Ripgrep;
+        self.focused_widget = .SearchResults;
     }
 
     pub fn increaseFont(self: *App) void {
@@ -494,7 +543,7 @@ pub const App = struct {
                 Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.8) },
                 one_char_size,
             ),
-            .Ripgrep => self.widget_ripgrep.render(
+            .SearchResults => self.widget_search_results.render(
                 self.sdl_renderer,
                 self.current_font,
                 scaler,
@@ -586,11 +635,18 @@ pub const App = struct {
     }
 
     /// showMessageBoxError displays a small error message closable with Escape or Return.
-    pub fn showMessageBoxError(self: *App, label: []const u8) void {
-        self.widget_messagebox.set(label, .Error) catch |err| {
+    pub fn showMessageBoxError(self: *App, comptime label: []const u8, args: anytype) void {
+        var message = std.fmt.allocPrint(self.allocator, label, args) catch |err| {
             std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
             return;
         };
+        defer self.allocator.free(message);
+
+        self.widget_messagebox.set(message, .Error) catch |err| {
+            std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
+            return;
+        };
+
         self.focused_widget = .MessageBox;
     }
 
@@ -623,6 +679,7 @@ pub const App = struct {
 
             // events handling
             // ---------------
+
             while (c.SDL_PollEvent(&event) > 0) {
                 if (event.type == c.SDL_QUIT) {
                     self.quit();
@@ -654,8 +711,8 @@ pub const App = struct {
                         self.lookupEvents(event);
                         to_render = true;
                     },
-                    .Ripgrep => {
-                        self.ripgrepEvents(event);
+                    .SearchResults => {
+                        self.searchResultsEvents(event);
                         to_render = true;
                     },
                     .MessageBox => {
@@ -667,6 +724,20 @@ pub const App = struct {
                 if (self.focused_widget != focused_widget) {
                     self.render();
                     focused_widget = self.focused_widget;
+                }
+            }
+
+            // LSP messages handling
+            // ---------------------
+
+            if (self.lsp) |lsp| {
+                while (!lsp.context.response_queue.isEmpty()) {
+                    var node = lsp.context.response_queue.get().?;
+                    if (self.interpretLSPMessage(node.data)) {
+                        to_render = true;
+                    }
+                    node.data.deinit();
+                    lsp.context.allocator.destroy(node);
                 }
             }
 
@@ -688,6 +759,50 @@ pub const App = struct {
         c.SDL_StopTextInput();
     }
 
+    // LSP
+    // -----------------------
+
+    fn interpretLSPMessage(self: *App, response: LSPResponse) bool {
+        var to_render = false;
+        switch (response.message_type) {
+            .Definition => {
+                if (response.definitions) |definitions| {
+                    // TODO(remy): support multiple definitions
+                    if (definitions.items.len > 1) {
+                        std.log.warn("App.interpretLSPMessage: multiple definitions ({d}) have been returned", .{definitions.items.len});
+                    }
+                    var definition = definitions.items[0];
+                    if (self.openFile(definition.filepath.bytes())) {
+                        self.currentWidgetTextEdit().goToLine(definition.start.b + 1, true);
+                        self.currentWidgetTextEdit().cursor.pos.a = definition.start.a;
+                        self.currentWidgetTextEdit().setInputMode(.Command);
+                    } else |err| {
+                        self.showMessageBoxError("LSP: error while jumping to definition: {}", .{err});
+                        std.log.debug("App.mainloop: can't jump to LSP definition: {}", .{err});
+                    }
+                } else {
+                    self.showMessageBoxError("LSP: can't find definition.", .{});
+                }
+                to_render = true;
+            },
+            .References => {
+                if (response.references == null or response.references.?.items.len == 0) {
+                    self.showMessageBoxError("LSP: no references found.", .{});
+                }
+                if (response.references) |references| {
+                    self.widget_search_results.setLspReferences(references) catch |err| {
+                        self.showMessageBoxError("LSP: can't display references: {}", .{err});
+                    };
+                    self.focused_widget = .SearchResults;
+                }
+                to_render = true;
+            },
+            .Initialize => {}, // nothing to do
+            else => std.log.debug("App.mainloop: unsupported LSP message received: {}", .{response}),
+        }
+        return to_render;
+    }
+
     // Widgets events handling
     // -----------------------
 
@@ -699,7 +814,7 @@ pub const App = struct {
                         self.focused_widget = FocusedWidget.Editor;
                         self.widget_command.interpret(self) catch |err| {
                             if (err == WidgetCommandError.UnknownCommand) {
-                                self.showMessageBoxError("Unknown command.");
+                                self.showMessageBoxError("Unknown command.", .{});
                                 return;
                             }
                             std.log.err("App.commandEvents: can't interpret: {}", .{err});
@@ -745,14 +860,14 @@ pub const App = struct {
         }
     }
 
-    fn ripgrepEvents(self: *App, event: c.SDL_Event) void {
+    fn searchResultsEvents(self: *App, event: c.SDL_Event) void {
         var input_state = c.SDL_GetKeyboardState(null);
         var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
                     c.SDLK_RETURN => {
-                        if (self.widget_ripgrep.select()) |selected| {
+                        if (self.widget_search_results.select()) |selected| {
                             if (selected) |entry| {
                                 self.openFile(entry.data.bytes()) catch |err| {
                                     std.log.debug("App.lookupEvents: can't open file: {}", .{err});
@@ -764,47 +879,46 @@ pub const App = struct {
                                 self.focused_widget = FocusedWidget.Editor;
                             }
                         } else |err| {
-                            std.log.err("App.ripgrepEvents: can't select current entry: {}", .{err});
+                            std.log.err("App.searchResultsEvents: can't select current entry: {}", .{err});
                         }
                     },
                     c.SDLK_BACKSPACE => {
-                        self.widget_ripgrep.list.onBackspace();
+                        self.widget_search_results.list.onBackspace();
                     },
                     c.SDLK_ESCAPE => {
-                        self.widget_ripgrep.list.reset();
                         self.focused_widget = FocusedWidget.Editor;
                     },
                     c.SDLK_n, c.SDLK_DOWN => {
                         if (ctrl or event.key.keysym.sym == c.SDLK_DOWN) {
-                            self.widget_ripgrep.list.next();
+                            self.widget_search_results.list.next();
                         }
                     },
                     c.SDLK_p, c.SDLK_UP => {
                         if (ctrl or event.key.keysym.sym == c.SDLK_UP) {
-                            self.widget_ripgrep.list.previous();
+                            self.widget_search_results.list.previous();
                         }
                     },
                     c.SDLK_u => {
                         if (ctrl) {
-                            self.widget_ripgrep.list.previousPage();
+                            self.widget_search_results.list.previousPage();
                         }
                     },
                     c.SDLK_d => {
                         if (ctrl) {
-                            self.widget_ripgrep.list.nextPage();
+                            self.widget_search_results.list.nextPage();
                         }
                     },
                     c.SDLK_LEFT => {
-                        self.widget_ripgrep.list.left();
+                        self.widget_search_results.list.left();
                     },
                     c.SDLK_RIGHT => {
-                        self.widget_ripgrep.list.right();
+                        self.widget_search_results.list.right();
                     },
                     else => {},
                 }
             },
             c.SDL_TEXTINPUT => {
-                _ = self.widget_ripgrep.list.onTextInput(readTextFromSDLInput(&event.text.text));
+                _ = self.widget_search_results.list.onTextInput(readTextFromSDLInput(&event.text.text));
             },
             else => {},
         }
@@ -948,8 +1062,8 @@ pub const App = struct {
                                     self.focused_widget = .Lookup;
                                 },
                                 c.SDLK_r => {
-                                    // re-open ripgrep results, but do not reset the widget
-                                    self.focused_widget = .Ripgrep;
+                                    // re-open search results, but do not reset the widget
+                                    self.focused_widget = .SearchResults;
                                 },
                                 else => _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),
                             }
@@ -998,6 +1112,9 @@ pub const App = struct {
             else => {},
         }
     }
+
+    // misc
+    // ----
 
     /// sdlMousePosToVec2u converts the mouse position in c_ints into a Vec2u
     /// If the click happened outside of the left/top window, the concerned value

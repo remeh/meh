@@ -4,7 +4,9 @@ const Editor = @import("editor.zig").Editor;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2u = @import("vec.zig").Vec2u;
 
-// TODO(remy): comment
+/// ChangeType are the different changes that can be applied on the text.
+/// The type is then used during undo/redo to know what has to be reverted
+/// or re-applied.
 pub const ChangeType = enum {
     /// `DeleteGlyph` is the action of having removed a character in a line.
     /// The vector `pos` contains the position of the removed character
@@ -43,7 +45,7 @@ pub const Change = struct {
         self.data.deinit();
     }
 
-    // TODO(remy): comment
+    /// redo re-applies a change that has been previously reverted.
     pub fn redo(self: *Change, editor: *Editor) !void {
         switch (self.type) {
             .InsertNewLine => {
@@ -61,7 +63,7 @@ pub const Change = struct {
         }
     }
 
-    // TODO(remy): comment
+    /// undo reverts a change having been done on the current editor.
     pub fn undo(self: *Change, editor: *Editor) !void {
         switch (self.type) {
             .InsertNewLine => {
