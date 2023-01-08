@@ -276,21 +276,22 @@ pub const App = struct {
         var editor = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
         try self.textedits.append(editor);
 
+        // starts an LSP client if that makes sense.
         self.startLSPClient(path) catch |err| {
             std.log.err("App.openFile: can't start an LSP client: {}", .{err});
         };
 
         if (self.lsp) |lsp| {
-            lsp.initialized() catch |err| {
-                std.log.err("App.openFile: can't send initialized to the LSP server: {}", .{err});
-            };
             lsp.openFile(&buffer) catch |err| {
                 std.log.err("App.openFile: can't send openFile to the LSP server: {}", .{err});
             };
         }
 
-        // immediately switch to this buffer
+        // switch to this buffer
         self.setCurrentFocusedWidgetTextEditIndex(self.textedits.items.len - 1);
+        // immediately trigger its rendering in order to have the WidgetTextEdit
+        // compute its viewport.
+        self.render();
     }
 
     /// close closes the current opened editor/buffer.
@@ -380,6 +381,7 @@ pub const App = struct {
         self.lsp = try LSP.init(self.allocator, lsp_server, extension[1..], self.working_dir.bytes());
         if (self.lsp) |lsp| {
             try lsp.initialize();
+            try lsp.initialized();
         }
     }
 
@@ -763,7 +765,6 @@ pub const App = struct {
     // -----------------------
 
     fn interpretLSPMessage(self: *App, response: LSPResponse) bool {
-        var to_render = false;
         switch (response.message_type) {
             .Definition => {
                 if (response.definitions) |definitions| {
@@ -773,8 +774,7 @@ pub const App = struct {
                     }
                     var definition = definitions.items[0];
                     if (self.openFile(definition.filepath.bytes())) {
-                        self.currentWidgetTextEdit().goToLine(definition.start.b + 1, true);
-                        self.currentWidgetTextEdit().cursor.pos.a = definition.start.a;
+                        self.currentWidgetTextEdit().goTo(Vec2u{ .a = definition.start.a, .b = definition.start.b + 1 }, .Center);
                         self.currentWidgetTextEdit().setInputMode(.Command);
                     } else |err| {
                         self.showMessageBoxError("LSP: error while jumping to definition: {}", .{err});
@@ -783,7 +783,7 @@ pub const App = struct {
                 } else {
                     self.showMessageBoxError("LSP: can't find definition.", .{});
                 }
-                to_render = true;
+                return true;
             },
             .References => {
                 if (response.references == null or response.references.?.items.len == 0) {
@@ -795,12 +795,12 @@ pub const App = struct {
                     };
                     self.focused_widget = .SearchResults;
                 }
-                to_render = true;
+                return true;
             },
             .Initialize => {}, // nothing to do
             else => std.log.debug("App.mainloop: unsupported LSP message received: {}", .{response}),
         }
-        return to_render;
+        return false;
     }
 
     // Widgets events handling
@@ -873,9 +873,9 @@ pub const App = struct {
                                     std.log.debug("App.lookupEvents: can't open file: {}", .{err});
                                     return;
                                 };
-                                self.render();
-                                self.currentWidgetTextEdit().goToLine(@intCast(usize, entry.data_int), true);
-                                // leave the widget
+                                // TODO(remy): move to the correct column, WidgetList has to support a pos instead of a line
+                                self.currentWidgetTextEdit().goToLine(@intCast(usize, entry.data_int), .Center);
+                                // leave the WidgetSearchResults widget
                                 self.focused_widget = FocusedWidget.Editor;
                             }
                         } else |err| {

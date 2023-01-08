@@ -212,7 +212,8 @@ pub const Buffer = struct {
     }
 };
 
-// TODO(remy): comment
+/// peekLine reads a file until the given line and returns that line in a new U8Slice.
+/// Memory of the U8Slice is owned by the caller and should be freed accordingly.
 pub fn peekLine(allocator: std.mem.Allocator, filepath: []const u8, line: usize) !U8Slice {
     // make sure that the provided fullpath is absolute
     var path = try std.fs.realpathAlloc(allocator, filepath);
@@ -256,7 +257,7 @@ pub fn peekLine(allocator: std.mem.Allocator, filepath: []const u8, line: usize)
 
         // append the rest of the read buffer if part of peeked line.
         if (current_line == line) {
-            try rv.appendConst(buff[line_start..read]);
+            try rv.appendConst(buff[line_offset..read]);
         }
     }
 

@@ -97,7 +97,7 @@ pub const WidgetSearchResults = struct {
             try self.list.entries.append(WidgetListEntry{
                 .label = line,
                 .data = try U8Slice.initFromSlice(self.allocator, reference.filepath.bytes()),
-                .data_int = @intCast(i64, reference.start.b),
+                .data_int = @intCast(i64, reference.start.b + 1), // +1 because LSP lines start at 0
                 .type = .SearchResult,
             });
         }
