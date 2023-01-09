@@ -81,7 +81,7 @@ pub const WidgetSearchResults = struct {
             try self.list.entries.append(WidgetListEntry{
                 .label = result.content,
                 .data = result.filename,
-                .data_pos = Vec2i{ .a = utoi(result.column) - 1, .b = utoi(result.line_number) },
+                .data_pos = Vec2i{ .a = utoi(result.column) - 1, .b = utoi(result.line_number) - 1 },
                 .type = .SearchResult,
             });
         }
@@ -96,7 +96,7 @@ pub const WidgetSearchResults = struct {
 
         for (references.items) |reference| {
             var line = try peekLine(self.allocator, reference.filepath.bytes(), reference.start.b);
-            const pos = Vec2i{ .a = utoi(reference.start.a), .b = utoi(reference.start.b + 1) }; // +1 because LSP lines start at 0
+            const pos = Vec2i{ .a = utoi(reference.start.a), .b = utoi(reference.start.b) };
             try self.list.entries.append(WidgetListEntry{
                 .label = line,
                 .data = try U8Slice.initFromSlice(self.allocator, reference.filepath.bytes()),

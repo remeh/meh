@@ -879,6 +879,7 @@ pub const WidgetTextEdit = struct {
                         };
                     },
                     // others
+                    'z' => self.centerCursor(),
                     'D' => self.editor.deleteAfter(self.cursor.pos),
                     'E' => self.deleteLine(),
                     'x' => {
@@ -905,6 +906,7 @@ pub const WidgetTextEdit = struct {
                             };
                         }
                     },
+                    // undo & redd
                     'u' => self.undo(),
                     'U' => self.redo(),
                     else => return false,
@@ -1401,16 +1403,9 @@ pub const WidgetTextEdit = struct {
     }
 
     /// goToLine moves the cursor to the given line.
-    /// First line starts at 1.
+    /// First line starts at 0.
     pub fn goToLine(self: *WidgetTextEdit, line_number: usize, scroll: ScrollBehavior) void {
         var new_pos = Vec2u{ .a = self.cursor.pos.a, .b = line_number };
-
-        if (new_pos.b > 0) {
-            new_pos.b -= 1;
-        } else {
-            new_pos.b = 0;
-        }
-
         self.setCursorPos(new_pos, .None); // no need to scroll here, we'll do it next function call
         self.validateCursorPos(scroll);
     }

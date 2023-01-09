@@ -267,7 +267,7 @@ pub const WidgetCommand = struct {
             // read the line number
             if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
                 var wt = app.currentWidgetTextEdit();
-                wt.goToLine(line_number, .Center);
+                wt.goToLine(line_number + 1, .Center);
                 return;
             } else |_| {
                 // it's not a number, let's continue
