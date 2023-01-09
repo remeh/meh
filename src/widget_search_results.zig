@@ -8,6 +8,8 @@ const LSPPosition = @import("lsp.zig").LSPPosition;
 const RipgrepResults = @import("ripgrep.zig").RipgrepResults;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const utoi = @import("vec.zig").utoi;
+const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 const WidgetInput = @import("widget_input.zig").WidgetInput;
@@ -79,7 +81,7 @@ pub const WidgetSearchResults = struct {
             try self.list.entries.append(WidgetListEntry{
                 .label = result.content,
                 .data = result.filename,
-                .data_int = @intCast(i64, result.line_number),
+                .data_pos = Vec2i{ .a = utoi(result.column) - 1, .b = utoi(result.line_number) - 1 },
                 .type = .SearchResult,
             });
         }
@@ -94,10 +96,11 @@ pub const WidgetSearchResults = struct {
 
         for (references.items) |reference| {
             var line = try peekLine(self.allocator, reference.filepath.bytes(), reference.start.b);
+            const pos = Vec2i{ .a = utoi(reference.start.a), .b = utoi(reference.start.b) };
             try self.list.entries.append(WidgetListEntry{
                 .label = line,
                 .data = try U8Slice.initFromSlice(self.allocator, reference.filepath.bytes()),
-                .data_int = @intCast(i64, reference.start.b),
+                .data_pos = pos,
                 .type = .SearchResult,
             });
         }

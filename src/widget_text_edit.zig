@@ -74,6 +74,14 @@ pub const SelectionState = enum {
     Active,
 };
 
+/// ScrollBehavior is used to provide the scrolling behavior when moving the cursor: should
+/// we move scroll the viewport or immediately center it around the cursor.
+pub const ScrollBehavior = enum {
+    None,
+    Scroll,
+    Center,
+};
+
 pub const WidgetTextEditSelection = struct {
     initial: Vec2u,
     start: Vec2u,
@@ -504,13 +512,6 @@ pub const WidgetTextEdit = struct {
             offset_before_move += self.line_numbers_offset / self.one_char_size.a;
         }
 
-        // the cursor is above
-        if (self.cursor.pos.b < self.viewport.lines.a) {
-            var count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
-            self.viewport.lines.a = self.cursor.pos.b;
-            self.viewport.lines.b = self.viewport.lines.a + count_lines_visible;
-        }
-
         // the cursor is below
         if (self.cursor.pos.b + glyph_offset_before_move > self.viewport.lines.b) {
             var distance = self.cursor.pos.b + glyph_offset_before_move - self.viewport.lines.b;
@@ -518,12 +519,17 @@ pub const WidgetTextEdit = struct {
             self.viewport.lines.b += distance;
         }
 
-        // the cursor is on the left
-        if (self.cursor.pos.a < self.viewport.columns.a) {
-            var count_col_visible = self.viewport.columns.b - self.viewport.columns.a;
-            self.viewport.columns.a = self.cursor.pos.a;
-            self.viewport.columns.b = self.viewport.columns.a + count_col_visible;
+        // the cursor is above
+        if (self.cursor.pos.b < self.viewport.lines.a) {
+            var count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
+            self.viewport.lines.a = self.cursor.pos.b;
+            self.viewport.lines.b = self.viewport.lines.a + count_lines_visible;
         }
+
+        // start by reseting the viewport to 0
+        var count_col_visible = self.viewport.columns.b - self.viewport.columns.a;
+        self.viewport.columns.a = 0;
+        self.viewport.columns.b = count_col_visible;
 
         // the cursor is on the right
         if (self.cursor.pos.a + offset_before_move > self.viewport.columns.b) {
@@ -533,10 +539,38 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    pub fn setCursorPos(self: *WidgetTextEdit, pos: Vec2u, scroll: bool) void {
+    // TODO(remy): comment
+    // TODO(remy): unit test
+    pub fn centerCursor(self: *WidgetTextEdit) void {
+        self.computeViewport();
+
+        var count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
+        if (self.editor.buffer.lines.items.len <= count_lines_visible) {
+            // no need to center, the whole file is visible
+            return;
+        }
+
+        const half = @divTrunc(count_lines_visible, 2);
+
+        if (self.cursor.pos.b < half) {
+            // no need to center
+            self.viewport.lines.a = 0;
+            self.viewport.lines.b = count_lines_visible;
+            return;
+        }
+
+        self.viewport.lines.a = self.cursor.pos.b - half;
+        self.viewport.lines.b = self.viewport.lines.a + count_lines_visible;
+    }
+
+    /// setCursorPos moves the cursor at the given position and scroll or center to the cursor
+    /// to make sure it's visible.
+    pub fn setCursorPos(self: *WidgetTextEdit, pos: Vec2u, scroll: ScrollBehavior) void {
         self.cursor.pos = pos;
-        if (scroll) {
-            self.scrollToCursor();
+        switch (scroll) {
+            .Center => self.centerCursor(),
+            .Scroll => self.scrollToCursor(),
+            .None => {},
         }
     }
 
@@ -550,7 +584,7 @@ pub const WidgetTextEdit = struct {
         }
 
         if (self.editor.search(txt, self.cursor.pos, direction)) |new_cursor_pos| {
-            self.setCursorPos(new_cursor_pos, true);
+            self.setCursorPos(new_cursor_pos, .Center); // no need to scroll since we centerCursor right after
         } else |err| {
             if (err != EditorError.NoSearchResult) {
                 std.log.warn("WidgetTextEdit.search: can't search for '{s}' in document '{s}': {}", .{ txt.bytes(), self.editor.buffer.fullpath.bytes(), err });
@@ -593,9 +627,9 @@ pub const WidgetTextEdit = struct {
             self.selection.stop.a == self.selection.start.a and
             self.selection.stop.b == self.selection.start.b)
         {
-            self.setCursorPos(self.selection.initial, false);
+            self.setCursorPos(self.selection.initial, .None);
             // make sure the position is on text
-            self.validateCursorPos(true);
+            self.validateCursorPos(.Scroll);
             // selection inactive
             self.selection.state = .Inactive;
             // enter insert mode
@@ -609,7 +643,7 @@ pub const WidgetTextEdit = struct {
     fn deleteSelection(self: *WidgetTextEdit) void {
         if (self.editor.deleteChunk(self.selection.start, self.selection.stop)) |cursor_pos| {
             self.editor.historyEndBlock();
-            self.setCursorPos(cursor_pos, true);
+            self.setCursorPos(cursor_pos, .Scroll);
             self.selection.state = .Inactive;
         } else |err| {
             std.log.err("WidgetTextEdit.deleteSelection: can't remove a chunk of data: {}", .{err});
@@ -629,7 +663,7 @@ pub const WidgetTextEdit = struct {
         var new_cursor_pos = try self.editor.paste(self.cursor.pos, str);
         self.editor.historyEndBlock();
         // move the cursor
-        self.setCursorPos(new_cursor_pos, true);
+        self.setCursorPos(new_cursor_pos, .Scroll);
     }
 
     // Events methods
@@ -686,7 +720,7 @@ pub const WidgetTextEdit = struct {
 
             if (self.cursor.pos.a < col) {
                 self.moveCursor(Vec2i{ .a = @intCast(i64, col - self.cursor.pos.a), .b = 0 }, false);
-                self.validateCursorPos(true);
+                self.validateCursorPos(.Scroll);
             }
         }
     }
@@ -732,7 +766,7 @@ pub const WidgetTextEdit = struct {
                     std.log.err("WidgetTextEdit.onTextInput: can't find glyph in line: {}", .{err});
                     return true;
                 };
-                self.setCursorPos(new_pos, true);
+                self.setCursorPos(new_pos, .Scroll);
                 self.setInputMode(.Command);
             },
             .d => {
@@ -750,7 +784,7 @@ pub const WidgetTextEdit = struct {
                             std.log.err("WidgetTextEdit.onTextInput: di: can't delete chunk: {}", .{err});
                             return true;
                         };
-                        self.setCursorPos(cursor_pos, true);
+                        self.setCursorPos(cursor_pos, .Scroll);
                         self.setInputMode(.Insert);
                     },
                     // delete the line
@@ -782,7 +816,7 @@ pub const WidgetTextEdit = struct {
                     // start inserting
                     'i' => {
                         self.setInputMode(.Insert);
-                        self.validateCursorPos(true);
+                        self.validateCursorPos(.Scroll);
                     },
                     'I' => {
                         self.moveCursorSpecial(CursorMove.StartOfLine, true);
@@ -845,6 +879,7 @@ pub const WidgetTextEdit = struct {
                         };
                     },
                     // others
+                    'z' => self.centerCursor(),
                     'D' => self.editor.deleteAfter(self.cursor.pos),
                     'E' => self.deleteLine(),
                     'x' => {
@@ -871,6 +906,7 @@ pub const WidgetTextEdit = struct {
                             };
                         }
                     },
+                    // undo & redd
                     'u' => self.undo(),
                     'U' => self.redo(),
                     else => return false,
@@ -921,7 +957,7 @@ pub const WidgetTextEdit = struct {
         }
 
         // make sure the cursor is on a viable position.
-        self.validateCursorPos(true);
+        self.validateCursorPos(.Scroll);
     }
 
     /// onMouseWheel is called when the user is using the wheel of the mouse.
@@ -958,7 +994,7 @@ pub const WidgetTextEdit = struct {
         var cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
 
         self.updateSelection(cursor_pos);
-        self.setCursorPos(cursor_pos, true);
+        self.setCursorPos(cursor_pos, .Scroll);
     }
 
     /// onReturn is called when the user has pressed Return.
@@ -1012,8 +1048,8 @@ pub const WidgetTextEdit = struct {
 
         // move the mouse on the click
         var cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
-        self.setCursorPos(cursor_pos, false);
-        self.validateCursorPos(true);
+        self.setCursorPos(cursor_pos, .None); // no need to scroll here we scroll next line
+        self.validateCursorPos(.Scroll);
 
         // use the position (which may have been corrected) as the selection start position
         self.startSelection(self.cursor.pos, .MouseSelection);
@@ -1038,7 +1074,7 @@ pub const WidgetTextEdit = struct {
     pub fn deleteLine(self: *WidgetTextEdit) void {
         self.editor.deleteLine(@intCast(usize, self.cursor.pos.b), .Input);
         self.editor.historyEndBlock();
-        self.validateCursorPos(true);
+        self.validateCursorPos(.Scroll);
         self.stopSelection(.Inactive);
     }
 
@@ -1134,7 +1170,7 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    /// moveCursor moves the cursor in the current WidgetTextEdit view.
+    /// moveCursor applies a relative move the cursor in the current WidgetTextEdit view.
     /// Values passed in `move` are in glyph.
     /// If you want to make sure the cursor is on a valid position, consider
     /// using `validateCursorPos`.
@@ -1177,14 +1213,17 @@ pub const WidgetTextEdit = struct {
             }
         }
 
-        self.validateCursorPos(scroll);
+        if (scroll) {
+            self.validateCursorPos(.Scroll);
+        }
+
         if (self.selection.state == .KeyboardSelection) {
             self.updateSelection(self.cursor.pos);
         }
     }
 
     /// validateCursorPos validates that the cursor is on a valid position, moves the cursor if it is not the case.
-    pub fn validateCursorPos(self: *WidgetTextEdit, scroll: bool) void {
+    pub fn validateCursorPos(self: *WidgetTextEdit, scroll: ScrollBehavior) void {
         if (self.cursor.pos.b >= self.editor.buffer.lines.items.len and self.editor.buffer.lines.items.len > 0) {
             self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
         }
@@ -1213,8 +1252,10 @@ pub const WidgetTextEdit = struct {
             std.log.err("WidgetTextEdit.moveCursor: can't get utf8size of the line {d}: {}", .{ self.cursor.pos.b, err });
         }
 
-        if (scroll) {
-            self.scrollToCursor();
+        switch (scroll) {
+            .Center => self.centerCursor(),
+            .Scroll => self.scrollToCursor(),
+            .None => {},
         }
     }
 
@@ -1254,7 +1295,7 @@ pub const WidgetTextEdit = struct {
             // TODO(remy): unit test
             .NextSpace => {
                 if (self.editor.findGlyphInLine(self.cursor.pos, " ", SearchDirection.After)) |new_pos| {
-                    self.setCursorPos(new_pos, true);
+                    self.setCursorPos(new_pos, .Scroll);
                 } else |err| {
                     std.log.err("WidgetTextEdit.moveCursorSpecial.NextSpace: {}", .{err});
                 }
@@ -1262,7 +1303,7 @@ pub const WidgetTextEdit = struct {
             // TODO(remy): unit test
             .PreviousSpace => {
                 if (self.editor.findGlyphInLine(self.cursor.pos, " ", SearchDirection.Before)) |new_pos| {
-                    self.setCursorPos(new_pos, true);
+                    self.setCursorPos(new_pos, .Scroll);
                 } else |err| {
                     std.log.err("WidgetTextEdit.moveCursorSpecial.NextSpace: {}", .{err});
                 }
@@ -1330,11 +1371,8 @@ pub const WidgetTextEdit = struct {
         }
 
         if (scroll and !scrolled) {
-            self.scrollToCursor();
+            self.validateCursorPos(.Scroll);
         }
-
-        // make sure the cursor is on a valid position
-        self.validateCursorPos(scroll and !scrolled);
     }
 
     // TODO(remy): comment
@@ -1364,25 +1402,33 @@ pub const WidgetTextEdit = struct {
         self.input_mode = input_mode;
     }
 
-    /// goToLine goes to the given line.
-    /// First line starts at 1.
-    pub fn goToLine(self: *WidgetTextEdit, line_number: usize, scroll: bool) void {
-        var pos = Vec2u{ .a = self.cursor.pos.a, .b = line_number };
-
-        if (pos.b > 0) {
-            pos.b -= 1;
-        } else {
-            pos.b = 0;
-        }
-
-        self.setCursorPos(pos, false); // no need to scroll here, we'll do it next function call
+    /// goToLine moves the cursor to the given line.
+    /// First line starts at 0.
+    pub fn goToLine(self: *WidgetTextEdit, line_number: usize, scroll: ScrollBehavior) void {
+        var new_pos = Vec2u{ .a = self.cursor.pos.a, .b = line_number };
+        self.setCursorPos(new_pos, .None); // no need to scroll here, we'll do it next function call
         self.validateCursorPos(scroll);
+    }
+
+    /// goToCol moves the cursor to the given column.
+    /// First column starts at 0.
+    pub fn goToColumn(self: *WidgetTextEdit, col: usize, scroll: ScrollBehavior) void {
+        var new_pos = Vec2u{ .a = col, .b = self.cursor.pos.b };
+        self.setCursorPos(new_pos, .None); // no need to scroll here, we'll do it next function call
+        self.validateCursorPos(scroll);
+    }
+
+    /// goTo moves the cursor to the given line and column.
+    /// First line starts at 1.
+    pub fn goTo(self: *WidgetTextEdit, position: Vec2u, scroll: ScrollBehavior) void {
+        self.goToLine(position.b, .None);
+        self.goToColumn(position.a, scroll);
     }
 
     /// undo cancels the previous change.
     pub fn undo(self: *WidgetTextEdit) void {
         if (self.editor.undo()) |pos| {
-            self.setCursorPos(pos, true);
+            self.setCursorPos(pos, .Center);
         } else |err| {
             if (err != EditorError.NothingToUndo) {
                 std.log.err("WidgetTextEdit.undo: can't undo: {}", .{err});
@@ -1393,7 +1439,7 @@ pub const WidgetTextEdit = struct {
     /// redo reapplies a change previously undone.
     pub fn redo(self: *WidgetTextEdit) void {
         if (self.editor.redo()) |pos| {
-            self.setCursorPos(pos, true);
+            self.setCursorPos(pos, .Center);
         } else |err| {
             if (err != EditorError.NothingToUndo) {
                 std.log.err("WidgetTextEdit.undo: can't undo: {}", .{err});
