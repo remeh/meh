@@ -37,7 +37,7 @@ pub const WidgetListFilterType = enum {
 pub const WidgetListEntry = struct {
     label: U8Slice,
     data: U8Slice,
-    data_int: i64,
+    data_pos: Vec2i,
 
     type: WidgetListEntryType,
 
@@ -291,7 +291,7 @@ pub const WidgetList = struct {
         switch (entry.type) {
             .SearchResult => {
                 var base = std.fs.path.basename(entry.data.bytes());
-                var filename = std.fmt.allocPrint(self.allocator, "{s}:{d}  ", .{ base, entry.data_int }) catch |err| {
+                var filename = std.fmt.allocPrint(self.allocator, "{s}:{d}  ", .{ base, entry.data_pos.b }) catch |err| {
                     std.log.err("WidgetList.renderEntry: can't create filename with line number string: {}", .{err});
                     return;
                 };

@@ -25,6 +25,7 @@ const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
+const Vec2itou = @import("vec.zig").Vec2itou;
 const itou = @import("vec.zig").itou;
 
 pub const AppError = error{
@@ -774,7 +775,7 @@ pub const App = struct {
                     }
                     var definition = definitions.items[0];
                     if (self.openFile(definition.filepath.bytes())) {
-                        self.currentWidgetTextEdit().goTo(Vec2u{ .a = definition.start.a, .b = definition.start.b + 1 }, .Center);
+                        self.currentWidgetTextEdit().goTo(definition.start, .Center);
                         self.currentWidgetTextEdit().setInputMode(.Command);
                     } else |err| {
                         self.showMessageBoxError("LSP: error while jumping to definition: {}", .{err});
@@ -873,8 +874,7 @@ pub const App = struct {
                                     std.log.debug("App.lookupEvents: can't open file: {}", .{err});
                                     return;
                                 };
-                                // TODO(remy): move to the correct column, WidgetList has to support a pos instead of a line
-                                self.currentWidgetTextEdit().goToLine(@intCast(usize, entry.data_int), .Center);
+                                self.currentWidgetTextEdit().goTo(Vec2itou(entry.data_pos), .Center);
                                 // leave the WidgetSearchResults widget
                                 self.focused_widget = FocusedWidget.Editor;
                             }

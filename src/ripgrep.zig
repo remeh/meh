@@ -35,6 +35,7 @@ pub const RipgrepResult = struct {
     filename: U8Slice,
     content: U8Slice,
     line_number: usize,
+    column: usize,
 };
 
 pub const RipgrepResultsIterator = struct {
@@ -58,6 +59,7 @@ pub const RipgrepResultsIterator = struct {
             var filename = U8Slice.initEmpty(self.allocator);
             var content = U8Slice.initEmpty(self.allocator);
             var line_number: usize = 0;
+            var column: usize = 0;
 
             while (true) {
                 if (it.glyph()[0] == ':') {
@@ -79,15 +81,26 @@ pub const RipgrepResultsIterator = struct {
                             line_number = std.fmt.parseInt(usize, line[start_idx..idx], 10) catch |err| {
                                 filename.deinit();
                                 content.deinit();
-                                std.log.err("RipgrepResultsIterator: filename can't appendConst: {}", .{err});
+                                std.log.err("RipgrepResultsIterator: can't read line number: {}", .{err});
                                 return null;
                             };
                             start_idx = idx + 1;
                         },
-                        // col number and the rest is content
+                        // column number and content
                         // ----------
                         2 => {
+                            // column
+                            // ------
+                            column = std.fmt.parseInt(usize, line[start_idx..idx], 10) catch |err| {
+                                filename.deinit();
+                                content.deinit();
+                                std.log.err("RipgrepResultsIterator: can't read column: {}", .{err});
+                                return null;
+                            };
                             start_idx = idx + 1;
+
+                            // content
+                            // -------
                             content.appendConst(line[start_idx..line.len]) catch |err| {
                                 filename.deinit();
                                 content.deinit();
@@ -116,6 +129,7 @@ pub const RipgrepResultsIterator = struct {
                 .filename = filename,
                 .content = content,
                 .line_number = line_number,
+                .column = column,
             };
         }
         return null;

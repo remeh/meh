@@ -6,6 +6,7 @@ const Draw = @import("draw.zig").Draw;
 const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 const WidgetInput = @import("widget_input.zig").WidgetInput;
@@ -90,7 +91,7 @@ pub const WidgetLookup = struct {
         try self.list.entries.append(WidgetListEntry{
             .label = try U8Slice.initFromSlice(self.allocator, ".."),
             .data = try U8Slice.initFromSlice(self.allocator, ".."),
-            .data_int = 0, // unused
+            .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
             .type = .Directory,
         });
 
@@ -112,7 +113,7 @@ pub const WidgetLookup = struct {
                     try self.list.entries.append(WidgetListEntry{
                         .label = try U8Slice.initFromSlice(self.allocator, entry.name),
                         .data = fullpath,
-                        .data_int = 0, // unused
+                        .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
                         .type = t,
                     });
                 },
@@ -135,7 +136,7 @@ pub const WidgetLookup = struct {
             try self.list.entries.append(WidgetListEntry{
                 .label = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
                 .data = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
-                .data_int = 0, // unused
+                .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
                 .type = .File,
             });
         }
