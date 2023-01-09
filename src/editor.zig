@@ -8,6 +8,7 @@ const Change = @import("history.zig").Change;
 const ChangeType = @import("history.zig").ChangeType;
 const History = @import("history.zig").History;
 const ImVec2 = @import("vec.zig").ImVec2;
+const LSP = @import("lsp.zig").LSP;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2f = @import("vec.zig").Vec2f;
@@ -36,6 +37,7 @@ pub const punctuation = ",./&\"'[|]{}()-=:;<>*!?@#+~` \t\n";
 pub const Editor = struct {
     allocator: std.mem.Allocator,
     buffer: Buffer,
+    lsp: ?*LSP,
     has_changes_compared_to_disk: bool,
     history: std.ArrayList(Change),
     history_redo: std.ArrayList(Change),
@@ -55,6 +57,7 @@ pub const Editor = struct {
             .history_redo = std.ArrayList(Change).init(allocator),
             .history_enabled = true,
             .history_current_block_id = 0,
+            .lsp = null,
             .prng = std.rand.DefaultPrng.init(1234),
         };
     }
@@ -337,6 +340,10 @@ pub const Editor = struct {
         var utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
 
         self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), utf8_pos, triggerer);
+
+        if (self.lsp) |lsp| {
+            try lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = pos.b });
+        }
     }
 
     /// deleteGlyph deletes on glyph from the underlying buffer.

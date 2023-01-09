@@ -274,8 +274,7 @@ pub const App = struct {
 
         // open the buffer, create an editor
         var buffer = try Buffer.initFromFile(self.allocator, path);
-        var editor = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
-        try self.textedits.append(editor);
+        var text_edit = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
 
         // starts an LSP client if that makes sense.
         self.startLSPClient(path) catch |err| {
@@ -286,7 +285,11 @@ pub const App = struct {
             lsp.openFile(&buffer) catch |err| {
                 std.log.err("App.openFile: can't send openFile to the LSP server: {}", .{err});
             };
+
+            text_edit.editor.lsp = lsp;
         }
+
+        try self.textedits.append(text_edit);
 
         // switch to this buffer
         self.setCurrentFocusedWidgetTextEditIndex(self.textedits.items.len - 1);
