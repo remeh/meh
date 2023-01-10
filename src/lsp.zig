@@ -271,6 +271,7 @@ pub const LSP = struct {
         var new_text = U8Slice.initEmpty(self.allocator);
         var i: usize = lines_range.a;
         var last_line_size: usize = 0;
+        errdefer new_text.deinit();
 
         while (i <= lines_range.b) : (i += 1) {
             var line = try buffer.getLine(i);

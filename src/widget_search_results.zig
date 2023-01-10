@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("clib.zig").c;
 
+const App = @import("app.zig").App;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const Font = @import("font.zig").Font;
@@ -91,11 +92,11 @@ pub const WidgetSearchResults = struct {
 
     /// setLspReferences creates all entries in the widget list using LSPPositions data.
     /// The given `references` are _NOT_ owned by the WidgetSearchResults (copies are created).
-    pub fn setLspReferences(self: *WidgetSearchResults, references: std.ArrayList(LSPPosition)) !void {
+    pub fn setLspReferences(self: *WidgetSearchResults, app: *App, references: std.ArrayList(LSPPosition)) !void {
         self.list.reset();
 
         for (references.items) |reference| {
-            var line = try peekLine(self.allocator, reference.filepath.bytes(), reference.start.b);
+            var line = try app.peekLine(reference.filepath.bytes(), reference.start.b);
             const pos = Vec2i{ .a = utoi(reference.start.a), .b = utoi(reference.start.b) };
             try self.list.entries.append(WidgetListEntry{
                 .label = line,

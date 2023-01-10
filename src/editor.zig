@@ -134,7 +134,12 @@ pub const Editor = struct {
             pos = change.pos;
         }
 
+        if (self.lsp) |lsp| {
+            try lsp.didChange(&self.buffer, Vec2u{ .a = 0, .b = self.linesCount() - 1 });
+        }
+
         self.has_changes_compared_to_disk = true;
+
         return pos;
     }
 
@@ -158,6 +163,11 @@ pub const Editor = struct {
 
         self.historyEndBlock();
         self.has_changes_compared_to_disk = true;
+
+        if (self.lsp) |lsp| {
+            try lsp.didChange(&self.buffer, Vec2u{ .a = 0, .b = self.linesCount() - 1 });
+        }
+
         return pos;
     }
 
@@ -183,6 +193,12 @@ pub const Editor = struct {
         var deleted_line = self.buffer.lines.orderedRemove(line_pos);
         // history
         self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2u{ .a = 0, .b = line_pos }, triggerer);
+
+        if (self.lsp) |lsp| {
+            lsp.didChange(&self.buffer, Vec2u{ .a = line_pos, .b = self.linesCount() - 1 }) catch |err| {
+                std.log.err("Editor.deleteLine: can't send didChange message to the LSP: {}", .{err});
+            };
+        }
     }
 
     /// deleteAfter deletes all glyphs after the given position (included) in the given line.
@@ -305,6 +321,10 @@ pub const Editor = struct {
             }
         }
 
+        if (self.lsp) |lsp| {
+            try lsp.didChange(&self.buffer, Vec2u{ .a = start_pos.b, .b = end_pos.b });
+        }
+
         return Vec2u{ .a = start_pos.a, .b = start_pos.b };
     }
 
@@ -319,6 +339,11 @@ pub const Editor = struct {
         try self.buffer.lines.insert(pos.b + 1, new_line);
         // history
         self.historyAppend(ChangeType.InsertNewLine, U8Slice.initEmpty(self.allocator), pos, triggerer);
+        if (self.lsp) |lsp| {
+            lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = self.linesCount() - 1 }) catch |err| {
+                std.log.err("Editor.deleteLine: can't send didChange message to the LSP: {}", .{err});
+            };
+        }
     }
 
     /// insertUtf8Text inserts the given UTF8 `text` at the given position.
@@ -377,6 +402,10 @@ pub const Editor = struct {
 
             var utf8_pos = Vec2u{ .a = remove_pos, .b = pos.b };
             self.historyAppend(ChangeType.DeleteGlyph, removed, utf8_pos, triggerer);
+
+            if (self.lsp) |lsp| {
+                try lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = pos.b });
+            }
         }
     }
 

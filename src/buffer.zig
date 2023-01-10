@@ -212,58 +212,6 @@ pub const Buffer = struct {
     }
 };
 
-/// peekLine reads a file until the given line and returns that line in a new U8Slice.
-/// Memory of the U8Slice is owned by the caller and should be freed accordingly.
-pub fn peekLine(allocator: std.mem.Allocator, filepath: []const u8, line: usize) !U8Slice {
-    // make sure that the provided fullpath is absolute
-    var path = try std.fs.realpathAlloc(allocator, filepath);
-    defer allocator.free(path);
-    var fullpath = U8Slice.initEmpty(allocator);
-    try fullpath.appendConst(path);
-    defer fullpath.deinit();
-
-    var file = try std.fs.cwd().openFile(filepath, .{});
-    defer file.close();
-
-    const block_size = 4096;
-    var slice: [4096]u8 = undefined;
-    var buff = &slice;
-    var read: usize = block_size;
-
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var rv = U8Slice.initEmpty(allocator);
-    errdefer rv.deinit();
-
-    var i: usize = 0;
-    var current_line: usize = 0;
-    var line_offset: usize = 0;
-
-    while (read == block_size) {
-        i = 0;
-        line_offset = 0;
-        read = try buf_reader.reader().read(buff);
-
-        while (i < read) : (i += 1) {
-            if (buff[i] == '\n') {
-                if (current_line == line) {
-                    // append the data left until the \n with the \n included
-                    try rv.appendConst(buff[line_offset .. i + 1]); // allocate the data in an u8slice
-                }
-                // move the cursor in this buffer
-                line_offset = i + 1;
-                current_line += 1;
-            }
-        }
-
-        // append the rest of the read buffer if part of peeked line.
-        if (current_line == line) {
-            try rv.appendConst(buff[line_offset..read]);
-        }
-    }
-
-    return rv;
-}
-
 test "buffer init_empty" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initEmpty(allocator);
@@ -358,17 +306,4 @@ test "buffer write_file" {
 
     buffer_first.deinit();
     buffer_second.deinit();
-}
-
-test "peekLine" {
-    const allocator = std.testing.allocator;
-    var line = try peekLine(allocator, "tests/sample_5", 3);
-    try std.testing.expectEqualSlices(u8, line.bytes(), "while this is continuing, this fourth line doesn't have much.\n");
-    line.deinit();
-    line = try peekLine(allocator, "tests/sample_5", 0);
-    try std.testing.expectEqualSlices(u8, line.bytes(), "\tthis is a line which is 👻\n");
-    line.deinit();
-    line = try peekLine(allocator, "tests/sample_5", 11);
-    try std.testing.expectEqualSlices(u8, line.bytes(), "there 4 (four) empty lines before this one.");
-    line.deinit();
 }

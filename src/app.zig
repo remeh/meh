@@ -10,7 +10,6 @@ const Font = @import("font.zig").Font;
 const LSP = @import("lsp.zig").LSP;
 const LSPError = @import("lsp.zig").LSPError;
 const LSPResponse = @import("lsp.zig").LSPResponse;
-const peekLine = @import("buffer.zig").peekLine;
 const RipgrepResults = @import("ripgrep.zig").RipgrepResults;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
@@ -422,6 +421,70 @@ pub const App = struct {
         }
     }
 
+    /// peekLine reads a file until the given line and returns that line in a new U8Slice.
+    /// Could used either a buffered already loaded or the file from the filesystem.
+    /// Memory of the U8Slice is owned by the caller and should be freed accordingly.
+    // TODO(remy): unit test
+    pub fn peekLine(self: *App, filepath: []const u8, line: usize) !U8Slice {
+        // make sure that the provided fullpath is absolute
+        var fullpath = try std.fs.realpathAlloc(self.allocator, filepath);
+        defer self.allocator.free(fullpath);
+
+        // check if we have this data in loaded buffers
+        // -------------
+
+        for (self.textedits.items) |textedit| {
+            if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), fullpath)) {
+                var l = try textedit.editor.buffer.getLine(line);
+                return try l.copy(self.allocator);
+            }
+        }
+
+        // we don't have this data available, peek on the filesystem
+        // -------------
+
+        var file = try std.fs.cwd().openFile(fullpath, .{});
+        defer file.close();
+
+        const block_size = 4096;
+        var slice: [4096]u8 = undefined;
+        var buff = &slice;
+        var read: usize = block_size;
+
+        var buf_reader = std.io.bufferedReader(file.reader());
+        var rv = U8Slice.initEmpty(self.allocator);
+        errdefer rv.deinit();
+
+        var i: usize = 0;
+        var current_line: usize = 0;
+        var line_offset: usize = 0;
+
+        while (read == block_size) {
+            i = 0;
+            line_offset = 0;
+            read = try buf_reader.reader().read(buff);
+
+            while (i < read) : (i += 1) {
+                if (buff[i] == '\n') {
+                    if (current_line == line) {
+                        // append the data left until the \n with the \n included
+                        try rv.appendConst(buff[line_offset .. i + 1]); // allocate the data in an u8slice
+                    }
+                    // move the cursor in this buffer
+                    line_offset = i + 1;
+                    current_line += 1;
+                }
+            }
+
+            // append the rest of the read buffer if part of peeked line.
+            if (current_line == line) {
+                try rv.appendConst(buff[line_offset..read]);
+            }
+        }
+
+        return rv;
+    }
+
     /// openRipgrepResults opens the WidgetSearchResults with the given results if there are any.
     pub fn openRipgrepResults(self: *App, results: RipgrepResults) void {
         if (results.stdout.len == 0) {
@@ -794,7 +857,7 @@ pub const App = struct {
                     self.showMessageBoxError("LSP: no references found.", .{});
                 }
                 if (response.references) |references| {
-                    self.widget_search_results.setLspReferences(references) catch |err| {
+                    self.widget_search_results.setLspReferences(self, references) catch |err| {
                         self.showMessageBoxError("LSP: can't display references: {}", .{err});
                     };
                     self.focused_widget = .SearchResults;
