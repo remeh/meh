@@ -6,6 +6,7 @@ const LSPMessages = @import("lsp_messages.zig");
 const LSPThread = @import("lsp_thread.zig").LSPThread;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2u = @import("vec.zig").Vec2u;
+const Vec4u = @import("vec.zig").Vec4u;
 
 pub const LSPError = error{
     MalformedResponse,
@@ -17,6 +18,7 @@ pub const LSPError = error{
 // TODO(remy): comment
 pub const LSPMessageType = enum {
     Definition,
+    DidChange,
     Initialize,
     Initialized,
     LogMessage,
@@ -261,6 +263,39 @@ pub const LSP = struct {
         try self.sendMessage(request);
     }
 
+    pub fn didChange(self: *LSP, buffer: *Buffer, lines_range: Vec2u) !void {
+        var msg_id = self.id();
+        var uri = try toUri(self.allocator, buffer.fullpath.bytes());
+        defer uri.deinit();
+
+        var new_text = U8Slice.initEmpty(self.allocator);
+        var i: usize = lines_range.a;
+        var last_line_size: usize = 0;
+
+        while (i <= lines_range.b) : (i += 1) {
+            var line = try buffer.getLine(i);
+            last_line_size = line.size();
+            try new_text.appendConst(line.bytes());
+        }
+
+        defer new_text.deinit();
+
+        var range = Vec4u{
+            .a = 0,
+            .b = lines_range.a,
+            .c = last_line_size,
+            .d = lines_range.b,
+        };
+
+        var json = try LSPWriter.textDocumentDidChange(self.allocator, msg_id, uri.bytes(), range, new_text.bytes());
+        var request = LSPRequest{
+            .json = json,
+            .message_type = .DidChange,
+            .request_id = msg_id,
+        };
+        try self.sendMessage(request);
+    }
+
     // -
 
     fn sendMessage(self: LSP, request: LSPRequest) !void {
@@ -368,6 +403,28 @@ pub const LSPWriter = struct {
                     .character = cursor_pos.a,
                     .line = cursor_pos.b,
                 },
+            },
+        };
+        return try LSPWriter.toJson(allocator, m);
+    }
+
+    fn textDocumentDidChange(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, range: Vec4u, new_text: []const u8) !U8Slice {
+        var content_change = LSPMessages.contentChange{
+            .range = LSPMessages.range{
+                .start = LSPMessages.position{ .character = range.a, .line = range.b },
+                .end = LSPMessages.position{ .character = range.c, .line = range.d },
+            },
+            .text = new_text,
+        };
+        var m = LSPMessages.textDocumentDidChange{
+            .jsonrpc = "2.0",
+            .method = "textDocument/didChange",
+            .params = LSPMessages.didChangeParams{
+                .textDocument = LSPMessages.textDocumentIdentifierVersioned{
+                    .uri = filepath,
+                    .version = msg_id, // we can re-use the msg id which is a monotonic counter
+                },
+                .contentChanges = [1]LSPMessages.contentChange{content_change},
             },
         };
         return try LSPWriter.toJson(allocator, m);

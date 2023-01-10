@@ -33,6 +33,15 @@ pub const dynRegTrue = dynReg{ .dynamicRegistration = true };
 pub const dynRegFalse = dynReg{ .dynamicRegistration = false };
 pub const emptyStruct = struct {};
 
+pub const textDocumentIdentifier = struct {
+    uri: []const u8,
+};
+
+pub const textDocumentIdentifierVersioned = struct {
+    uri: []const u8,
+    version: i64,
+};
+
 // Requests
 // -------------------------------------------------------------
 
@@ -94,10 +103,6 @@ pub const textDocumentItem = struct {
     text: []const u8,
 };
 
-pub const textDocumentIdentifier = struct {
-    uri: []const u8,
-};
-
 pub const textDocumentPositionParams = struct {
     textDocument: textDocumentIdentifier,
 };
@@ -135,6 +140,25 @@ pub const textDocumentDefinition = struct {
 pub const definitionParams = struct {
     textDocument: textDocumentIdentifier,
     position: position,
+};
+
+// message: textDocument/didChange
+// -------------------------------
+
+pub const textDocumentDidChange = struct {
+    jsonrpc: []const u8,
+    method: []const u8,
+    params: didChangeParams,
+};
+
+pub const didChangeParams = struct {
+    textDocument: textDocumentIdentifierVersioned,
+    contentChanges: [1]contentChange,
+};
+
+pub const contentChange = struct {
+    range: range,
+    text: []const u8,
 };
 
 // Responses
