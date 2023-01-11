@@ -41,7 +41,7 @@ pub const Buffer = struct {
     /// initFromFile creates a buffer, reads data from the given fullpath
     /// and copies it in the Buffer instance.
     /// initFromFile calls `trackLineReturnPositions` to start tracking the line returns.
-    // TODO(remy): some refactoring (see `peekLine`) would be nice here.
+    // TODO(remy): some refactoring (see `App.peekLine`) would be nice here.
     pub fn initFromFile(allocator: std.mem.Allocator, filepath: []const u8) !Buffer {
         // make sure that the provided fullpath is absolute
         var path = try std.fs.realpathAlloc(allocator, filepath);

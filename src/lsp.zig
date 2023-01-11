@@ -220,6 +220,10 @@ pub const LSP = struct {
     }
 
     pub fn openFile(self: *LSP, buffer: *Buffer) !void {
+        if (self.context.is_running.load(.Acquire) == false) {
+            return;
+        }
+    
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
@@ -236,6 +240,10 @@ pub const LSP = struct {
     }
 
     pub fn references(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
+        if (self.context.is_running.load(.Acquire) == false) {
+            return;
+        }
+    
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
@@ -250,6 +258,10 @@ pub const LSP = struct {
     }
 
     pub fn definition(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
+        if (self.context.is_running.load(.Acquire) == false) {
+            return;
+        }
+    
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
@@ -264,6 +276,10 @@ pub const LSP = struct {
     }
 
     pub fn didChange(self: *LSP, buffer: *Buffer, lines_range: Vec2u) !void {
+        if (self.context.is_running.load(.Acquire) == false) {
+            return;
+        }
+    
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
@@ -300,6 +316,10 @@ pub const LSP = struct {
     // -
 
     fn sendMessage(self: LSP, request: LSPRequest) !void {
+        if (self.context.is_running.load(.Acquire) == false) {
+            return;
+        }
+    
         var node = try self.allocator.create(Queue(LSPRequest).Node);
         node.data = request;
         // send the JSON data to the other thread

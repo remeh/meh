@@ -22,7 +22,7 @@ pub const LSPThread = struct {
     pub fn run(ctx: *LSPContext) !void {
         std.log.debug("starting the LSP thread", .{});
         var requests = std.AutoHashMap(i64, LSPMessageType).init(ctx.allocator);
-
+        
         // spawn the LSP server process
 
         const argv: [1][]const u8 = [1][]const u8{ctx.server_bin_path};
@@ -360,9 +360,11 @@ pub const LSPThread = struct {
                         }
                     }
 
-                    if (rv.definitions.?.items.len == 0) {
-                        rv.definitions.?.deinit();
-                        rv.definitions = null;
+                    if (rv.definitions) |defs| {
+                        if (defs.items.len == 0) {
+                            defs.deinit();
+                            rv.definitions = null;
+                        }
                     }
                 },
                 else => {},

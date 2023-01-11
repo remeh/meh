@@ -447,7 +447,7 @@ pub const App = struct {
         defer file.close();
 
         const block_size = 4096;
-        var slice: [4096]u8 = undefined;
+        var slice: [block_size]u8 = undefined;
         var buff = &slice;
         var read: usize = block_size;
 
