@@ -223,7 +223,7 @@ pub const LSP = struct {
         if (self.context.is_running.load(.Acquire) == false) {
             return;
         }
-    
+
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
@@ -243,7 +243,7 @@ pub const LSP = struct {
         if (self.context.is_running.load(.Acquire) == false) {
             return;
         }
-    
+
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
@@ -261,7 +261,7 @@ pub const LSP = struct {
         if (self.context.is_running.load(.Acquire) == false) {
             return;
         }
-    
+
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
@@ -279,7 +279,7 @@ pub const LSP = struct {
         if (self.context.is_running.load(.Acquire) == false) {
             return;
         }
-    
+
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
@@ -319,7 +319,7 @@ pub const LSP = struct {
         if (self.context.is_running.load(.Acquire) == false) {
             return;
         }
-    
+
         var node = try self.allocator.create(Queue(LSPRequest).Node);
         node.data = request;
         // send the JSON data to the other thread

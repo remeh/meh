@@ -10,6 +10,16 @@ pub const BufferError = error{
     NoFilepath,
 };
 
+/// BufferPosition is used to refer to a position in a given buffer.
+pub const BufferPosition = struct {
+    fullpath: U8Slice,
+    cursor_position: Vec2u,
+
+    pub fn deinit(self: BufferPosition) void {
+        self.fullpath.deinit();
+    }
+};
+
 // TODO(remy): comment
 pub const Buffer = struct {
     /// allocator used for all things allocated by this buffer instance.

@@ -137,6 +137,7 @@ pub const WidgetCommand = struct {
                 return;
             }
             if (self.getArg(1)) |f| {
+                app.storeBufferPosition(.Previous);
                 app.openFile(f) catch |err| {
                     std.log.err("WidgetCommand.interpret: can't open file: {}", .{err});
                 };
@@ -177,6 +178,8 @@ pub const WidgetCommand = struct {
                     }
                 }
             }
+
+            app.storeBufferPosition(.Previous);
 
             var wt = app.currentWidgetTextEdit();
             wt.search(str, SearchDirection.After, true);
@@ -266,6 +269,7 @@ pub const WidgetCommand = struct {
         if (command.len > 1 and std.mem.eql(u8, command[0..1], ":")) {
             // read the line number
             if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
+                app.storeBufferPosition(.Previous);
                 var wt = app.currentWidgetTextEdit();
                 wt.goToLine(line_number - 1, .Center);
                 return;

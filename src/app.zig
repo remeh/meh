@@ -3,6 +3,7 @@ const c = @import("clib.zig").c;
 const expect = std.testing.expect;
 
 const Buffer = @import("buffer.zig").Buffer;
+const BufferPosition = @import("buffer.zig").BufferPosition;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const ImVec2 = @import("vec.zig").ImVec2;
@@ -57,6 +58,20 @@ pub const Direction = enum {
     Right,
 };
 
+pub const StoreBufferPositionBehavior = enum {
+    /// Previous is used to store the current position when the user is jumping somewhere else
+    /// or to jump to a a previous position.
+    /// When storing, using Previous delete ones in `next_positions`.
+    Previous,
+    /// PreviousNoDelete is used to store the current position when the user is jumping somewhere else
+    /// or to jump to a a previous position.
+    /// When storing, using PreviousNoDelete do NOT delete ones in `next_positions`. Used while going
+    /// back and forth.
+    PreviousNoDelete,
+    /// Next is used to jump to the next position when moving back and forth in positions history.
+    Next,
+};
+
 /// Main app structure.
 /// The app has three fonts mode:
 ///   * hidpi: using a bigger font but scaled by 0.5, providing the hidpi rendering quality
@@ -108,6 +123,14 @@ pub const App = struct {
 
     /// working_dir stores the current path to use when opening new files, etc.
     working_dir: U8Slice,
+
+    /// previous_positions is used to be able to get back to a previous positions
+    /// when jumping around in source code. See `previous_positions`.
+    previous_positions: std.ArrayList(BufferPosition),
+
+    /// next_positions is used to get back to a more recent positions (after having
+    /// moved to a previous one with `previous_positions`.
+    next_positions: std.ArrayList(BufferPosition),
 
     /// current_widget_text_edit is the currently selected widget text in the
     /// opened WidgetTextEdits/editors/buffers.
@@ -200,6 +223,8 @@ pub const App = struct {
             .has_split_view = false,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
+            .previous_positions = std.ArrayList(BufferPosition).init(allocator),
+            .next_positions = std.ArrayList(BufferPosition).init(allocator),
             .lsp = null,
             .sdl_window = sdl_window.?,
             .font_custom = undefined,
@@ -218,12 +243,21 @@ pub const App = struct {
     }
 
     pub fn deinit(self: *App) void {
-        var i: usize = 0;
-        while (i < self.textedits.items.len) : (i += 1) {
-            self.textedits.items[i].deinit();
+        for (self.textedits.items) |*textedit| {
+            textedit.deinit();
         }
-
         self.textedits.deinit();
+
+        for (self.previous_positions.items) |pos| {
+            pos.deinit();
+        }
+        self.previous_positions.deinit();
+
+        for (self.next_positions.items) |pos| {
+            pos.deinit();
+        }
+        self.next_positions.deinit();
+
         self.widget_command.deinit();
         self.widget_lookup.deinit();
         self.widget_messagebox.deinit();
@@ -419,6 +453,78 @@ pub const App = struct {
         if (!self.has_split_view) {
             self.focused_editor = .Left;
         }
+    }
+
+    /// storeBufferPosition stores the current position of the cursor in the active buffer.
+    pub fn storeBufferPosition(self: *App, direction: StoreBufferPositionBehavior) void {
+        if (self.textedits.items.len == 0) {
+            return;
+        }
+
+        const textedit = self.currentWidgetTextEdit();
+        var buffer_pos = BufferPosition{
+            .fullpath = textedit.editor.buffer.fullpath.copy(self.allocator) catch |err| {
+                std.log.err("App.storeBufferPosition: can't copy buffer fullpath: {}", .{err});
+                return;
+            },
+            .cursor_position = textedit.cursor.pos,
+        };
+
+        switch (direction) {
+            .Previous => {
+                self.previous_positions.append(buffer_pos) catch |err| {
+                    std.log.err("App.storeBufferPosition: can't store previous buffer position: {}", .{err});
+                };
+
+                // since we're adding a new position, all the ones in next_positions have to disappear
+                while (self.next_positions.items.len > 0) {
+                    self.next_positions.pop().deinit();
+                }
+            },
+            .PreviousNoDelete => {
+                self.previous_positions.append(buffer_pos) catch |err| {
+                    std.log.err("App.storeBufferPosition: can't store previous buffer position: {}", .{err});
+                };
+            },
+            .Next => {
+                self.next_positions.append(buffer_pos) catch |err| {
+                    std.log.err("App.storeBufferPosition: can't store next buffer position: {}", .{err});
+                };
+            },
+        }
+
+        // TODO(remy): don't grow indefinitely
+    }
+
+    pub fn jumpToPrevious(self: *App) !void {
+        if (self.previous_positions.items.len == 0) {
+            return;
+        }
+
+        const buff_pos = self.previous_positions.pop();
+        defer buff_pos.deinit();
+
+        self.storeBufferPosition(.Next);
+
+        return try self.jumpToBufferPosition(buff_pos);
+    }
+
+    pub fn jumpToNext(self: *App) !void {
+        if (self.next_positions.items.len == 0) {
+            return;
+        }
+
+        const buff_pos = self.next_positions.pop();
+        defer buff_pos.deinit();
+
+        self.storeBufferPosition(.PreviousNoDelete);
+
+        return try self.jumpToBufferPosition(buff_pos);
+    }
+
+    pub fn jumpToBufferPosition(self: *App, buff_pos: BufferPosition) !void {
+        try self.openFile(buff_pos.fullpath.bytes());
+        self.currentWidgetTextEdit().goTo(buff_pos.cursor_position, .Center);
     }
 
     /// peekLine reads a file until the given line and returns that line in a new U8Slice.
@@ -839,6 +945,9 @@ pub const App = struct {
                     if (definitions.items.len > 1) {
                         std.log.warn("App.interpretLSPMessage: multiple definitions ({d}) have been returned", .{definitions.items.len});
                     }
+
+                    self.storeBufferPosition(.Previous);
+
                     var definition = definitions.items[0];
                     if (self.openFile(definition.filepath.bytes())) {
                         self.currentWidgetTextEdit().goTo(definition.start, .Center);
@@ -936,6 +1045,8 @@ pub const App = struct {
                     c.SDLK_RETURN => {
                         if (self.widget_search_results.select()) |selected| {
                             if (selected) |entry| {
+                                self.storeBufferPosition(.Previous);
+
                                 self.openFile(entry.data.bytes()) catch |err| {
                                     std.log.debug("App.lookupEvents: can't open file: {}", .{err});
                                     return;
@@ -1001,6 +1112,8 @@ pub const App = struct {
                     c.SDLK_RETURN => {
                         if (self.widget_lookup.select()) |selected| {
                             if (selected) |entry| {
+                                self.storeBufferPosition(.Previous);
+
                                 // we'll try to open that file
                                 self.openFile(entry.data.bytes()) catch |err| {
                                     std.log.debug("App.lookupEvents: can't open file: {}", .{err});
@@ -1126,6 +1239,17 @@ pub const App = struct {
                                         return;
                                     };
                                     self.focused_widget = .Lookup;
+                                },
+                                c.SDLK_o => {
+                                    if (shift) {
+                                        self.jumpToNext() catch |err| {
+                                            self.showMessageBoxError("Can't jump to next position: {}", .{err});
+                                        };
+                                    } else {
+                                        self.jumpToPrevious() catch |err| {
+                                            self.showMessageBoxError("Can't jump to previous position: {}", .{err});
+                                        };
+                                    }
                                 },
                                 c.SDLK_r => {
                                     // re-open search results, but do not reset the widget
