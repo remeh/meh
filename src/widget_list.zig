@@ -230,7 +230,7 @@ pub const WidgetList = struct {
         // label below the input / above the list
         // ----
 
-        var label_pos = Vec2u{ .a = position.a, .b = position.b + (one_char_size.b * 2) };
+        var label_pos = Vec2u{ .a = position.a + one_char_size.a, .b = position.b + (one_char_size.b * 2) };
         Draw.text(font, scaler, label_pos, widget_size.a, Colors.white, self.label.bytes());
 
         // list the entries
