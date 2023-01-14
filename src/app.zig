@@ -310,9 +310,11 @@ pub const App = struct {
         var text_edit = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
 
         // starts an LSP client if that makes sense.
-        self.startLSPClient(path) catch |err| {
-            std.log.err("App.openFile: can't start an LSP client: {}", .{err});
-        };
+        if (self.lsp != null) {
+            self.startLSPClient(path) catch |err| {
+                std.log.err("App.openFile: can't start an LSP client: {}", .{err});
+            };
+        }
 
         if (self.lsp) |lsp| {
             lsp.openFile(&buffer) catch |err| {

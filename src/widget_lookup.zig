@@ -110,8 +110,14 @@ pub const WidgetLookup = struct {
                     try fullpath.appendConst(self.current_path.bytes());
                     try fullpath.appendConst("/");
                     try fullpath.appendConst(entry.name);
+
+                    var label = try U8Slice.initFromSlice(self.allocator, entry.name);
+                    if (t == .Directory) {
+                        try label.appendConst("/");
+                    }
+
                     try self.list.entries.append(WidgetListEntry{
-                        .label = try U8Slice.initFromSlice(self.allocator, entry.name),
+                        .label = label,
                         .data = fullpath,
                         .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
                         .type = t,
@@ -140,6 +146,8 @@ pub const WidgetLookup = struct {
                 .type = .File,
             });
         }
+
+        try self.list.label.appendConst("Opened buffers:");
 
         try self.list.filter();
     }
