@@ -161,12 +161,32 @@ pub const contentChange = struct {
     text: []const u8,
 };
 
+// message: textDocument/completion
+// --------------------------------
+
+pub const textDocumentCompletion = struct {
+    jsonrpc: []const u8,
+    id: i64,
+    method: []const u8,
+    params: completionParams,
+};
+
+pub const completionParams = struct {
+    textDocument: textDocumentIdentifier,
+    position: position,
+};
+
 // Responses
 // -------------------------------------------------------------
 
 pub const headerResponse = struct {
     jsonrpc: []const u8,
     id: i64,
+};
+
+pub const headerNotificationResponse = struct {
+    jsonrpc: []const u8,
+    method: []const u8,
 };
 
 pub const positionResponse = struct {

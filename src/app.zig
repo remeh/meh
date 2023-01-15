@@ -310,7 +310,7 @@ pub const App = struct {
         var text_edit = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
 
         // starts an LSP client if that makes sense.
-        if (self.lsp != null) {
+        if (self.lsp == null) {
             self.startLSPClient(path) catch |err| {
                 std.log.err("App.openFile: can't start an LSP client: {}", .{err});
             };
@@ -498,6 +498,8 @@ pub const App = struct {
         // TODO(remy): don't grow indefinitely
     }
 
+    /// jumpToPrevious jumps back to the previous position in `previous_positions`.
+    /// See jumpToNext and jumpToBufferPosition.
     pub fn jumpToPrevious(self: *App) !void {
         if (self.previous_positions.items.len == 0) {
             return;
@@ -511,6 +513,8 @@ pub const App = struct {
         return try self.jumpToBufferPosition(buff_pos);
     }
 
+    /// jumpToNext jumps back to the next position in `next_positions`.
+    /// See jumpToPrevious and jumpToBufferPosition.
     pub fn jumpToNext(self: *App) !void {
         if (self.next_positions.items.len == 0) {
             return;
@@ -524,6 +528,8 @@ pub const App = struct {
         return try self.jumpToBufferPosition(buff_pos);
     }
 
+    /// jumpToBufferPosition jumps to the given buffer position, trying to open the file
+    /// if necessary.
     pub fn jumpToBufferPosition(self: *App, buff_pos: BufferPosition) !void {
         try self.openFile(buff_pos.fullpath.bytes());
         self.currentWidgetTextEdit().goTo(buff_pos.cursor_position, .Center);
@@ -1215,6 +1221,14 @@ pub const App = struct {
                                         self.focused_editor = .Right;
                                     } else {
                                         self.focused_editor = .Left;
+                                    }
+                                },
+                                c.SDLK_n => {
+                                    if (self.lsp) |lsp| {
+                                        const wt = self.currentWidgetTextEdit();
+                                        lsp.completion(&wt.editor.buffer, wt.cursor.pos) catch |err| {
+                                            std.log.err("App.editorEvents: can't send lsp request for definition: {}", .{err});
+                                        };
                                     }
                                 },
                                 c.SDLK_k => {

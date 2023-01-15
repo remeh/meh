@@ -239,140 +239,140 @@ pub const LSPThread = struct {
         return;
     }
 
-    fn interpret(allocator: std.mem.Allocator, requests: *std.AutoHashMap(i64, LSPMessageType), json: []const u8) !LSPResponse {
+    fn interpret(allocator: std.mem.Allocator, requests: *std.AutoHashMap(i64, LSPMessageType), response: []const u8) !LSPResponse {
         // isolate the json
-        var idx = std.mem.indexOf(u8, json, "{");
+        var idx = std.mem.indexOf(u8, response, "{");
         if (idx == null) {
             return LSPError.MalformedResponse;
         }
 
-        var json_token_stream = std.json.TokenStream.init(json[idx.?..]);
+        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
+        var json_token_stream = std.json.TokenStream.init(response[idx.?..]);
+
+        if (std.json.parse(LSPMessages.headerResponse, &json_token_stream, json_params)) |header| {
+            defer std.json.parseFree(
+                LSPMessages.headerResponse,
+                header,
+                .{ .allocator = allocator, .ignore_unknown_fields = true },
+            );
+
+            // read the rest depending on the message type
+
+            if (requests.get(header.id)) |message_type| {
+                var rv = LSPResponse.init(allocator, header.id, message_type);
+                errdefer rv.deinit();
+
+                switch (message_type) {
+                    .References => try LSPThread.interpretReferences(allocator, &rv, response, idx.?),
+                    .Definition => LSPThread.interpretDefinition(allocator, &rv, response, idx.?),
+                    else => {},
+                }
+
+                return rv;
+            }
+        } else |_| {
+            // the header has no request ID, it must be a notification
+            return LSPThread.readNotification(allocator, response, idx.?);
+        }
+
+        return LSPError.MissingRequestEntry;
+    }
+
+    fn interpretReferences(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
+        rv.references = std.ArrayList(LSPPosition).init(allocator);
+        var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
+
+        const references = try std.json.parse(LSPMessages.referencesResponse, &json_token_stream, json_params);
+        defer std.json.parseFree(LSPMessages.referencesResponse, references, json_params);
+
+        if (references.result) |refs| {
+            for (refs) |result| {
+                if (result.toLSPPosition(allocator)) |position| {
+                    rv.references.?.append(position) catch |err| {
+                        std.log.err("LSPThread.interpret: can't append position: {}", .{err});
+                    };
+                } else |err| {
+                    std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
+                }
+            }
+        }
+
+        if (rv.references.?.items.len == 0) {
+            rv.references.?.deinit();
+            rv.references = null;
+        }
+    }
+
+    fn interpretDefinition(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) void {
+        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
+        var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
+
+        // Some LSP servers return only one result (an object), some returns
+        // an array, through trial and error we have to test both.
+
+        rv.*.definitions = std.ArrayList(LSPPosition).init(allocator);
+
+        // single value JSON
+        if (std.json.parse(LSPMessages.definitionResponse, &json_token_stream, json_params)) |definition| {
+            defer std.json.parseFree(LSPMessages.definitionResponse, definition, json_params);
+            if (definition.result) |result| {
+                if (result.toLSPPosition(allocator)) |position| {
+                    rv.*.definitions.?.append(position) catch |err| {
+                        std.log.err("LSPThread.interpret: can't append position: {}", .{err});
+                    };
+                } else |err| {
+                    std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
+                }
+            }
+        } else |_| {
+            // multiple value JSON, reset the JSON token stream
+            json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
+
+            if (std.json.parse(LSPMessages.definitionsResponse, &json_token_stream, json_params)) |definitions| {
+                defer std.json.parseFree(LSPMessages.definitionsResponse, definitions, json_params);
+
+                if (definitions.result) |results| {
+                    for (results) |result| {
+                        if (result.toLSPPosition(allocator)) |position| {
+                            rv.*.definitions.?.append(position) catch |err| {
+                                std.log.err("LSPThread.interpret: can't append position: {}", .{err});
+                            };
+                        } else |err| {
+                            std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
+                        }
+                    }
+                }
+            } else |_| {
+                rv.*.definitions = null;
+            }
+        }
+
+        if (rv.*.definitions) |defs| {
+            if (defs.items.len == 0) {
+                defs.deinit();
+                rv.*.definitions = null;
+            }
+        }
+    }
+
+    fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
+        // read the type of the notification
+        var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
 
         // read the header only
         const header = try std.json.parse(
-            LSPMessages.headerResponse,
+            LSPMessages.headerNotificationResponse,
             &json_token_stream,
             .{ .allocator = allocator, .ignore_unknown_fields = true },
         );
         defer std.json.parseFree(
-            LSPMessages.headerResponse,
+            LSPMessages.headerNotificationResponse,
             header,
             .{ .allocator = allocator, .ignore_unknown_fields = true },
         );
 
-        // read the rest depending on the message type
-        if (requests.get(header.id)) |message_type| {
-            var rv = LSPResponse.init(allocator, header.id, message_type);
-            errdefer rv.deinit();
-
-            // DEBUG OUTPUT JSON
-            std.log.debug("%{s}%", .{json[idx.?..]});
-
-            json_token_stream = std.json.TokenStream.init(json[idx.?..]);
-
-            switch (message_type) {
-                .References => {
-                    rv.references = std.ArrayList(LSPPosition).init(allocator);
-
-                    const references = try std.json.parse(
-                        LSPMessages.referencesResponse,
-                        &json_token_stream,
-                        .{ .allocator = allocator, .ignore_unknown_fields = true },
-                    );
-                    defer std.json.parseFree(
-                        LSPMessages.referencesResponse,
-                        references,
-                        .{ .allocator = allocator, .ignore_unknown_fields = true },
-                    );
-
-                    if (references.result) |refs| {
-                        for (refs) |result| {
-                            if (result.toLSPPosition(allocator)) |position| {
-                                rv.references.?.append(position) catch |err| {
-                                    std.log.err("LSPThread.interpret: can't append position: {}", .{err});
-                                };
-                            } else |err| {
-                                std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
-                            }
-                        }
-                    }
-
-                    if (rv.references.?.items.len == 0) {
-                        rv.references.?.deinit();
-                        rv.references = null;
-                    }
-                },
-                .Definition => {
-                    // Some LSP servers return only one result (an object), some returns
-                    // an array, through trial and error we have to test both.
-
-                    rv.definitions = std.ArrayList(LSPPosition).init(allocator);
-
-                    // single value JSON
-                    if (std.json.parse(
-                        LSPMessages.definitionResponse,
-                        &json_token_stream,
-                        .{ .allocator = allocator, .ignore_unknown_fields = true },
-                    )) |definition| {
-                        defer std.json.parseFree(
-                            LSPMessages.definitionResponse,
-                            definition,
-                            .{ .allocator = allocator, .ignore_unknown_fields = true },
-                        );
-
-                        if (definition.result) |result| {
-                            if (result.toLSPPosition(allocator)) |position| {
-                                rv.definitions.?.append(position) catch |err| {
-                                    std.log.err("LSPThread.interpret: can't append position: {}", .{err});
-                                };
-                            } else |err| {
-                                std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
-                            }
-                        }
-                    } else |_| {
-                        // multiple value JSON
-                        json_token_stream = std.json.TokenStream.init(json[idx.?..]);
-
-                        if (std.json.parse(
-                            LSPMessages.definitionsResponse,
-                            &json_token_stream,
-                            .{ .allocator = allocator, .ignore_unknown_fields = true },
-                        )) |definitions| {
-                            defer std.json.parseFree(
-                                LSPMessages.definitionsResponse,
-                                definitions,
-                                .{ .allocator = allocator, .ignore_unknown_fields = true },
-                            );
-
-                            if (definitions.result) |results| {
-                                for (results) |result| {
-                                    if (result.toLSPPosition(allocator)) |position| {
-                                        rv.definitions.?.append(position) catch |err| {
-                                            std.log.err("LSPThread.interpret: can't append position: {}", .{err});
-                                        };
-                                    } else |err| {
-                                        std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
-                                    }
-                                }
-                            }
-                        } else |_| {
-                            rv.definitions = null;
-                        }
-                    }
-
-                    if (rv.definitions) |defs| {
-                        if (defs.items.len == 0) {
-                            defs.deinit();
-                            rv.definitions = null;
-                        }
-                    }
-                },
-                else => {},
-            }
-
-            return rv;
-        }
-
+        std.log.debug("received an LSP notification: {s}", .{header.method});
         return LSPError.MissingRequestEntry;
     }
 };

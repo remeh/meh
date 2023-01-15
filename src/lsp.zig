@@ -17,6 +17,7 @@ pub const LSPError = error{
 
 // TODO(remy): comment
 pub const LSPMessageType = enum {
+    Completion,
     Definition,
     DidChange,
     Initialize,
@@ -275,6 +276,24 @@ pub const LSP = struct {
         try self.sendMessage(request);
     }
 
+    pub fn completion(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
+        if (self.context.is_running.load(.Acquire) == false) {
+            return;
+        }
+
+        var msg_id = self.id();
+        var uri = try toUri(self.allocator, buffer.fullpath.bytes());
+        defer uri.deinit();
+
+        var json = try LSPWriter.textDocumentCompletion(self.allocator, msg_id, uri.bytes(), cursor);
+        var request = LSPRequest{
+            .json = json,
+            .message_type = .Completion,
+            .request_id = msg_id,
+        };
+        try self.sendMessage(request);
+    }
+
     pub fn didChange(self: *LSP, buffer: *Buffer, lines_range: Vec2u) !void {
         if (self.context.is_running.load(.Acquire) == false) {
             return;
@@ -446,6 +465,24 @@ pub const LSPWriter = struct {
                     .version = msg_id, // we can re-use the msg id which is a monotonic counter
                 },
                 .contentChanges = [1]LSPMessages.contentChange{content_change},
+            },
+        };
+        return try LSPWriter.toJson(allocator, m);
+    }
+
+    fn textDocumentCompletion(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, cursor_pos: Vec2u) !U8Slice {
+        var m = LSPMessages.textDocumentCompletion{
+            .jsonrpc = "2.0",
+            .method = "textDocument/completion",
+            .id = msg_id,
+            .params = LSPMessages.completionParams{
+                .textDocument = LSPMessages.textDocumentIdentifier{
+                    .uri = filepath,
+                },
+                .position = LSPMessages.position{
+                    .character = cursor_pos.a,
+                    .line = cursor_pos.b,
+                },
             },
         };
         return try LSPWriter.toJson(allocator, m);
