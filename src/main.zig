@@ -25,8 +25,8 @@ pub fn main() !void {
         }
     }
     errdefer app.deinit();
-    try app.mainloop();
 
+    try app.mainloop();
     app.deinit();
 
     _ = gpa.detectLeaks();

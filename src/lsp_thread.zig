@@ -111,6 +111,8 @@ pub const LSPThread = struct {
                             std.log.err("lspThread: can't send to the server: {}", .{err});
                         };
 
+                        std.log.debug("sent: {s}", .{node.data.json.bytes()});
+
                         // store the request infos needed for later interpretation of the response
                         requests.put(node.data.request_id, node.data.message_type) catch |err| {
                             std.log.err("LSPThread.run: can't store request information: {}", .{err});

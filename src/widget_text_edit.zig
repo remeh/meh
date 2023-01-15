@@ -641,7 +641,7 @@ pub const WidgetTextEdit = struct {
     }
 
     fn deleteSelection(self: *WidgetTextEdit) void {
-        if (self.editor.deleteChunk(self.selection.start, self.selection.stop)) |cursor_pos| {
+        if (self.editor.deleteChunk(self.selection.start, self.selection.stop, .Input)) |cursor_pos| {
             self.editor.historyEndBlock();
             self.setCursorPos(cursor_pos, .Scroll);
             self.selection.state = .Inactive;
@@ -780,6 +780,7 @@ pub const WidgetTextEdit = struct {
                         var cursor_pos = self.editor.deleteChunk(
                             Vec2u{ .a = word_pos.a, .b = self.cursor.pos.b },
                             Vec2u{ .a = word_pos.b, .b = self.cursor.pos.b },
+                            .Input,
                         ) catch |err| {
                             std.log.err("WidgetTextEdit.onTextInput: di: can't delete chunk: {}", .{err});
                             return true;

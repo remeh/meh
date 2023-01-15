@@ -24,7 +24,9 @@ pub const EditorError = error{
 
 pub const Triggerer = enum {
     Input,
+    Paste,
     Redo,
+    Undo,
 };
 
 pub const SearchDirection = enum { Before, After };
@@ -85,6 +87,11 @@ pub const Editor = struct {
             return;
         }
 
+        if (triggerer == .Undo) {
+            data.deinit();
+            return;
+        }
+
         // on input, we want to clear the redo list because
         // it doesn't make any sense anymore.
         if (triggerer == .Input) {
@@ -134,7 +141,7 @@ pub const Editor = struct {
             pos = change.pos;
         }
 
-        if (self.lsp) |lsp| {
+        if (self.lsp) |lsp| { // refresh the whole document
             try lsp.didChange(&self.buffer, Vec2u{ .a = 0, .b = self.linesCount() - 1 });
         }
 
@@ -164,9 +171,11 @@ pub const Editor = struct {
         self.historyEndBlock();
         self.has_changes_compared_to_disk = true;
 
-        if (self.lsp) |lsp| {
+        if (self.lsp) |lsp| { // refresh the whole document
             try lsp.didChange(&self.buffer, Vec2u{ .a = 0, .b = self.linesCount() - 1 });
         }
+
+        self.has_changes_compared_to_disk = true;
 
         return pos;
     }
@@ -195,9 +204,11 @@ pub const Editor = struct {
         self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2u{ .a = 0, .b = line_pos }, triggerer);
 
         if (self.lsp) |lsp| {
-            lsp.didChange(&self.buffer, Vec2u{ .a = line_pos, .b = self.linesCount() - 1 }) catch |err| {
-                std.log.err("Editor.deleteLine: can't send didChange message to the LSP: {}", .{err});
-            };
+            if (triggerer == .Input) {
+                lsp.didChange(&self.buffer, Vec2u{ .a = line_pos, .b = self.linesCount() - 1 }) catch |err| {
+                    std.log.err("Editor.deleteLine: can't send didChange message to the LSP: {}", .{err});
+                };
+            }
         }
     }
 
@@ -226,7 +237,7 @@ pub const Editor = struct {
             end_position.a -= 1;
         }
 
-        _ = self.deleteChunk(position, end_position) catch |err| {
+        _ = self.deleteChunk(position, end_position, .Input) catch |err| {
             std.log.err("Editor.deleteAfter: can't delete chunk: {}", .{err});
             return;
         };
@@ -235,7 +246,7 @@ pub const Editor = struct {
     /// deleteChunk removes chunk of text in lines.
     /// `start_pos` and `end_pos` are in glyph.
     /// Returns the new cursor position.
-    pub fn deleteChunk(self: *Editor, start_pos: Vec2u, end_pos: Vec2u) !Vec2u {
+    pub fn deleteChunk(self: *Editor, start_pos: Vec2u, end_pos: Vec2u, triggerer: Triggerer) !Vec2u {
         if (start_pos.b < 0 or end_pos.b >= self.buffer.lines.items.len) {
             return BufferError.OutOfBuffer;
         }
@@ -247,7 +258,7 @@ pub const Editor = struct {
             // delete only a piece of it
             var j: usize = start_pos.a;
             while (j < end_pos.a) : (j += 1) {
-                try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = start_pos.b }, .Right, .Input);
+                try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = start_pos.b }, .Right, triggerer);
             }
             return Vec2u{ .a = start_pos.a, .b = start_pos.b };
         }
@@ -259,7 +270,7 @@ pub const Editor = struct {
         if (start_pos.a == 0 and end_pos.a == 0) {
             var i: usize = start_pos.b;
             while (i < end_pos.b) : (i += 1) {
-                self.deleteLine(start_pos.b, .Input);
+                self.deleteLine(start_pos.b, triggerer);
             }
             return Vec2u{ .a = start_pos.a, .b = start_pos.b };
         }
@@ -275,7 +286,7 @@ pub const Editor = struct {
 
             // starting line has to be completely cleaned
             if (i == start_pos.b and start_pos.a == 0 and (end_pos.b > start_pos.b or end_pos.a == line_size - 1)) {
-                self.deleteLine(i - line_removed, .Input);
+                self.deleteLine(i - line_removed, triggerer);
                 line_removed += 1;
                 continue;
             }
@@ -285,13 +296,13 @@ pub const Editor = struct {
                 // we have to partially removes data from the first line
                 var j: usize = 0;
                 while (j < line_size - start_pos.a) : (j += 1) {
-                    try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = i - line_removed }, .Right, .Input);
+                    try self.deleteGlyph(Vec2u{ .a = start_pos.a, .b = i - line_removed }, .Right, triggerer);
                 }
             }
 
             // in between lines can be simply removed
             if (i > start_pos.b and i < end_pos.b) {
-                self.deleteLine(i - line_removed, .Input);
+                self.deleteLine(i - line_removed, triggerer);
                 line_removed += 1;
                 continue;
             }
@@ -299,7 +310,7 @@ pub const Editor = struct {
             if (i == end_pos.b) {
                 // last line has to be completely removed
                 if (end_pos.a == line_size - 1) {
-                    self.deleteLine(end_pos.b - line_removed, .Input);
+                    self.deleteLine(end_pos.b - line_removed, triggerer);
                     line_removed += 1;
                     continue;
                 }
@@ -308,21 +319,23 @@ pub const Editor = struct {
                 // first, remove that chunk
                 var j: usize = 0;
                 while (j < end_pos.a) : (j += 1) {
-                    try self.deleteGlyph(Vec2u{ .a = 0, .b = end_pos.b - line_removed }, .Right, .Input);
+                    try self.deleteGlyph(Vec2u{ .a = 0, .b = end_pos.b - line_removed }, .Right, triggerer);
                 }
 
                 if (start_pos.a > 0) {
                     // then, copy what's left on top of the cursor
-                    try self.insertUtf8Text(Vec2u{ .a = start_pos.a, .b = start_pos.b }, line.bytes(), .Input);
+                    try self.insertUtf8Text(Vec2u{ .a = start_pos.a, .b = start_pos.b }, line.bytes(), triggerer);
 
                     // remove the line we copied data from
-                    self.deleteLine(end_pos.b - line_removed, .Input);
+                    self.deleteLine(end_pos.b - line_removed, triggerer);
                 }
             }
         }
 
         if (self.lsp) |lsp| {
-            try lsp.didChange(&self.buffer, Vec2u{ .a = start_pos.b, .b = end_pos.b });
+            if (triggerer == .Input) {
+                try lsp.didChange(&self.buffer, Vec2u{ .a = start_pos.b, .b = end_pos.b });
+            }
         }
 
         return Vec2u{ .a = start_pos.a, .b = start_pos.b };
@@ -337,12 +350,16 @@ pub const Editor = struct {
         line.data.shrinkAndFree(try line.utf8pos(pos.a));
         try line.data.append('\n');
         try self.buffer.lines.insert(pos.b + 1, new_line);
+
         // history
         self.historyAppend(ChangeType.InsertNewLine, U8Slice.initEmpty(self.allocator), pos, triggerer);
+
         if (self.lsp) |lsp| {
-            lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = self.linesCount() - 1 }) catch |err| {
-                std.log.err("Editor.deleteLine: can't send didChange message to the LSP: {}", .{err});
-            };
+            if (triggerer == .Input) {
+                lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = self.linesCount() - 1 }) catch |err| {
+                    std.log.err("Editor.deleteLine: can't send didChange message to the LSP: {}", .{err});
+                };
+            }
         }
     }
 
@@ -364,10 +381,13 @@ pub const Editor = struct {
 
         var utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
 
+        // history
         self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), utf8_pos, triggerer);
 
         if (self.lsp) |lsp| {
-            try lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = pos.b });
+            if (triggerer == .Input) {
+                try lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = pos.b });
+            }
         }
     }
 
@@ -404,7 +424,9 @@ pub const Editor = struct {
             self.historyAppend(ChangeType.DeleteGlyph, removed, utf8_pos, triggerer);
 
             if (self.lsp) |lsp| {
-                try lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = pos.b });
+                if (triggerer == .Input) {
+                    try lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = pos.b });
+                }
             }
         }
     }
@@ -418,7 +440,7 @@ pub const Editor = struct {
         while (i < txt.data.items.len) {
             // new line
             if (txt.data.items[i] == '\n') {
-                try self.newLine(insert_pos, .Input);
+                try self.newLine(insert_pos, .Paste);
                 insert_pos.a = 0;
                 insert_pos.b += 1;
                 i += 1;
@@ -426,10 +448,15 @@ pub const Editor = struct {
             }
             // not a new line
             var to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
-            try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add], .Input);
+            try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add], .Paste);
             insert_pos.a += 1;
             i += to_add;
         }
+
+        if (self.lsp) |lsp| {
+            try lsp.didChange(&self.buffer, Vec2u{ .a = position.b, .b = insert_pos.b });
+        }
+
         return insert_pos;
     }
 

@@ -68,25 +68,19 @@ pub const Change = struct {
         switch (self.type) {
             .InsertNewLine => {
                 var extra = try editor.buffer.getLine(@intCast(u64, self.pos.b + 1));
-                var line = try editor.buffer.getLine(@intCast(u64, self.pos.b));
-                // remove the \n
-                line.data.shrinkAndFree(line.size() - 1);
-                // append the rest of data
-                try line.data.appendSlice(extra.bytes());
-                // remove the next line which has been appended already
-                var data = editor.buffer.lines.orderedRemove(self.pos.b + 1); // XXX(remy): are we sure with this +1?
-                data.deinit();
+                if (extra.size() > 1) {
+                    // append the extra text but don't keep the \n
+                    try editor.insertUtf8Text(self.pos, extra.bytes()[0..extra.size() - 1], .Undo);
+                }
+                editor.deleteLine(self.pos.b + 1, .Undo);
             },
             .InsertUtf8Text => {
-                var line = try editor.buffer.getLine(self.pos.b);
-                var i: usize = 0;
-                while (i < self.data.size()) : (i += 1) {
-                    _ = line.data.orderedRemove(self.pos.a);
-                }
+                var end = self.pos;
+                end.a += self.data.size();
+                _ = try editor.deleteChunk(self.pos, end, .Undo);
             },
             .DeleteGlyph => {
-                var line = try editor.buffer.getLine(@intCast(u64, self.pos.b));
-                try line.data.insertSlice(self.pos.a, self.data.bytes());
+                try editor.insertUtf8Text(self.pos, self.data.bytes(), .Undo);
             },
             .DeleteLine => {
                 try editor.buffer.lines.insert(self.pos.b, self.data);
