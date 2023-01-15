@@ -111,8 +111,6 @@ pub const LSPThread = struct {
                             std.log.err("lspThread: can't send to the server: {}", .{err});
                         };
 
-                        std.log.debug("sent: {s}", .{node.data.json.bytes()});
-
                         // store the request infos needed for later interpretation of the response
                         requests.put(node.data.request_id, node.data.message_type) catch |err| {
                             std.log.err("LSPThread.run: can't store request information: {}", .{err});
@@ -252,11 +250,7 @@ pub const LSPThread = struct {
         var json_token_stream = std.json.TokenStream.init(response[idx.?..]);
 
         if (std.json.parse(LSPMessages.headerResponse, &json_token_stream, json_params)) |header| {
-            defer std.json.parseFree(
-                LSPMessages.headerResponse,
-                header,
-                .{ .allocator = allocator, .ignore_unknown_fields = true },
-            );
+            defer std.json.parseFree(LSPMessages.headerResponse, header, json_params);
 
             // read the rest depending on the message type
 
@@ -359,20 +353,13 @@ pub const LSPThread = struct {
     }
 
     fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
+        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
         // read the type of the notification
         var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
 
         // read the header only
-        const header = try std.json.parse(
-            LSPMessages.headerNotificationResponse,
-            &json_token_stream,
-            .{ .allocator = allocator, .ignore_unknown_fields = true },
-        );
-        defer std.json.parseFree(
-            LSPMessages.headerNotificationResponse,
-            header,
-            .{ .allocator = allocator, .ignore_unknown_fields = true },
-        );
+        const header = try std.json.parse(LSPMessages.headerNotificationResponse, &json_token_stream, json_params);
+        defer std.json.parseFree(LSPMessages.headerNotificationResponse, header, json_params);
 
         std.log.debug("received an LSP notification: {s}", .{header.method});
         return LSPError.MissingRequestEntry;

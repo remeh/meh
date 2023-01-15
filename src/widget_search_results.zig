@@ -87,6 +87,8 @@ pub const WidgetSearchResults = struct {
             });
         }
 
+        try self.list.label.appendConst("Found:");
+
         try self.list.filter();
     }
 
@@ -105,6 +107,8 @@ pub const WidgetSearchResults = struct {
                 .type = .SearchResult,
             });
         }
+
+        try self.list.label.appendConst("References found:");
 
         try self.list.filter();
     }
