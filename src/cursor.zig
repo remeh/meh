@@ -99,6 +99,17 @@ pub const Cursor = struct {
 
     // TODO(remy): comment
     // TODO(remy): unit test
+    pub fn posInPixel(cursor: Cursor, text_edit: *WidgetTextEdit, one_char_size: Vec2u) Vec2u {
+        var rv = Vec2u{
+            .a = text_edit.line_numbers_offset + (cursor.pos.a * one_char_size.a) - (text_edit.viewport.columns.a * one_char_size.a),
+            .b = cursor.pos.b * one_char_size.b - (text_edit.viewport.lines.a * one_char_size.b),
+        };
+
+        return rv;
+    }
+
+    // TODO(remy): comment
+    // TODO(remy): unit test
     pub fn posFromWindowPos(_: Cursor, text_edit: *WidgetTextEdit, click_window_pos: Vec2u, draw_pos: Vec2u) Vec2u {
         var rv = Vec2u{ .a = 0, .b = 0 };
 

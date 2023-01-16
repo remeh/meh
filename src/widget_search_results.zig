@@ -109,7 +109,6 @@ pub const WidgetSearchResults = struct {
         }
 
         try self.list.label.appendConst("References found:");
-
         try self.list.filter();
     }
 

@@ -20,8 +20,9 @@ const WidgetInput = @import("widget_input.zig").WidgetInput;
 const Insert = @import("widget_text_edit.zig").Insert;
 
 pub const WidgetListEntryType = enum {
-    File,
+    Autocomplete,
     Directory,
+    File,
     SearchResult,
 };
 

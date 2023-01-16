@@ -6,7 +6,6 @@ const Buffer = @import("buffer.zig").Buffer;
 const BufferPosition = @import("buffer.zig").BufferPosition;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
-const ImVec2 = @import("vec.zig").ImVec2;
 const Font = @import("font.zig").Font;
 const LSP = @import("lsp.zig").LSP;
 const LSPError = @import("lsp.zig").LSPError;
@@ -14,6 +13,7 @@ const LSPResponse = @import("lsp.zig").LSPResponse;
 const RipgrepResults = @import("ripgrep.zig").RipgrepResults;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const WidgetAutocomplete = @import("widget_autocomplete.zig").WidgetAutocomplete;
 const WidgetCommand = @import("widget_command.zig").WidgetCommand;
 const WidgetCommandError = @import("widget_command.zig").WidgetCommandError;
 const WidgetLookup = @import("widget_lookup.zig").WidgetLookup;
@@ -33,8 +33,9 @@ pub const AppError = error{
 };
 
 pub const FocusedWidget = enum {
-    Editor,
+    Autocomplete,
     Command,
+    Editor,
     Lookup,
     MessageBox,
     SearchResults,
@@ -80,6 +81,7 @@ pub const StoreBufferPositionBehavior = enum {
 ///                    for high resolutions (for the text to not look small).
 pub const App = struct {
     allocator: std.mem.Allocator,
+    widget_autocomplete: WidgetAutocomplete,
     widget_command: WidgetCommand,
     widget_lookup: WidgetLookup,
     widget_messagebox: WidgetMessageBox,
@@ -214,6 +216,7 @@ pub const App = struct {
             .allocator = allocator,
             .widget_text_edit_pos = Vec2u{ .a = 0, .b = 8 * 4 },
             .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
+            .widget_autocomplete = try WidgetAutocomplete.init(allocator),
             .widget_command = try WidgetCommand.init(allocator),
             .widget_lookup = try WidgetLookup.init(allocator),
             .widget_messagebox = WidgetMessageBox.init(allocator),
@@ -258,6 +261,7 @@ pub const App = struct {
         }
         self.next_positions.deinit();
 
+        self.widget_autocomplete.deinit();
         self.widget_command.deinit();
         self.widget_lookup.deinit();
         self.widget_messagebox.deinit();
@@ -699,6 +703,19 @@ pub const App = struct {
         // widgets
 
         switch (self.focused_widget) {
+            .Autocomplete => {
+                const wt = self.currentWidgetTextEdit();
+                const cursor_pixel_pos = wt.cursor.posInPixel(wt, wt.one_char_size);
+                self.widget_autocomplete.render(
+                    self.sdl_renderer,
+                    self.current_font,
+                    scaler,
+                    self.window_scaled_size,
+                    cursor_pixel_pos,
+                    Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.8) },
+                    one_char_size,
+                );
+            },
             .Command => self.widget_command.render(
                 self.sdl_renderer,
                 self.current_font,
@@ -882,6 +899,10 @@ pub const App = struct {
                 // events to handle differently per focused widget
                 focused_widget = self.focused_widget;
                 switch (self.focused_widget) {
+                    .Autocomplete => {
+                        self.autocompleteEvents(event);
+                        to_render = true;
+                    },
                     .Command => {
                         self.commandEvents(event);
                         to_render = true;
@@ -904,10 +925,10 @@ pub const App = struct {
                 }
 
                 // the focus widget changed, trigger an immedate repaint
-                if (self.focused_widget != focused_widget) {
-                    self.render();
-                    focused_widget = self.focused_widget;
-                }
+                //                if (self.focused_widget != focused_widget) {
+                //                    self.render();
+                //                    focused_widget = self.focused_widget;
+                //                }
             }
 
             // LSP messages handling
@@ -947,6 +968,13 @@ pub const App = struct {
 
     fn interpretLSPMessage(self: *App, response: LSPResponse) bool {
         switch (response.message_type) {
+            .Completion => {
+                if (response.completions) |completions| {
+                    self.widget_autocomplete.setCompletionItems(completions) catch |err| {
+                        self.showMessageBoxError("LSP: can't display completions items: {}", .{err});
+                    };
+                }
+            },
             .Definition => {
                 if (response.definitions) |definitions| {
                     // TODO(remy): support multiple definitions
@@ -989,6 +1017,26 @@ pub const App = struct {
 
     // Widgets events handling
     // -----------------------
+
+    fn autocompleteEvents(self: *App, event: c.SDL_Event) void {
+        switch (event.type) {
+            c.SDL_KEYDOWN => {
+                switch (event.key.keysym.sym) {
+                    c.SDLK_RETURN => {
+                        // TODO(remy): insert text
+                        self.focused_widget = FocusedWidget.Editor;
+                        self.widget_autocomplete.reset();
+                    },
+                    c.SDLK_ESCAPE => {
+                        self.focused_widget = FocusedWidget.Editor;
+                        self.widget_autocomplete.reset();
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
 
     fn commandEvents(self: *App, event: c.SDL_Event) void {
         switch (event.type) {
@@ -1224,6 +1272,7 @@ pub const App = struct {
                                     }
                                 },
                                 c.SDLK_n => {
+                                    self.focused_widget = FocusedWidget.Autocomplete;
                                     if (self.lsp) |lsp| {
                                         const wt = self.currentWidgetTextEdit();
                                         lsp.completion(&wt.editor.buffer, wt.cursor.pos) catch |err| {

@@ -2,6 +2,7 @@ const std = @import("std");
 const Queue = std.atomic.Queue;
 
 const LSPContext = @import("lsp.zig").LSPContext;
+const LSPCompletion = @import("lsp.zig").LSPCompletion;
 const LSPError = @import("lsp.zig").LSPError;
 const LSPMessages = @import("lsp_messages.zig");
 const LSPMessageType = @import("lsp.zig").LSPMessageType;
@@ -259,8 +260,9 @@ pub const LSPThread = struct {
                 errdefer rv.deinit();
 
                 switch (message_type) {
-                    .References => try LSPThread.interpretReferences(allocator, &rv, response, idx.?),
+                    .Completion => try LSPThread.interpretCompletion(allocator, &rv, response, idx.?),
                     .Definition => LSPThread.interpretDefinition(allocator, &rv, response, idx.?),
+                    .References => try LSPThread.interpretReferences(allocator, &rv, response, idx.?),
                     else => {},
                 }
 
@@ -274,29 +276,36 @@ pub const LSPThread = struct {
         return LSPError.MissingRequestEntry;
     }
 
-    fn interpretReferences(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+    fn interpretCompletion(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
         const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
-        rv.references = std.ArrayList(LSPPosition).init(allocator);
         var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
 
-        const references = try std.json.parse(LSPMessages.referencesResponse, &json_token_stream, json_params);
-        defer std.json.parseFree(LSPMessages.referencesResponse, references, json_params);
+        rv.*.completions = std.ArrayList(LSPCompletion).init(allocator);
 
-        if (references.result) |refs| {
-            for (refs) |result| {
-                if (result.toLSPPosition(allocator)) |position| {
-                    rv.references.?.append(position) catch |err| {
-                        std.log.err("LSPThread.interpret: can't append position: {}", .{err});
-                    };
-                } else |err| {
-                    std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
+        std.log.debug("\n\n{s}\n\n", .{response[json_start_idx..]});
+
+        const completions = try std.json.parse(LSPMessages.completionsResponse, &json_token_stream, json_params);
+        defer std.json.parseFree(LSPMessages.completionsResponse, completions, json_params);
+
+        if (completions.result) |result| {
+            if (result.items) |items| {
+                for (items) |item| {
+                    if (item.toLSPCompletion(allocator)) |completion| {
+                        rv.completions.?.append(completion) catch |err| {
+                            std.log.err("LSPThread.interpret: can't append completion: {}", .{err});
+                        };
+                    } else |err| {
+                        std.log.err("LSPThread.interpret: can't convert to LSPCompletion: {}", .{err});
+                    }
                 }
             }
         }
 
-        if (rv.references.?.items.len == 0) {
-            rv.references.?.deinit();
-            rv.references = null;
+        if (rv.*.completions) |comps| {
+            if (comps.items.len == 0) {
+                comps.deinit();
+                rv.*.completions = null;
+            }
         }
     }
 
@@ -349,6 +358,32 @@ pub const LSPThread = struct {
                 defs.deinit();
                 rv.*.definitions = null;
             }
+        }
+    }
+
+    fn interpretReferences(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
+        rv.references = std.ArrayList(LSPPosition).init(allocator);
+        var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
+
+        const references = try std.json.parse(LSPMessages.referencesResponse, &json_token_stream, json_params);
+        defer std.json.parseFree(LSPMessages.referencesResponse, references, json_params);
+
+        if (references.result) |refs| {
+            for (refs) |result| {
+                if (result.toLSPPosition(allocator)) |position| {
+                    rv.references.?.append(position) catch |err| {
+                        std.log.err("LSPThread.interpret: can't append position: {}", .{err});
+                    };
+                } else |err| {
+                    std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
+                }
+            }
+        }
+
+        if (rv.references.?.items.len == 0) {
+            rv.references.?.deinit();
+            rv.references = null;
         }
     }
 

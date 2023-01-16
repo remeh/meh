@@ -44,14 +44,16 @@ pub const LSPResponse = struct {
     allocator: std.mem.Allocator,
     message_type: LSPMessageType,
     log_message: ?U8Slice,
-    references: ?std.ArrayList(LSPPosition),
+    completions: ?std.ArrayList(LSPCompletion),
     definitions: ?std.ArrayList(LSPPosition),
+    references: ?std.ArrayList(LSPPosition),
     request_id: i64,
     pub fn init(allocator: std.mem.Allocator, request_id: i64, message_type: LSPMessageType) LSPResponse {
         return LSPResponse{
             .allocator = allocator,
             .message_type = message_type,
             .request_id = request_id,
+            .completions = null,
             .definitions = null,
             .references = null,
             .log_message = null,
@@ -60,6 +62,12 @@ pub const LSPResponse = struct {
     pub fn deinit(self: LSPResponse) void {
         if (self.log_message) |log_message| {
             log_message.deinit();
+        }
+        if (self.completions) |comps| {
+            for (comps.items) |completion| {
+                completion.deinit();
+            }
+            comps.deinit();
         }
         if (self.definitions) |defs| {
             for (defs.items) |def| {
@@ -83,6 +91,16 @@ pub const LSPPosition = struct {
 
     pub fn deinit(self: LSPPosition) void {
         self.filepath.deinit();
+    }
+};
+
+pub const LSPCompletion = struct {
+    insert_text: U8Slice,
+    label: U8Slice,
+
+    pub fn deinit(self: LSPCompletion) void {
+        self.insert_text.deinit();
+        self.label.deinit();
     }
 };
 

@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const LSPCompletion = @import("lsp.zig").LSPCompletion;
 const LSPError = @import("lsp.zig").LSPError;
 const LSPPosition = @import("lsp.zig").LSPPosition;
 const U8Slice = @import("u8slice.zig").U8Slice;
@@ -228,4 +229,66 @@ pub const definitionsResponse = struct {
     jsonrpc: []const u8,
     id: i64,
     result: ?[]positionResponse,
+};
+
+// Completion
+
+pub const completionsResponse = struct {
+    jsonrpc: []const u8,
+    id: i64,
+    result: ?completionResult,
+};
+
+pub const completionResult = struct {
+    isIncomplete: bool,
+    items: ?[]completionItem,
+};
+
+// FIXME(remy): these fields could be here or could be missing, I did not succeed
+// to get them "optional" for now while parsing the JSON using the stdlib json parser.
+pub const completionItem = struct {
+    label: ?[]const u8,
+    kind: ?i64,
+    //    detail: ?[]const u8,
+    //    documentation: ?completionResultDoc,
+    //    sortText: ?[]const u8,
+    insertText: ?[]const u8,
+
+    pub fn toLSPCompletion(self: completionItem, allocator: std.mem.Allocator) !LSPCompletion {
+        //        var detail = U8Slice.initEmpty(allocator);
+        //        if (self.detail) |d| {
+        //            try detail.appendConst(d);
+        //        }
+
+        var label = U8Slice.initEmpty(allocator);
+        if (self.label) |l| {
+            try label.appendConst(l);
+        }
+
+        var insert_text = U8Slice.initEmpty(allocator);
+        if (self.insertText) |i| {
+            try insert_text.appendConst(i);
+        } else {
+            // TODO(remy): return an error
+        }
+
+        //        var sort_text = U8Slice.initEmpty(allocator);
+        //        if (self.sortText) |i| {
+        //            try sort_text.appendConst(i);
+        //        } else {
+        //            // TODO(remy): return an error
+        //        }
+
+        return LSPCompletion{
+            //            .detail = detail,
+            .label = label,
+            .insert_text = insert_text,
+            //            .sort_text = sort_text,
+        };
+    }
+};
+
+pub const completionResultDoc = struct {
+    kind: ?[]const u8,
+    value: ?[]const u8,
 };
