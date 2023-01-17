@@ -27,6 +27,7 @@ pub const WidgetListEntryType = enum {
 };
 
 pub const WidgetListFilterType = enum {
+    Autocomplete,
     Label,
     Data,
     LabelAndData,
@@ -186,7 +187,7 @@ pub const WidgetList = struct {
         for (self.entries.items) |entry| {
             var add = (entered_filter.len == 0);
             if (entered_filter.len > 0) {
-                if ((self.filter_type == .Label or self.filter_type == .LabelAndData) and
+                if ((self.filter_type == .Autocomplete or self.filter_type == .Label or self.filter_type == .LabelAndData) and
                     std.mem.containsAtLeast(u8, entry.label.bytes(), 1, entered_filter))
                 {
                     add = true;
@@ -214,7 +215,11 @@ pub const WidgetList = struct {
         widget_size: Vec2u,
         one_char_size: Vec2u,
     ) void {
-        const input_height = 50;
+        var input_height: usize = switch (self.filter_type) {
+            .Autocomplete => 0,
+            else => 50,
+        };
+
         const sep_margin = 2;
         // when reaching the bottom of the list, we want to start scrolling before
         // reaching the last entry.
@@ -223,10 +228,12 @@ pub const WidgetList = struct {
         // input
         // ----
 
-        var input_pos = Vec2u{ .a = position.a + 5, .b = position.b + 5 };
-        var input_size = Vec2u{ .a = widget_size.a, .b = input_height };
+        if (self.filter_type != .Autocomplete) {
+            var input_pos = Vec2u{ .a = position.a + 5, .b = position.b + 5 };
+            var input_size = Vec2u{ .a = widget_size.a, .b = input_height };
 
-        self.input.render(sdl_renderer, font, scaler, input_pos, input_size, one_char_size);
+            self.input.render(sdl_renderer, font, scaler, input_pos, input_size, one_char_size);
+        }
 
         // label below the input / above the list
         // ----

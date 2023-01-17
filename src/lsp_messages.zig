@@ -62,10 +62,20 @@ pub const initialized = struct {
     params: emptyStruct,
 };
 
+pub const completionCapabilities = struct {
+    dynamicRegistration: bool,
+    completionItem: completionItemCapabilities,
+};
+
+pub const completionItemCapabilities = struct {
+    insertReplaceSupport: bool,
+};
+
 pub const initializeTextDocumentCapabilities = struct {
-    references: dynReg,
-    implementation: dynReg,
+    completion: completionCapabilities,
     definition: dynReg,
+    implementation: dynReg,
+    references: dynReg,
 };
 
 pub const initializeCapabilities = struct {
@@ -211,7 +221,7 @@ pub const positionResponse = struct {
 pub const referencesResponse = struct {
     jsonrpc: []const u8,
     id: i64,
-    result: ?[]positionResponse,
+    result: ?[]positionResponse = null,
 };
 
 // Definition
@@ -222,13 +232,13 @@ pub const referencesResponse = struct {
 pub const definitionResponse = struct {
     jsonrpc: []const u8,
     id: i64,
-    result: ?positionResponse,
+    result: ?positionResponse = null,
 };
 
 pub const definitionsResponse = struct {
     jsonrpc: []const u8,
     id: i64,
-    result: ?[]positionResponse,
+    result: ?[]positionResponse = null,
 };
 
 // Completion
@@ -236,29 +246,29 @@ pub const definitionsResponse = struct {
 pub const completionsResponse = struct {
     jsonrpc: []const u8,
     id: i64,
-    result: ?completionResult,
+    result: ?completionResult = null,
 };
 
 pub const completionResult = struct {
     isIncomplete: bool,
-    items: ?[]completionItem,
+    items: ?[]completionItem = null,
 };
 
 // FIXME(remy): these fields could be here or could be missing, I did not succeed
 // to get them "optional" for now while parsing the JSON using the stdlib json parser.
 pub const completionItem = struct {
-    label: ?[]const u8,
-    kind: ?i64,
-    //    detail: ?[]const u8,
-    //    documentation: ?completionResultDoc,
-    //    sortText: ?[]const u8,
-    insertText: ?[]const u8,
+    label: ?[]const u8 = null,
+    kind: ?i64 = null,
+    detail: ?[]const u8 = null,
+    //documentation: ?completionResultDoc = null,
+    sortText: ?[]const u8 = null,
+    insertText: ?[]const u8 = null,
 
     pub fn toLSPCompletion(self: completionItem, allocator: std.mem.Allocator) !LSPCompletion {
-        //        var detail = U8Slice.initEmpty(allocator);
-        //        if (self.detail) |d| {
-        //            try detail.appendConst(d);
-        //        }
+        var detail = U8Slice.initEmpty(allocator);
+        if (self.detail) |d| {
+            try detail.appendConst(d);
+        }
 
         var label = U8Slice.initEmpty(allocator);
         if (self.label) |l| {
@@ -272,23 +282,23 @@ pub const completionItem = struct {
             // TODO(remy): return an error
         }
 
-        //        var sort_text = U8Slice.initEmpty(allocator);
-        //        if (self.sortText) |i| {
-        //            try sort_text.appendConst(i);
-        //        } else {
-        //            // TODO(remy): return an error
-        //        }
+        var sort_text = U8Slice.initEmpty(allocator);
+        if (self.sortText) |i| {
+            try sort_text.appendConst(i);
+        } else {
+            // TODO(remy): return an error
+        }
 
         return LSPCompletion{
-            //            .detail = detail,
+            .detail = detail,
             .label = label,
             .insert_text = insert_text,
-            //            .sort_text = sort_text,
+            .sort_text = sort_text,
         };
     }
 };
 
 pub const completionResultDoc = struct {
-    kind: ?[]const u8,
-    value: ?[]const u8,
+    kind: ?[]const u8 = null,
+    value: ?[]const u8 = null,
 };

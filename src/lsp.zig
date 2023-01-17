@@ -95,12 +95,15 @@ pub const LSPPosition = struct {
 };
 
 pub const LSPCompletion = struct {
+    detail: U8Slice,
     insert_text: U8Slice,
     label: U8Slice,
-
+    sort_text: U8Slice,
     pub fn deinit(self: LSPCompletion) void {
+        self.detail.deinit();
         self.insert_text.deinit();
         self.label.deinit();
+        self.sort_text.deinit();
     }
 };
 
@@ -386,9 +389,15 @@ pub const LSPWriter = struct {
                 .processId = 0,
                 .capabilities = LSPMessages.initializeCapabilities{
                     .textDocument = LSPMessages.initializeTextDocumentCapabilities{
-                        .references = LSPMessages.dynRegTrue,
-                        .implementation = LSPMessages.dynRegTrue,
+                        .completion = LSPMessages.completionCapabilities{
+                            .dynamicRegistration = true,
+                            .completionItem = LSPMessages.completionItemCapabilities{
+                                .insertReplaceSupport = true,
+                            },
+                        },
                         .definition = LSPMessages.dynRegTrue,
+                        .implementation = LSPMessages.dynRegTrue,
+                        .references = LSPMessages.dynRegTrue,
                     },
                 },
                 .workspaceFolders = [1]LSPMessages.workspaceFolder{

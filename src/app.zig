@@ -712,7 +712,6 @@ pub const App = struct {
                     scaler,
                     self.window_scaled_size,
                     cursor_pixel_pos,
-                    Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.8) },
                     one_char_size,
                 );
             },
@@ -974,6 +973,7 @@ pub const App = struct {
                         self.showMessageBoxError("LSP: can't display completions items: {}", .{err});
                     };
                 }
+                return true;
             },
             .Definition => {
                 if (response.definitions) |definitions| {
@@ -1019,11 +1019,35 @@ pub const App = struct {
     // -----------------------
 
     fn autocompleteEvents(self: *App, event: c.SDL_Event) void {
+        var input_state = c.SDL_GetKeyboardState(null);
+        var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
                     c.SDLK_RETURN => {
-                        // TODO(remy): insert text
+                        if (self.widget_autocomplete.select()) |entry| {
+                            const wt = self.currentWidgetTextEdit();
+                            // remove the filter if any has been entered
+                            if (self.widget_autocomplete.list.input.text()) |text| {
+                                if (wt.editor.deleteChunk(
+                                    Vec2u{
+                                        .a = wt.cursor.pos.a - text.size(),
+                                        .b = wt.cursor.pos.b,
+                                    },
+                                    wt.cursor.pos,
+                                    .Input,
+                                )) |new_pos| {
+                                    wt.setCursorPos(new_pos, .Scroll);
+                                } else |_| {}
+                            } else |_| {}
+                            // insert the completion
+                            wt.editor.insertUtf8Text(wt.cursor.pos, entry.?.data.bytes(), .Input) catch |err| {
+                                self.showMessageBoxError("LSP: can't insert value (insert completion): {}", .{err});
+                            };
+                            wt.setCursorPos(Vec2u{ .a = wt.cursor.pos.a + entry.?.data.size(), .b = wt.cursor.pos.b }, .Scroll);
+                        } else |err| {
+                            self.showMessageBoxError("LSP: can't insert value: {}", .{err});
+                        }
                         self.focused_widget = FocusedWidget.Editor;
                         self.widget_autocomplete.reset();
                     },
@@ -1031,8 +1055,28 @@ pub const App = struct {
                         self.focused_widget = FocusedWidget.Editor;
                         self.widget_autocomplete.reset();
                     },
+                    c.SDLK_BACKSPACE => {
+                        self.currentWidgetTextEdit().onBackspace();
+                        self.widget_autocomplete.list.onBackspace();
+                    },
+                    c.SDLK_n, c.SDLK_DOWN => {
+                        if (ctrl or event.key.keysym.sym == c.SDLK_DOWN) {
+                            self.widget_autocomplete.list.next();
+                        }
+                    },
+                    c.SDLK_p, c.SDLK_UP => {
+                        if (ctrl or event.key.keysym.sym == c.SDLK_UP) {
+                            self.widget_autocomplete.list.previous();
+                        }
+                    },
                     else => {},
                 }
+            },
+            c.SDL_TEXTINPUT => {
+                const read_text = readTextFromSDLInput(&event.text.text);
+                _ = self.currentWidgetTextEdit().onTextInput(read_text);
+                _ = self.widget_autocomplete.list.onTextInput(read_text);
+                self.widget_autocomplete.filter_size += 1;
             },
             else => {},
         }

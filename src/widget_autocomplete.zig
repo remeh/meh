@@ -23,6 +23,7 @@ const ScreenSection = enum {
 
 pub const WidgetAutocomplete = struct {
     allocator: std.mem.Allocator,
+    filter_size: usize,
     loading: bool,
     list: WidgetList,
 
@@ -32,8 +33,9 @@ pub const WidgetAutocomplete = struct {
     pub fn init(allocator: std.mem.Allocator) !WidgetAutocomplete {
         return WidgetAutocomplete{
             .allocator = allocator,
+            .filter_size = 0,
             .loading = true,
-            .list = try WidgetList.init(allocator, WidgetListFilterType.Label),
+            .list = try WidgetList.init(allocator, WidgetListFilterType.Autocomplete),
         };
     }
 
@@ -47,14 +49,13 @@ pub const WidgetAutocomplete = struct {
     pub fn reset(self: *WidgetAutocomplete) void {
         self.list.reset();
         self.loading = true;
-        // TODO(remy): reset entries
     }
 
     /// select returns the selected Entry if any.
     /// It's *not* caller responsibility to free the Entry object.
     pub fn select(self: *WidgetAutocomplete) !?WidgetListEntry {
-        if (try self.list.select()) |_| {
-            // TODO(remy): insert text in the widget text edit
+        if (try self.list.select()) |entry| {
+            return entry;
         }
         return null;
     }
@@ -80,7 +81,6 @@ pub const WidgetAutocomplete = struct {
         scaler: Scaler,
         window_scaled_size: Vec2u,
         cursor_pixel_pos: Vec2u,
-        widget_size: Vec2u,
         one_char_size: Vec2u,
     ) void {
         // check in which part of the screen the cursor is currently at,
@@ -125,8 +125,8 @@ pub const WidgetAutocomplete = struct {
             sdl_renderer,
             font,
             scaler,
-            cursor_pixel_pos,
-            widget_size,
+            top_left,
+            size,
             one_char_size,
         );
     }
