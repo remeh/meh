@@ -215,12 +215,20 @@ pub const WidgetList = struct {
         widget_size: Vec2u,
         one_char_size: Vec2u,
     ) void {
-        var input_height: usize = switch (self.filter_type) {
+        const input_height: usize = switch (self.filter_type) {
             .Autocomplete => 0,
             else => 50,
         };
+        const input_sep_margin: usize = switch (self.filter_type) {
+            .Autocomplete => 0,
+            else => 2,
+        };
+        const label_sep_margin: usize = switch (self.filter_type) {
+            .Autocomplete => 0,
+            else => one_char_size.b,
+        };
+        const entry_sep_margin = 2;
 
-        const sep_margin = 2;
         // when reaching the bottom of the list, we want to start scrolling before
         // reaching the last entry.
         const start_scroll_bottom_offset = 3;
@@ -238,14 +246,16 @@ pub const WidgetList = struct {
         // label below the input / above the list
         // ----
 
-        var label_pos = Vec2u{ .a = position.a + one_char_size.a, .b = position.b + (one_char_size.b * 2) };
-        Draw.text(font, scaler, label_pos, widget_size.a, Colors.white, self.label.bytes());
+        if (self.filter_type != .Autocomplete) {
+            var label_pos = Vec2u{ .a = position.a + one_char_size.a, .b = position.b + (one_char_size.b * 2) };
+            Draw.text(font, scaler, label_pos, widget_size.a, Colors.white, self.label.bytes());
+        }
 
         // list the entries
         // ----
 
         var offset: usize = 0;
-        var visible_entries: usize = (widget_size.b - (input_height + sep_margin)) / (one_char_size.b + sep_margin);
+        var visible_entries: usize = (widget_size.b - (input_height + entry_sep_margin)) / (one_char_size.b + input_sep_margin);
         var entry_offset: usize = 0;
 
         // offset what we're looking at if the selected entry would not be visible.
@@ -256,8 +266,8 @@ pub const WidgetList = struct {
         var idx: usize = entry_offset;
         while (idx < self.filtered_entries.items.len) {
             var entry = self.filtered_entries.items[idx];
-            var pos = Vec2u{ .a = position.a, .b = position.b + input_height + one_char_size.b + sep_margin + offset };
-            var size = Vec2u{ .a = widget_size.a, .b = one_char_size.b + sep_margin + 1 };
+            var pos = Vec2u{ .a = position.a, .b = position.b + input_height + label_sep_margin + entry_sep_margin + offset };
+            var size = Vec2u{ .a = widget_size.a, .b = one_char_size.b + entry_sep_margin + 1 };
 
             self.renderEntry(
                 sdl_renderer,
@@ -269,7 +279,7 @@ pub const WidgetList = struct {
                 idx == self.selected_entry_idx,
             );
 
-            offset += one_char_size.b + sep_margin;
+            offset += one_char_size.b + input_sep_margin;
             idx += 1;
 
             // more entries won't fit, stop drawing them
