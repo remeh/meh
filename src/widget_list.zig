@@ -40,6 +40,7 @@ pub const WidgetListEntry = struct {
     label: U8Slice,
     data: U8Slice,
     data_pos: Vec2i,
+    data_range: ?Vec4u = null,
 
     type: WidgetListEntryType,
 

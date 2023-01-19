@@ -9,6 +9,7 @@ const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 
 pub const LSPError = error{
+    IncompleteCompletionEntry,
     MalformedResponse,
     MalformedUri,
     MissingRequestEntry,
@@ -99,6 +100,7 @@ pub const LSPCompletion = struct {
     insert_text: U8Slice,
     label: U8Slice,
     sort_text: U8Slice,
+    range: ?Vec4u,
     pub fn deinit(self: LSPCompletion) void {
         self.detail.deinit();
         self.insert_text.deinit();

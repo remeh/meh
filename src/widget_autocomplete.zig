@@ -67,6 +67,7 @@ pub const WidgetAutocomplete = struct {
                 .label = try completion.label.copy(self.allocator),
                 .data = try completion.insert_text.copy(self.allocator),
                 .data_pos = Vec2i{ .a = 0, .b = 0 }, // unused // TODO(remy): store Kind?
+                .data_range = completion.range,
                 .type = .Autocomplete,
             });
         }

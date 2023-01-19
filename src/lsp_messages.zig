@@ -5,6 +5,7 @@ const LSPError = @import("lsp.zig").LSPError;
 const LSPPosition = @import("lsp.zig").LSPPosition;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2u = @import("vec.zig").Vec2u;
+const Vec4u = @import("vec.zig").Vec4u;
 
 // JSON structures
 // ------------------------------------------------------------
@@ -24,6 +25,15 @@ pub const position = struct {
 pub const range = struct {
     start: position,
     end: position,
+
+    pub fn vec4u(self: range) Vec4u {
+        return Vec4u{
+            .a = self.start.character,
+            .b = self.start.line,
+            .c = self.end.character,
+            .d = self.end.line,
+        };
+    }
 };
 
 pub const dynReg = struct {
@@ -263,39 +273,58 @@ pub const completionItem = struct {
     //documentation: ?completionResultDoc = null,
     sortText: ?[]const u8 = null,
     insertText: ?[]const u8 = null,
+    textEdit: ?completionTextEdit = null,
 
     pub fn toLSPCompletion(self: completionItem, allocator: std.mem.Allocator) !LSPCompletion {
         var detail = U8Slice.initEmpty(allocator);
+        errdefer detail.deinit();
         if (self.detail) |d| {
             try detail.appendConst(d);
         }
 
         var label = U8Slice.initEmpty(allocator);
+        errdefer label.deinit();
         if (self.label) |l| {
             try label.appendConst(l);
         }
 
-        var insert_text = U8Slice.initEmpty(allocator);
-        if (self.insertText) |i| {
-            try insert_text.appendConst(i);
-        } else {
-            // TODO(remy): return an error
-        }
-
         var sort_text = U8Slice.initEmpty(allocator);
+        errdefer sort_text.deinit();
         if (self.sortText) |i| {
             try sort_text.appendConst(i);
         } else {
-            // TODO(remy): return an error
+            return LSPError.IncompleteCompletionEntry;
         }
 
-        return LSPCompletion{
+        var rv = LSPCompletion{
             .detail = detail,
             .label = label,
-            .insert_text = insert_text,
+            .insert_text = undefined,
             .sort_text = sort_text,
+            .range = null,
         };
+
+        var insert_text = U8Slice.initEmpty(allocator);
+        errdefer insert_text.deinit();
+        if (self.textEdit) |text_edit| {
+            rv.range = text_edit.range.vec4u();
+            try insert_text.appendConst(text_edit.newText);
+        } else {
+            if (self.insertText) |i| {
+                try insert_text.appendConst(i);
+            } else {
+                return LSPError.IncompleteCompletionEntry;
+            }
+        }
+        rv.insert_text = insert_text;
+
+        return rv;
     }
+};
+
+pub const completionTextEdit = struct {
+    range: range,
+    newText: []const u8,
 };
 
 pub const completionResultDoc = struct {
