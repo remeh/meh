@@ -112,7 +112,7 @@ pub const LSPCompletion = struct {
 // TODO(remy): comment
 pub const LSPContext = struct {
     allocator: std.mem.Allocator,
-    server_bin_path: []const u8,
+    server_exec: []const u8,
     // queue used to communicate from the LSP thread to the main thread.
     response_queue: std.atomic.Queue(LSPResponse),
     // queue used to communicate from the main thread to the LSP thread.
@@ -130,14 +130,14 @@ pub const LSP = struct {
     uri_working_dir: U8Slice,
     language_id: U8Slice,
 
-    pub fn init(allocator: std.mem.Allocator, server_bin_path: []const u8, language_id: []const u8, working_dir: []const u8) !*LSP {
+    pub fn init(allocator: std.mem.Allocator, server_exec: []const u8, language_id: []const u8, working_dir: []const u8) !*LSP {
         // start a thread dealing with the LSP server in the background
         // create two queues for bidirectional communication
         var ctx = try allocator.create(LSPContext);
         ctx.allocator = allocator;
         ctx.response_queue = Queue(LSPResponse).init();
         ctx.send_queue = Queue(LSPRequest).init();
-        ctx.server_bin_path = server_bin_path;
+        ctx.server_exec = server_exec;
 
         // spawn the LSP thread
         const thread = try std.Thread.spawn(std.Thread.SpawnConfig{}, LSPThread.run, .{ctx});
@@ -214,6 +214,8 @@ pub const LSP = struct {
             return "zls";
         } else if (std.mem.eql(u8, extension, ".cpp")) {
             return "clangd";
+        } else if (std.mem.eql(u8, extension, ".rb")) {
+            return "solargraph stdio";
         }
         return LSPError.UnknownExtension;
     }

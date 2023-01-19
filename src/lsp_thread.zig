@@ -26,8 +26,16 @@ pub const LSPThread = struct {
 
         // spawn the LSP server process
 
-        const argv: [1][]const u8 = [1][]const u8{ctx.server_bin_path};
-        var child = std.ChildProcess.init(&argv, ctx.allocator);
+        var cmd = std.ArrayList([]const u8).init(ctx.allocator);
+        defer cmd.deinit();
+        var it = std.mem.tokenize(u8, ctx.server_exec, " ");
+        while (it.next()) |arg| {
+            try cmd.append(arg);
+        }
+        const slice = try cmd.toOwnedSlice();
+        defer ctx.allocator.free(slice);
+
+        var child = std.ChildProcess.init(slice, ctx.allocator);
         child.stdin_behavior = .Pipe;
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Ignore;

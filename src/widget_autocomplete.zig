@@ -24,6 +24,7 @@ const ScreenSection = enum {
 pub const WidgetAutocomplete = struct {
     allocator: std.mem.Allocator,
     filter_size: usize,
+    no_results: bool,
     loading: bool,
     list: WidgetList,
 
@@ -34,6 +35,7 @@ pub const WidgetAutocomplete = struct {
         return WidgetAutocomplete{
             .allocator = allocator,
             .filter_size = 0,
+            .no_results = false,
             .loading = true,
             .list = try WidgetList.init(allocator, WidgetListFilterType.Autocomplete),
         };
@@ -49,6 +51,7 @@ pub const WidgetAutocomplete = struct {
     pub fn reset(self: *WidgetAutocomplete) void {
         self.list.reset();
         self.loading = true;
+        self.no_results = false;
     }
 
     /// select returns the selected Entry if any.
@@ -71,8 +74,18 @@ pub const WidgetAutocomplete = struct {
                 .type = .Autocomplete,
             });
         }
+
+        if (completions.items.len == 0) {
+            self.setNoResults();
+        }
+
         self.loading = false;
         try self.list.filter();
+    }
+
+    pub fn setNoResults(self: *WidgetAutocomplete) void {
+        self.loading = false;
+        self.no_results = true;
     }
 
     pub fn render(
@@ -112,13 +125,17 @@ pub const WidgetAutocomplete = struct {
         };
         Draw.fillRect(sdl_renderer, scaler, top_left, size, Colors.dark_gray);
 
-        if (self.loading) {
+        if (self.loading or self.no_results) {
             const text_start = Vec2u{
                 .a = top_left.a + (size.a / 2) - one_char_size.a * 6,
                 .b = top_left.b + (size.b / 2),
             };
 
-            Draw.text(font, scaler, text_start, 0, Colors.white, "Loading...");
+            if (self.loading) {
+                Draw.text(font, scaler, text_start, 0, Colors.white, "Loading...");
+            } else {
+                Draw.text(font, scaler, text_start, 0, Colors.white, "No results.");
+            }
             return;
         }
 

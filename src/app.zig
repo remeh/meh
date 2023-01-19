@@ -972,6 +972,8 @@ pub const App = struct {
                     self.widget_autocomplete.setCompletionItems(completions) catch |err| {
                         self.showMessageBoxError("LSP: can't display completions items: {}", .{err});
                     };
+                } else {
+                    self.widget_autocomplete.setNoResults();
                 }
                 return true;
             },
