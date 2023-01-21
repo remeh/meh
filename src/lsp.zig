@@ -216,6 +216,9 @@ pub const LSP = struct {
             return "clangd";
         } else if (std.mem.eql(u8, extension, ".rb")) {
             return "solargraph stdio";
+        } else if (std.mem.eql(u8, extension, ".py")) {
+            // provided by: https://github.com/python-lsp/python-lsp-server
+            return "pylsp";
         }
         return LSPError.UnknownExtension;
     }
