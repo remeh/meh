@@ -705,7 +705,10 @@ pub const App = struct {
         switch (self.focused_widget) {
             .Autocomplete => {
                 const wt = self.currentWidgetTextEdit();
-                const cursor_pixel_pos = wt.cursor.posInPixel(wt, wt.one_char_size);
+                var cursor_pixel_pos = wt.cursor.posInPixel(wt, wt.one_char_size);
+                if (self.has_split_view and self.focused_editor == .Right) {
+                    cursor_pixel_pos.a += self.window_scaled_size.a / 2;
+                }
                 self.widget_autocomplete.render(
                     self.sdl_renderer,
                     self.current_font,

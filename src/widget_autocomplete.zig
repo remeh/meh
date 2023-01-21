@@ -99,19 +99,19 @@ pub const WidgetAutocomplete = struct {
     ) void {
         // check in which part of the screen the cursor is currently at,
         // with this information, decide where to draw the autocomplete
-        var half_window_scaled_size = Vec2u{
-            .a = @divTrunc(window_scaled_size.a, 2),
-            .b = @divTrunc(window_scaled_size.b, 2),
+        var third_window_scaled_size = Vec2u{
+            .a = @divTrunc(window_scaled_size.a, 3),
+            .b = @divTrunc(window_scaled_size.b, 3),
         };
 
         var section = ScreenSection.TopLeft;
-        if (cursor_pixel_pos.a < half_window_scaled_size.a and cursor_pixel_pos.b < half_window_scaled_size.b) {
+        if (cursor_pixel_pos.a < third_window_scaled_size.a * 2 and cursor_pixel_pos.b < third_window_scaled_size.b * 2) {
             section = .TopLeft;
-        } else if (cursor_pixel_pos.a < half_window_scaled_size.a and cursor_pixel_pos.b >= half_window_scaled_size.b) {
+        } else if (cursor_pixel_pos.a < third_window_scaled_size.a * 2 and cursor_pixel_pos.b >= third_window_scaled_size.b * 2) {
             section = .BottomLeft;
-        } else if (cursor_pixel_pos.a > half_window_scaled_size.a and cursor_pixel_pos.b < half_window_scaled_size.b) {
+        } else if (cursor_pixel_pos.a > third_window_scaled_size.a * 2 and cursor_pixel_pos.b < third_window_scaled_size.b * 2) {
             section = .TopRight;
-        } else if (cursor_pixel_pos.a > half_window_scaled_size.a and cursor_pixel_pos.b >= half_window_scaled_size.b) {
+        } else if (cursor_pixel_pos.a > third_window_scaled_size.a * 2 and cursor_pixel_pos.b >= third_window_scaled_size.b * 2) {
             section = .BottomRight;
         }
 
@@ -119,9 +119,9 @@ pub const WidgetAutocomplete = struct {
         const size = Vec2u{ .a = window_scaled_size.a / 3, .b = one_char_size.b * 20 };
         const top_left = switch (section) {
             .TopLeft => Vec2u{ .a = cursor_pixel_pos.a + one_char_size.a, .b = cursor_pixel_pos.b + one_char_size.b },
-            .BottomLeft => Vec2u{ .a = cursor_pixel_pos.a + one_char_size.a, .b = cursor_pixel_pos.b - size.b + one_char_size.b },
-            .TopRight => Vec2u{ .a = cursor_pixel_pos.a - size.a, .b = cursor_pixel_pos.b },
-            .BottomRight => Vec2u{ .a = cursor_pixel_pos.a - size.a, .b = cursor_pixel_pos.b - size.b },
+            .BottomLeft => Vec2u{ .a = cursor_pixel_pos.a + one_char_size.a, .b = cursor_pixel_pos.b - size.b + (one_char_size.b * 2) },
+            .TopRight => Vec2u{ .a = cursor_pixel_pos.a - size.a, .b = cursor_pixel_pos.b + one_char_size.b },
+            .BottomRight => Vec2u{ .a = cursor_pixel_pos.a - size.a, .b = cursor_pixel_pos.b + one_char_size.b - size.b },
         };
         Draw.fillRect(sdl_renderer, scaler, top_left, size, Colors.dark_gray);
 
