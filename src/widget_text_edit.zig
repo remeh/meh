@@ -178,6 +178,11 @@ pub const WidgetTextEdit = struct {
             pos.a += left_offset;
         }
 
+        // horizontal limit lines
+
+        self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 80);
+        self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 120);
+
         // render the lines
         // it also adds a left offset (a small blank)
 
@@ -187,7 +192,7 @@ pub const WidgetTextEdit = struct {
         self.line_numbers_offset = pos.a - draw_pos.a;
     }
 
-    // renderLineNumbers renders the lines number at the left of the widget.
+    /// renderLineNumbers renders the lines number at the left of the widget.
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
     /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
     /// Returns x offset introduced by drawing the lines numbers
@@ -249,6 +254,21 @@ pub const WidgetTextEdit = struct {
         }
 
         return width;
+    }
+
+    /// renderHorizontalLimit is used to render the 80 and 120 chars limit.
+    fn renderHorizontalLimit(_: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, widget_size: Vec2u, draw_pos: Vec2u, one_char_size: Vec2u, left_offset: usize, chars_count: usize) void {
+        if (left_offset + (one_char_size.a * chars_count) > widget_size.a) {
+            return;
+        }
+
+        Draw.line(
+            sdl_renderer,
+            scaler,
+            .{ .a = left_offset + draw_pos.a + (one_char_size.a * chars_count), .b = 0 },
+            .{ .a = left_offset + draw_pos.a + (one_char_size.a * chars_count), .b = widget_size.b },
+            Colors.dark_gray,
+        );
     }
 
     // TODO(remy): remove
