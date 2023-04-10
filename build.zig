@@ -8,12 +8,18 @@ pub fn build(b: *std.build.Builder) void {
     // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
 
-    // Standard release options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
-    const mode = b.standardReleaseOptions();
+    // Standard optimization options allow the person running `zig build` to select
+    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
+    // set a preferred release mode, allowing the user to decide how to optimize.
+    const optimize = b.standardOptimizeOption(.{});
 
-    const meh = b.addExecutable("meh", "src/main.zig");
-    prepare(meh, target, mode);
+    const meh = b.addExecutable(.{
+        .name ="meh",
+        .root_source_file = .{ .path = "src/main.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    prepare(meh);
     meh.install();
 
     const run_cmd = meh.run();
@@ -25,15 +31,17 @@ pub fn build(b: *std.build.Builder) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const meh_tests = b.addTest("src/tests.zig");
-    prepare(meh_tests, target, mode);
+    const meh_tests = b.addTest(.{
+        .root_source_file = .{ .path = "src/tests.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    prepare(meh_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&meh_tests.step);
 }
 
-fn prepare(step: *std.build.LibExeObjStep, target: std.zig.CrossTarget, mode: std.builtin.Mode) void {
-    step.setTarget(target);
-    step.setBuildMode(mode);
+fn prepare(step: *std.build.LibExeObjStep) void {
     // step.use_stage1 = true;
 
     if (builtin.os.tag == .macos) {
