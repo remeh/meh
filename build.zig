@@ -14,15 +14,15 @@ pub fn build(b: *std.build.Builder) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const meh = b.addExecutable(.{
-        .name ="meh",
+        .name = "meh",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
     prepare(meh);
-    meh.install();
+    b.installArtifact(meh);
 
-    const run_cmd = meh.run();
+    const run_cmd = b.addRunArtifact(meh);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);

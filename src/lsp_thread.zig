@@ -255,11 +255,9 @@ pub const LSPThread = struct {
             return LSPError.MalformedResponse;
         }
 
-        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
-        var json_token_stream = std.json.TokenStream.init(response[idx.?..]);
-
-        if (std.json.parse(LSPMessages.headerResponse, &json_token_stream, json_params)) |header| {
-            defer std.json.parseFree(LSPMessages.headerResponse, header, json_params);
+        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
+        if (std.json.parseFromSlice(LSPMessages.headerResponse, allocator, response, json_params)) |header| {
+            defer std.json.parseFree(LSPMessages.headerResponse, allocator, header);
 
             // read the rest depending on the message type
 
@@ -285,15 +283,12 @@ pub const LSPThread = struct {
     }
 
     fn interpretCompletion(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
-        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
-        var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
+        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
         rv.*.completions = std.ArrayList(LSPCompletion).init(allocator);
 
-        std.log.debug("\n\n{s}\n\n", .{response[json_start_idx..]});
-
-        const completions = try std.json.parse(LSPMessages.completionsResponse, &json_token_stream, json_params);
-        defer std.json.parseFree(LSPMessages.completionsResponse, completions, json_params);
+        const completions = try std.json.parseFromSlice(LSPMessages.completionsResponse, allocator, response[json_start_idx..], json_params);
+        defer std.json.parseFree(LSPMessages.completionsResponse, allocator, completions);
 
         if (completions.result) |result| {
             if (result.items) |items| {
@@ -318,8 +313,7 @@ pub const LSPThread = struct {
     }
 
     fn interpretDefinition(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) void {
-        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
-        var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
+        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
         // Some LSP servers return only one result (an object), some returns
         // an array, through trial and error we have to test both.
@@ -327,8 +321,8 @@ pub const LSPThread = struct {
         rv.*.definitions = std.ArrayList(LSPPosition).init(allocator);
 
         // single value JSON
-        if (std.json.parse(LSPMessages.definitionResponse, &json_token_stream, json_params)) |definition| {
-            defer std.json.parseFree(LSPMessages.definitionResponse, definition, json_params);
+        if (std.json.parseFromSlice(LSPMessages.definitionResponse, allocator, response[json_start_idx..], json_params)) |definition| {
+            defer std.json.parseFree(LSPMessages.definitionResponse, allocator, definition);
             if (definition.result) |result| {
                 if (result.toLSPPosition(allocator)) |position| {
                     rv.*.definitions.?.append(position) catch |err| {
@@ -340,10 +334,8 @@ pub const LSPThread = struct {
             }
         } else |_| {
             // multiple value JSON, reset the JSON token stream
-            json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
-
-            if (std.json.parse(LSPMessages.definitionsResponse, &json_token_stream, json_params)) |definitions| {
-                defer std.json.parseFree(LSPMessages.definitionsResponse, definitions, json_params);
+            if (std.json.parseFromSlice(LSPMessages.definitionsResponse, allocator, response[json_start_idx..], json_params)) |definitions| {
+                defer std.json.parseFree(LSPMessages.definitionsResponse, allocator, definitions);
 
                 if (definitions.result) |results| {
                     for (results) |result| {
@@ -370,12 +362,11 @@ pub const LSPThread = struct {
     }
 
     fn interpretReferences(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
-        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
+        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
         rv.references = std.ArrayList(LSPPosition).init(allocator);
-        var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
 
-        const references = try std.json.parse(LSPMessages.referencesResponse, &json_token_stream, json_params);
-        defer std.json.parseFree(LSPMessages.referencesResponse, references, json_params);
+        const references = try std.json.parseFromSlice(LSPMessages.referencesResponse, allocator, response[json_start_idx..], json_params);
+        defer std.json.parseFree(LSPMessages.referencesResponse, allocator, references);
 
         if (references.result) |refs| {
             for (refs) |result| {
@@ -396,13 +387,10 @@ pub const LSPThread = struct {
     }
 
     fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
-        const json_params = std.json.ParseOptions{ .allocator = allocator, .ignore_unknown_fields = true };
-        // read the type of the notification
-        var json_token_stream = std.json.TokenStream.init(response[json_start_idx..]);
-
+        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
         // read the header only
-        const header = try std.json.parse(LSPMessages.headerNotificationResponse, &json_token_stream, json_params);
-        defer std.json.parseFree(LSPMessages.headerNotificationResponse, header, json_params);
+        const header = try std.json.parseFromSlice(LSPMessages.headerNotificationResponse, allocator, response[json_start_idx..], json_params);
+        defer std.json.parseFree(LSPMessages.headerNotificationResponse, allocator, header);
 
         std.log.debug("received an LSP notification: {s}", .{header.method});
         return LSPError.MissingRequestEntry;

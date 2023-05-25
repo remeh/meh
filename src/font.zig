@@ -48,6 +48,8 @@ pub const Font = struct {
         var fp = U8Slice.initEmpty(allocator);
         try fp.appendConst(filepath);
 
+        // TODO(remy): load the font from filepath (instead of using the font_data const)
+
         // will be cleaned up by the TTF_OpenFontRW call (the second parameter set to 1).
         var rwops: *c.SDL_RWops = c.SDL_RWFromConstMem(font_data, font_data.len);
 
@@ -74,12 +76,15 @@ pub const Font = struct {
 
         // create the font atlas
 
-        var surface: *c.SDL_Surface = c.SDL_CreateRGBSurface(0, atlas_size, atlas_size, 32, 0x00, 0x00, 0x00, 0xFF);
+        var surface: *c.SDL_Surface = c.SDL_CreateRGBSurface(0, atlas_size, atlas_size, 32, 0x00, 0x00, 0x00, 0x00);
+        _ = c.SDL_SetSurfaceBlendMode(surface, c.SDL_BLENDMODE_BLEND);
         _ = c.SDL_SetColorKey(surface, c.SDL_TRUE, c.SDL_MapRGBA(surface.format, 0, 0, 0, 255));
+
         // replacement character goes first in the atlas
         try rv.buildAtlasRange(surface, @as(u21, std.unicode.replacement_character), @as(u21, std.unicode.replacement_character + 1));
         try rv.buildAtlasRange(surface, @as(u21, 0x001A), @as(u21, 0x007F));
         try rv.buildAtlasRange(surface, @as(u21, 0x00A0), @as(u21, 0x017F));
+
         try rv.bindTexture(surface);
         c.SDL_FreeSurface(surface);
 
@@ -104,6 +109,7 @@ pub const Font = struct {
             std.log.err("Font.buildAtlas: can't create texture for font {s} size {d}", .{ self.filepath.bytes(), self.font_size });
             return FontError.CantBuildAtlas;
         }
+
         self.atlas.texture = texture.?;
     }
 
@@ -128,7 +134,17 @@ pub const Font = struct {
             b[glyph_bytes_size] = 0;
 
             text = c.TTF_RenderUTF8_LCD(self.ttf_font, b[0..], white, bg);
-            _ = c.SDL_BlitSurface(text, 0, surface, &c.SDL_Rect{ .x = @intCast(c_int, self.atlas.current_pos.a), .y = @intCast(c_int, self.atlas.current_pos.b), .w = text.w, .h = text.h });
+
+            // we store the glyph size because we'll need it after having freed the text surface.
+            var glyph_size = Vec2u{ .a = @intCast(usize, text.w), .b = @intCast(usize, text.h) };
+
+            var rect: c.SDL_Rect = c.SDL_Rect{
+                .x = @intCast(c_int, self.atlas.current_pos.a),
+                .y = @intCast(c_int, self.atlas.current_pos.b),
+                .w = @intCast(c_int, glyph_size.a),
+                .h = @intCast(c_int, glyph_size.b),
+            };
+            _ = c.SDL_BlitSurface(text, 0, surface, &rect);
             c.SDL_FreeSurface(text);
 
             try self.atlas.glyph_pos.put(
@@ -136,8 +152,8 @@ pub const Font = struct {
                 Vec4u{
                     .a = self.atlas.current_pos.a,
                     .b = self.atlas.current_pos.b,
-                    .c = @intCast(usize, text.w),
-                    .d = @intCast(usize, text.h),
+                    .c = @intCast(usize, glyph_size.a),
+                    .d = @intCast(usize, glyph_size.b),
                 },
             );
 
@@ -148,9 +164,9 @@ pub const Font = struct {
                 self.atlas.current_pos.b = self.atlas.next_y;
                 self.atlas.next_y = self.atlas.current_pos.b + self.font_size;
             } else {
-                self.atlas.current_pos.a += @intCast(usize, text.w);
-                if (self.atlas.next_y - self.atlas.current_pos.b < text.h) {
-                    self.atlas.next_y = self.atlas.current_pos.b + @intCast(usize, text.h);
+                self.atlas.current_pos.a += @intCast(usize, glyph_size.a);
+                if (self.atlas.next_y - self.atlas.current_pos.b < glyph_size.b) {
+                    self.atlas.next_y = self.atlas.current_pos.b + @intCast(usize, glyph_size.b);
                 }
             }
         }
@@ -184,7 +200,6 @@ pub const Font = struct {
         }
 
         var glyph_rect_in_atlas = self.glyphPos(str);
-
         var src_rect = c.SDL_Rect{
             .x = @intCast(c_int, glyph_rect_in_atlas.a),
             .y = @intCast(c_int, glyph_rect_in_atlas.b),
@@ -198,9 +213,10 @@ pub const Font = struct {
             .w = @divTrunc(@intCast(c_int, self.font_size), 2),
             .h = @intCast(c_int, self.font_size),
         };
+        var pdst_rect: *c.SDL_Rect = &dst_rect; // XXX(remy): don't use me
 
         _ = c.SDL_SetTextureColorMod(self.atlas.texture, @intCast(u8, color.a), @intCast(u8, color.b), @intCast(u8, color.c));
-        _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, &dst_rect);
+        _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, pdst_rect);
     }
 
     /// drawText draws the given text at the given position, position being in window coordinates.

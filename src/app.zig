@@ -196,6 +196,10 @@ pub const App = struct {
             return AppError.CantInit;
         }
 
+        var info: c.SDL_RendererInfo = undefined;
+        _ = c.SDL_GetRendererInfo(sdl_renderer, &info);
+        std.log.debug("using SDL renderer: {s}", .{info.name});
+
         _ = c.SDL_SetRenderDrawBlendMode(sdl_renderer, c.SDL_BLENDMODE_BLEND);
 
         // load the fonts
