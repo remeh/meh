@@ -256,7 +256,7 @@ pub const LSPThread = struct {
         }
 
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
-        if (std.json.parseFromSlice(LSPMessages.headerResponse, allocator, response, json_params)) |header| {
+        if (std.json.parseFromSlice(LSPMessages.headerResponse, allocator, response[idx.?..], json_params)) |header| {
             defer std.json.parseFree(LSPMessages.headerResponse, allocator, header);
 
             // read the rest depending on the message type
