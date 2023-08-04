@@ -212,6 +212,8 @@ pub const LSP = struct {
             return "gopls";
         } else if (std.mem.eql(u8, extension, ".zig")) {
             return "zls";
+        } else if (std.mem.eql(u8, extension, ".rs")) {
+            return "rust-analyzer";
         } else if (std.mem.eql(u8, extension, ".cpp")) {
             return "clangd";
         } else if (std.mem.eql(u8, extension, ".rb")) {

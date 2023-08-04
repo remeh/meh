@@ -375,11 +375,11 @@ pub const WidgetList = struct {
     }
 
     pub fn sortEntriesByLabel(self: *WidgetList) void {
-        std.sort.sort(WidgetListEntry, self.entries.items, {}, WidgetList.sortByLabel);
+        std.sort.insertion(WidgetListEntry, self.entries.items, {}, WidgetList.sortByLabel);
     }
 
     pub fn sortEntriesByData(self: *WidgetList) void {
-        std.sort.sort(WidgetListEntry, self.entries.items, {}, WidgetList.sortByData);
+        std.sort.insertion(WidgetListEntry, self.entries.items, {}, WidgetList.sortByData);
     }
 
     fn sortByData(context: void, a: WidgetListEntry, b: WidgetListEntry) bool {

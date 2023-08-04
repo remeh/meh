@@ -100,9 +100,9 @@ pub const WidgetLookup = struct {
         var it = dir.iterate();
         while (try it.next()) |entry| {
             switch (entry.kind) {
-                .File, .Directory => {
+                .file, .directory => {
                     var t: WidgetListEntryType = .File;
-                    if (entry.kind == .Directory) {
+                    if (entry.kind == .directory) {
                         t = .Directory;
                     }
 
