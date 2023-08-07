@@ -9,6 +9,7 @@ const ChangeType = @import("history.zig").ChangeType;
 const History = @import("history.zig").History;
 const ImVec2 = @import("vec.zig").ImVec2;
 const LSP = @import("lsp.zig").LSP;
+const SyntaxHighlighter = @import("syntax_highlighter.zig").SyntaxHighlighter;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2f = @import("vec.zig").Vec2f;
@@ -46,11 +47,12 @@ pub const Editor = struct {
     history_enabled: bool,
     history_current_block_id: i64,
     prng: std.rand.DefaultPrng,
+    syntax_highlighter: SyntaxHighlighter,
 
     // Constructors
     // ------------
 
-    pub fn init(allocator: std.mem.Allocator, buffer: Buffer) Editor {
+    pub fn init(allocator: std.mem.Allocator, buffer: Buffer) !Editor {
         return Editor{
             .allocator = allocator,
             .buffer = buffer,
@@ -61,10 +63,12 @@ pub const Editor = struct {
             .history_current_block_id = 0,
             .lsp = null,
             .prng = std.rand.DefaultPrng.init(1234),
+            .syntax_highlighter = try SyntaxHighlighter.init(allocator, buffer.linesCount()),
         };
     }
 
     pub fn deinit(self: *Editor) void {
+        self.syntax_highlighter.deinit();
         for (self.history.items) |change| {
             change.data.deinit();
         }
@@ -210,6 +214,8 @@ pub const Editor = struct {
                 };
             }
         }
+
+        self.syntax_highlighter.removeLine(line_pos);
     }
 
     /// deleteAfter deletes all glyphs after the given position (included) in the given line.
@@ -332,11 +338,15 @@ pub const Editor = struct {
             }
         }
 
+        // lsp
         if (self.lsp) |lsp| {
             if (triggerer == .Input) {
                 try lsp.didChange(&self.buffer, Vec2u{ .a = start_pos.b, .b = end_pos.b });
             }
         }
+
+        // syntax highlighting
+        self.syntax_highlighter.setDirty(Vec2u{ .a = start_pos.b, .b = end_pos.b });
 
         return Vec2u{ .a = start_pos.a, .b = start_pos.b };
     }
@@ -354,6 +364,7 @@ pub const Editor = struct {
         // history
         self.historyAppend(ChangeType.InsertNewLine, U8Slice.initEmpty(self.allocator), pos, triggerer);
 
+        // lsp
         if (self.lsp) |lsp| {
             if (triggerer == .Input) {
                 lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = self.linesCount() - 1 }) catch |err| {
@@ -361,6 +372,9 @@ pub const Editor = struct {
                 };
             }
         }
+
+        // syntax highlighting
+        try self.syntax_highlighter.insertNewLine(pos.b);
     }
 
     /// insertUtf8Text inserts the given UTF8 `text` at the given position.
@@ -384,11 +398,15 @@ pub const Editor = struct {
         // history
         self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), utf8_pos, triggerer);
 
+        // lsp
         if (self.lsp) |lsp| {
             if (triggerer == .Input) {
                 try lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = pos.b });
             }
         }
+
+        // syntax highlighting
+        self.syntax_highlighter.setDirty(Vec2u{ .a = pos.b, .b = pos.b });
     }
 
     /// deleteGlyph deletes on glyph from the underlying buffer.
@@ -428,6 +446,9 @@ pub const Editor = struct {
                     try lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = pos.b });
                 }
             }
+
+            // syntax highlighting
+            self.syntax_highlighter.setDirty(Vec2u{ .a = pos.b, .b = pos.b });
         }
     }
 

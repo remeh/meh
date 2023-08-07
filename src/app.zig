@@ -315,7 +315,7 @@ pub const App = struct {
 
         // open the buffer, create an editor
         var buffer = try Buffer.initFromFile(self.allocator, path);
-        var text_edit = WidgetTextEdit.initWithBuffer(self.allocator, buffer);
+        var text_edit = try WidgetTextEdit.initWithBuffer(self.allocator, buffer);
 
         // starts an LSP client if that makes sense.
         if (self.lsp == null) {

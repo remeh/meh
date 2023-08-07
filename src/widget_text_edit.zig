@@ -12,10 +12,8 @@ const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
 const Font = @import("font.zig").Font;
 const ImVec2 = @import("vec.zig").ImVec2;
-const LineSyntaxHighlighting = @import("syntax_highlighter.zig").LineSyntaxHighlighting;
 const Scaler = @import("scaler.zig").Scaler;
 const SearchDirection = @import("editor.zig").SearchDirection;
-const SyntaxHighlighter = @import("syntax_highlighter.zig").SyntaxHighlighter;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2f = @import("vec.zig").Vec2f;
@@ -122,12 +120,12 @@ pub const WidgetTextEdit = struct {
     // ------------
 
     /// initWithBuffer inits a WidgetTextEdit to edit the given buffer.
-    pub fn initWithBuffer(allocator: std.mem.Allocator, buffer: Buffer) WidgetTextEdit {
+    pub fn initWithBuffer(allocator: std.mem.Allocator, buffer: Buffer) !WidgetTextEdit {
         return WidgetTextEdit{
             .allocator = allocator,
             .cursor = Cursor.init(),
             .render_line_numbers = true,
-            .editor = Editor.init(allocator, buffer),
+            .editor = try Editor.init(allocator, buffer),
             .input_mode = InputMode.Command,
             .one_char_size = Vec2u{ .a = 16, .b = 8 },
             .viewport = WidgetTextEditViewport{
@@ -185,8 +183,11 @@ pub const WidgetTextEdit = struct {
         self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 80);
         self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 120);
 
+        // refresh the syntax highlighting
+        self.refreshSyntaxHighlighting();
+
         // render the lines
-        // it also adds a left offset (a small blank)
+        // it also adds a left offset (a small blank) and makes sure the syntax highlighting is ready
 
         left_offset = self.renderLines(font, scaler, pos, one_char_size, focused);
         pos.a += left_offset;
@@ -299,8 +300,6 @@ pub const WidgetTextEdit = struct {
             return left_blank_offset;
         }
         
-        var lineSyntaxHighlighting: LineSyntaxHighlighting = undefined;
-
         while (i < self.viewport.lines.b and i < self.editor.buffer.linesCount()) : (i += 1) {
             if (self.editor.buffer.getLine(i)) |line| {
                 // empty line, just jump a line
@@ -326,8 +325,6 @@ pub const WidgetTextEdit = struct {
                     continue;
                 }
                 
-                lineSyntaxHighlighting = SyntaxHighlighter.highlight(self.allocator, line);
-
                 // we always have to render every line from the start: since they may contain a \t
                 // we will have to take care of the fact that a \t use multiple spaces.
 
@@ -340,6 +337,7 @@ pub const WidgetTextEdit = struct {
                 var move_done: usize = 0;
                 var offset: usize = 0; // offset in glyph, relative to the left of the widget (i.e. right of the line numbers if any)
                 var bytes = line.bytes();
+                var line_syntax_highlight = self.editor.syntax_highlighter.getLine(i);
 
                 while (move_done < self.viewport.columns.b) {
                     if (it.glyph()[0] == char_tab and tab_idx == 0) {
@@ -354,7 +352,7 @@ pub const WidgetTextEdit = struct {
                         // we have to draw a glyph
 
                         if (tab_idx == 0) {
-                            var color = lineSyntaxHighlighting.get(it.current_glyph);
+                            var color = line_syntax_highlight.getForColumn(it.current_glyph);
                             _ = Draw.glyph(
                                 font,
                                 scaler,
@@ -454,6 +452,23 @@ pub const WidgetTextEdit = struct {
         }
 
         return left_blank_offset;
+    }
+
+    /// TODO(remy): comment me
+    fn refreshSyntaxHighlighting(self: *WidgetTextEdit) void {
+        var line_start = @max(0, self.viewport.lines.a);
+        var line_end = @min(self.viewport.lines.b, self.editor.linesCount());
+
+        while (line_start < line_end) : (line_start += 1) {
+            var line = self.editor.buffer.getLine(line_start) catch |err| {
+                std.log.err("WidgetTextEdit.refreshSyntaxHighlighting: can't getLine: {}", .{err});
+                continue;
+            };
+            _ = self.editor.syntax_highlighter.refresh(line_start, line) catch |err| {
+                std.log.err("WidgetTextEdit.refreshSyntaxHighlighting: can't compute syntax highlight: {}", .{err});
+                continue;
+            };
+        }
     }
 
     /// isSelected returns true if the given glyph is selected in the managed editor.

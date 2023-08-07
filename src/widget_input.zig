@@ -23,7 +23,7 @@ pub const WidgetInput = struct {
     pub fn init(allocator: std.mem.Allocator) !WidgetInput {
         var rv = WidgetInput{
             .allocator = allocator,
-            .widget_text_edit = WidgetTextEdit.initWithBuffer(allocator, try Buffer.initEmpty(allocator)),
+            .widget_text_edit = try WidgetTextEdit.initWithBuffer(allocator, try Buffer.initEmpty(allocator)),
         };
 
         rv.widget_text_edit.render_line_numbers = false;
