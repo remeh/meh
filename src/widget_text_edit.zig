@@ -12,8 +12,10 @@ const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
 const Font = @import("font.zig").Font;
 const ImVec2 = @import("vec.zig").ImVec2;
+const LineSyntaxHighlighting = @import("syntax_highlighter.zig").LineSyntaxHighlighting;
 const Scaler = @import("scaler.zig").Scaler;
 const SearchDirection = @import("editor.zig").SearchDirection;
+const SyntaxHighlighter = @import("syntax_highlighter.zig").SyntaxHighlighter;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2f = @import("vec.zig").Vec2f;
@@ -271,22 +273,6 @@ pub const WidgetTextEdit = struct {
         );
     }
 
-    // TODO(remy): remove
-    fn glyphColor(_: WidgetTextEdit, str: []const u8) Vec4u {
-        if (str.len == 0) {
-            return Colors.light_gray;
-        }
-
-        if (str[0] == '(' or str[0] == ')' or
-            str[0] == '[' or str[0] == ']' or
-            str[0] == '{' or str[0] == '}')
-        {
-            return Vec4u{ .a = 46, .b = 126, .c = 184, .d = 255 };
-        }
-
-        return Colors.light_gray;
-    }
-
     /// renderLines renders the lines of text, the selections if any, and the cursor if visible.
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
     /// using the given `scaler`. `draw_pos` and `one_char_size` should be in pixel.
@@ -312,6 +298,8 @@ pub const WidgetTextEdit = struct {
 
             return left_blank_offset;
         }
+        
+        var lineSyntaxHighlighting: LineSyntaxHighlighting = undefined;
 
         while (i < self.viewport.lines.b and i < self.editor.buffer.linesCount()) : (i += 1) {
             if (self.editor.buffer.getLine(i)) |line| {
@@ -337,6 +325,8 @@ pub const WidgetTextEdit = struct {
                     y_offset += self.one_char_size.b;
                     continue;
                 }
+                
+                lineSyntaxHighlighting = SyntaxHighlighter.highlight(self.allocator, line);
 
                 // we always have to render every line from the start: since they may contain a \t
                 // we will have to take care of the fact that a \t use multiple spaces.
@@ -364,7 +354,7 @@ pub const WidgetTextEdit = struct {
                         // we have to draw a glyph
 
                         if (tab_idx == 0) {
-                            var color = self.glyphColor(bytes[it.current_byte..]);
+                            var color = lineSyntaxHighlighting.get(it.current_glyph);
                             _ = Draw.glyph(
                                 font,
                                 scaler,
