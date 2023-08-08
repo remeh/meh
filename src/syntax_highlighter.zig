@@ -112,16 +112,15 @@ pub const SyntaxHighlighter = struct {
     // -------------------
 
     fn compute(allocator: std.mem.Allocator, line_content: *U8Slice) !LineSyntaxHighlight {
-        // TODO(remy): actual computation of the syntax highlighting.
         var columns = std.ArrayList(Vec4u).init(allocator);
         errdefer columns.deinit();
 
         var is_in_quote: usize = 0; // contains which quote char has been used to start
+        var char_before_word: usize = 0; // contains which char was before the word
         var current_pos: usize = 0;
-        //        var char_before_word: usize = 0;
         var previous_char: usize = 0;
         var quote_start: usize = 0;
-        //        var word_start: usize = 0;
+        var word_start: usize = 0;
         var default_color: bool = true;
 
         var it = try UTF8Iterator.init(line_content.bytes(), 0);
@@ -134,24 +133,35 @@ pub const SyntaxHighlighter = struct {
             {
                 is_in_quote = ch;
                 quote_start = current_pos;
-                // entering a comment
+            // entering a comment
             } else if (is_in_quote == 0 and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' '))) {
                 // finish with coloring everything as a comment
                 // TODO(remy): proper comment color definition
                 if (columns.items.len > 0) {
                     _ = columns.pop(); // FIXME(remy):
                 }
-                try SyntaxHighlighter.finish_coloring_with(&columns, &it, Colors.gray);
+                try finish_coloring_with(&columns, &it, Colors.gray);
                 break;
-                // is in quote and leaving that same quote
-            } else if (is_in_quote != 0 and ch == is_in_quote) {
+            // is in quote and leaving that same quote
+            } else if (is_in_quote > 0 and ch == is_in_quote) {
                 is_in_quote = 0;
                 while (quote_start < current_pos) : (quote_start += 1) {
                     columns.items[quote_start] = Colors.gray;
                 }
                 try columns.append(Colors.gray);
                 default_color = false;
-                // TODO(remy): implement the in quote thingy
+            }
+
+            // end of a word
+            if (is_in_quote == 0 and !std.ascii.isAlphanumeric(@intCast(u8, ch)) and ch != '_') {
+                if (ch == '(' or ch == '{' or ch == '[' or char_before_word == '.') {
+                    while (word_start < current_pos) : (word_start += 1) {
+                        columns.items[word_start] = Colors.white;
+                    }
+                }
+
+                char_before_word = ch;
+                word_start = current_pos+1;
             }
 
             // default color
