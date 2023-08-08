@@ -98,6 +98,9 @@ pub const WidgetTextEdit = struct {
     /// render_line_numbers is set to true when the line numbers have to be rendered
     /// It is set to false when the WidgetTextEdit is used as an edit input.
     render_line_numbers: bool,
+    /// render_horizontal_limits is set to true when 80 and 120 chars limit lines
+    /// are rendered.
+    render_horizontal_limits: bool,
     /// viewport represents what part of the buffer has to be visible
     /// It is measured in glyphs.
     viewport: WidgetTextEditViewport,
@@ -125,6 +128,7 @@ pub const WidgetTextEdit = struct {
             .allocator = allocator,
             .cursor = Cursor.init(),
             .render_line_numbers = true,
+            .render_horizontal_limits = true,
             .editor = try Editor.init(allocator, buffer),
             .input_mode = InputMode.Command,
             .one_char_size = Vec2u{ .a = 16, .b = 8 },
@@ -180,8 +184,10 @@ pub const WidgetTextEdit = struct {
 
         // horizontal limit lines
 
-        self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 80);
-        self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 120);
+        if (self.render_horizontal_limits) {
+            self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 80);
+            self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 120);
+        }
 
         // refresh the syntax highlighting
         self.refreshSyntaxHighlighting();
@@ -299,7 +305,7 @@ pub const WidgetTextEdit = struct {
 
             return left_blank_offset;
         }
-        
+
         while (i < self.viewport.lines.b and i < self.editor.buffer.linesCount()) : (i += 1) {
             if (self.editor.buffer.getLine(i)) |line| {
                 // empty line, just jump a line
@@ -324,7 +330,7 @@ pub const WidgetTextEdit = struct {
                     y_offset += self.one_char_size.b;
                     continue;
                 }
-                
+
                 // we always have to render every line from the start: since they may contain a \t
                 // we will have to take care of the fact that a \t use multiple spaces.
 
