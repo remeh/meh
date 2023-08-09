@@ -142,7 +142,7 @@ pub const SyntaxHighlighter = struct {
             {
                 is_in_quote = ch;
                 quote_start = current_pos;
-            // entering a comment
+                // entering a comment
             } else if (is_in_quote == 0 and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' '))) {
                 // finish with coloring everything as a comment
                 // TODO(remy): proper comment color definition
@@ -151,7 +151,7 @@ pub const SyntaxHighlighter = struct {
                 }
                 try finish_coloring_with(&columns, &it, Colors.gray);
                 break;
-            // is in quote and leaving that same quote
+                // is in quote and leaving that same quote
             } else if (is_in_quote > 0 and ch == is_in_quote) {
                 is_in_quote = 0;
                 while (quote_start < current_pos) : (quote_start += 1) {
@@ -170,7 +170,7 @@ pub const SyntaxHighlighter = struct {
                 }
 
                 char_before_word = ch;
-                word_start = current_pos+1;
+                word_start = current_pos + 1;
             }
 
             // default color

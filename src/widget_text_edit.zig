@@ -101,6 +101,9 @@ pub const WidgetTextEdit = struct {
     /// render_horizontal_limits is set to true when 80 and 120 chars limit lines
     /// are rendered.
     render_horizontal_limits: bool,
+    /// syntax_highlight is set to true if content of the WidgetTextEdit should
+    /// be highlighted
+    syntax_highlight: bool,
     /// viewport represents what part of the buffer has to be visible
     /// It is measured in glyphs.
     viewport: WidgetTextEditViewport,
@@ -129,6 +132,7 @@ pub const WidgetTextEdit = struct {
             .cursor = Cursor.init(),
             .render_line_numbers = true,
             .render_horizontal_limits = true,
+            .syntax_highlight = true,
             .editor = try Editor.init(allocator, buffer),
             .input_mode = InputMode.Command,
             .one_char_size = Vec2u{ .a = 16, .b = 8 },
@@ -190,7 +194,9 @@ pub const WidgetTextEdit = struct {
         }
 
         // refresh the syntax highlighting
-        self.refreshSyntaxHighlighting();
+        if (self.syntax_highlight) {
+            self.refreshSyntaxHighlighting();
+        }
 
         // render the lines
         // it also adds a left offset (a small blank) and makes sure the syntax highlighting is ready
@@ -358,7 +364,10 @@ pub const WidgetTextEdit = struct {
                         // we have to draw a glyph
 
                         if (tab_idx == 0) {
-                            var color = line_syntax_highlight.getForColumn(it.current_glyph);
+                            var color = Colors.light_gray;
+                            if (self.syntax_highlight) {
+                                color = line_syntax_highlight.getForColumn(it.current_glyph);
+                            }
                             _ = Draw.glyph(
                                 font,
                                 scaler,

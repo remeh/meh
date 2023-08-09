@@ -28,6 +28,7 @@ pub const WidgetInput = struct {
 
         rv.widget_text_edit.render_line_numbers = false;
         rv.widget_text_edit.render_horizontal_limits = false;
+        rv.widget_text_edit.syntax_highlight = false;
         rv.widget_text_edit.editor.history_enabled = false;
         rv.widget_text_edit.viewport.lines.a = 0;
         rv.widget_text_edit.viewport.columns.a = 0;
