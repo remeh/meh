@@ -97,6 +97,7 @@ pub const SyntaxHighlighter = struct {
             return false;
         }
 
+        // refresh this line syntax highlighting
         existing.deinit();
 
         var line_syntax_highlight = try SyntaxHighlighter.compute(self.allocator, line_content);
@@ -114,6 +115,14 @@ pub const SyntaxHighlighter = struct {
     fn compute(allocator: std.mem.Allocator, line_content: *U8Slice) !LineSyntaxHighlight {
         var columns = std.ArrayList(Vec4u).init(allocator);
         errdefer columns.deinit();
+
+        if (line_content.size() == 0) {
+            return LineSyntaxHighlight{
+                .allocator = allocator,
+                .columns = columns,
+                .dirty = false,
+            };
+        }
 
         var is_in_quote: usize = 0; // contains which quote char has been used to start
         var char_before_word: usize = 0; // contains which char was before the word
