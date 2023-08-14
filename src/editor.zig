@@ -538,6 +538,10 @@ pub const Editor = struct {
         }
 
         var line = try self.buffer.getLine(position.b);
+        if (pos.b >= line.size()) {
+            return EditorError.NoWordHere;
+        }
+
         return line.bytes()[pos.a..pos.b];
     }
 

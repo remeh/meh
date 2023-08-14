@@ -21,11 +21,25 @@ pub const gray = Vec4u{
     .d = 255,
 };
 
+pub const blue = Vec4u{
+    .a = 61,
+    .b = 151,
+    .c = 226,
+    .d = 255,
+};
+
+pub const green = Vec4u{
+    .a = 151,
+    .b = 194,
+    .c = 73,
+    .d = 255,
+};
+
 pub const red = Vec4u{
-    .a = 255,
-    .b = 0,
-    .c = 0,
-    .d = 220,
+    .a = 224,
+    .b = 90,
+    .c = 79,
+    .d = 255,
 };
 
 pub const dark_gray = Vec4u{

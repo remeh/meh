@@ -676,7 +676,7 @@ pub const WidgetTextEdit = struct {
             self.setInputMode(.Insert);
             return;
         }
-
+        
         self.selection.state = next_state;
     }
 
@@ -1058,6 +1058,9 @@ pub const WidgetTextEdit = struct {
         // stop selection mode
         self.stopSelection(.Inactive);
 
+        // do not highlight anything anymore
+        _ = self.editor.syntax_highlighter.setHighlightWord(null);
+
         self.input_mode = InputMode.Command;
     }
 
@@ -1094,6 +1097,12 @@ pub const WidgetTextEdit = struct {
 
         // use the position (which may have been corrected) as the selection start position
         self.startSelection(self.cursor.pos, .MouseSelection);
+
+        var word: ?[]const u8 = self.editor.wordAt(self.cursor.pos) catch null;
+        var has_changed = self.editor.syntax_highlighter.setHighlightWord(word);
+        if (has_changed) {
+            self.refreshSyntaxHighlighting();
+        }
     }
 
     /// onMouseStopSelection is called when the user has stopped pressing with the mouse button.
@@ -1213,8 +1222,10 @@ pub const WidgetTextEdit = struct {
 
     /// moveCursor applies a relative move the cursor in the current WidgetTextEdit view.
     /// Values passed in `move` are in glyph.
+    /// `scroll` forces the viewport to make the cursor visible.
     /// If you want to make sure the cursor is on a valid position, consider
-    /// using `validateCursorPos`.
+    /// using `validateCursorPos`. Note that `validateCursorPos(.Scroll)` is
+    /// called if `scroll` is set to true.
     pub fn moveCursor(self: *WidgetTextEdit, move: Vec2i, scroll: bool) void {
         var cursor_pos = Vec2utoi(self.cursor.pos);
         var line: *U8Slice = undefined;

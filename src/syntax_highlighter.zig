@@ -35,6 +35,7 @@ pub const LineSyntaxHighlight = struct {
 pub const SyntaxHighlighter = struct {
     allocator: std.mem.Allocator,
     lines: std.ArrayList(LineSyntaxHighlight),
+    word_under_cursor: ?[]const u8,
 
     // TODO(remy): comment
     // TODO(remy): unit test
@@ -49,6 +50,7 @@ pub const SyntaxHighlighter = struct {
         return SyntaxHighlighter{
             .allocator = allocator,
             .lines = lines,
+            .word_under_cursor = null,
         };
     }
 
@@ -89,6 +91,36 @@ pub const SyntaxHighlighter = struct {
         }
     }
 
+    pub fn setAllDirty(self: *SyntaxHighlighter) void {
+        for (self.lines.items) |*line| {
+            line.dirty = true;
+        }
+    }
+
+    // TODO(remy): comment me
+    // TODO(remy): unit test
+    pub fn setHighlightWord(self: *SyntaxHighlighter, word: ?[]const u8) bool {
+        var has_changed: bool = false;
+
+        // have to highlight a new word
+        if (word != null and self.word_under_cursor != null and
+            !std.mem.eql(u8, word.?, self.word_under_cursor.?))
+        {
+            self.setAllDirty();
+            has_changed = true;
+        }
+
+        // neither we were not highlighting anything or we start
+        // not highlighting anything.
+        if ((word == null and self.word_under_cursor != null) or (word != null and self.word_under_cursor == null)) {
+            self.setAllDirty();
+            has_changed = true;
+        }
+
+        self.word_under_cursor = word;
+        return has_changed;
+    }
+
     // TODO(remy): comment me
     pub fn refresh(self: *SyntaxHighlighter, line_number: usize, line_content: *U8Slice) !bool {
         // if existing and not dirty, nothing to do the highlight is already ok
@@ -100,7 +132,7 @@ pub const SyntaxHighlighter = struct {
         // refresh this line syntax highlighting
         existing.deinit();
 
-        var line_syntax_highlight = try SyntaxHighlighter.compute(self.allocator, line_content);
+        var line_syntax_highlight = try SyntaxHighlighter.compute(self.allocator, line_content, self.word_under_cursor);
         self.lines.items[line_number] = line_syntax_highlight;
         return true;
     }
@@ -112,7 +144,11 @@ pub const SyntaxHighlighter = struct {
     // syntax highlighting
     // -------------------
 
-    fn compute(allocator: std.mem.Allocator, line_content: *U8Slice) !LineSyntaxHighlight {
+    fn compute(
+        allocator: std.mem.Allocator,
+        line_content: *U8Slice,
+        word_under_cursor: ?[]const u8,
+    ) !LineSyntaxHighlight {
         var columns = std.ArrayList(Vec4u).init(allocator);
         errdefer columns.deinit();
 
@@ -125,63 +161,73 @@ pub const SyntaxHighlighter = struct {
         }
 
         var is_in_quote: usize = 0; // contains which quote char has been used to start
+        var is_in_comment: bool = false;
         var char_before_word: usize = 0; // contains which char was before the word
         var current_pos: usize = 0;
         var previous_char: usize = 0;
         var quote_start: usize = 0;
         var word_start: usize = 0;
-        var default_color: bool = true;
 
         var it = try UTF8Iterator.init(line_content.bytes(), 0);
         while (true) {
             var ch: usize = it.glyph()[0];
+            
+            // immediately set this glyph color to the default color            
+            if (is_in_comment) {
+                try columns.append(Colors.gray);
+            } else {
+                try columns.append(Colors.light_gray);
+            }
 
-            // entering a quoted text
             if (is_in_quote == 0 and previous_char != '\\' and
                 (ch == '"' or ch == '\'' or ch == '`'))
             {
+                // entering a quoted text
                 is_in_quote = ch;
                 quote_start = current_pos;
-                // entering a comment
             } else if (is_in_quote == 0 and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' '))) {
-                // finish with coloring everything as a comment
-                // TODO(remy): proper comment color definition
+                // entering a comment
                 if (columns.items.len > 0) {
-                    _ = columns.pop(); // FIXME(remy):
+                    // TODO(remy): color previous char
+                    if (previous_char == '/' and columns.items.len > 1) {
+                        columns.items[columns.items.len-2] = Colors.gray;
+                    }
+                    columns.items[columns.items.len-1] = Colors.gray;
                 }
-                try finish_coloring_with(&columns, &it, Colors.gray);
-                break;
+                is_in_comment = true;
+            } else if (is_in_quote > 0 and ch == is_in_quote and previous_char != '\\') {
                 // is in quote and leaving that same quote
-            } else if (is_in_quote > 0 and ch == is_in_quote) {
                 is_in_quote = 0;
-                while (quote_start < current_pos) : (quote_start += 1) {
-                    columns.items[quote_start] = Colors.gray;
-                }
-                try columns.append(Colors.gray);
-                default_color = false;
+                color_with(&columns, quote_start, current_pos+1, Colors.gray);
             }
 
             // end of a word
-            if (is_in_quote == 0 and !std.ascii.isAlphanumeric(@intCast(u8, ch)) and ch != '_') {
-                if (ch == '(' or ch == '{' or ch == '[' or char_before_word == '.') {
-                    while (word_start < current_pos) : (word_start += 1) {
-                        columns.items[word_start] = Colors.white;
-                    }
+            if (!std.ascii.isAlphanumeric(@intCast(u8, ch)) and ch != '_') {
+                if (is_in_quote == 0) {
+                     if (std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "TODO") or
+                         std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "XXX") or
+                         std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "FIXME")) {
+                         color_with(&columns, word_start, current_pos, Colors.red);
+                     } else if (std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "DONE")) {
+                         color_with(&columns, word_start, current_pos, Colors.green);
+                     } else if (is_in_comment == false and (ch == '(' or ch == '{' or ch == '[' or char_before_word == '.')) {
+                         color_with(&columns, word_start, current_pos, Colors.white);
+                     }
+                }
+
+                // maybe it is the highlighted word?
+                if (word_under_cursor != null and
+                        std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], word_under_cursor.?)) {
+                    color_with(&columns, word_start, current_pos, Colors.blue);
                 }
 
                 char_before_word = ch;
                 word_start = current_pos + 1;
             }
 
-            // default color
-            if (default_color) {
-                columns.append(Colors.light_gray) catch {};
-            }
-
             // move forward and reset every registers
             previous_char = ch;
             current_pos += 1;
-            default_color = true;
 
             // or stop if there is nothing more
             if (!it.next()) {
@@ -194,6 +240,13 @@ pub const SyntaxHighlighter = struct {
             .columns = columns,
             .dirty = false,
         };
+    }
+
+    fn color_with(columns: *std.ArrayList(Vec4u), start: usize, end: usize, color: Vec4u) void {
+        var idx = start;
+        while (idx < end) : (idx += 1) {
+            columns.items[idx] = color;
+        }
     }
 
     fn finish_coloring_with(columns: *std.ArrayList(Vec4u), it: *UTF8Iterator, color: Vec4u) !void {
