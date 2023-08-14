@@ -168,8 +168,8 @@ pub const WidgetTextEdit = struct {
     pub fn render(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u, focused: bool) void {
         self.one_char_size = one_char_size;
         self.visible_cols_and_lines = Vec2u{
-            .a = (widget_size.a - self.line_numbers_offset) / @floatToInt(usize, @intToFloat(f32, one_char_size.a)),
-            .b = ((widget_size.b) / @floatToInt(usize, @intToFloat(f32, one_char_size.b))) - 1, // FIXME(remy): this -1 is based on nothing
+            .a = (widget_size.a - self.line_numbers_offset) / @as(usize, @intFromFloat(@as(f32, @floatFromInt(one_char_size.a)))),
+            .b = ((widget_size.b) / @as(usize, @intFromFloat(@as(f32, @floatFromInt(one_char_size.b))))) - 1, // FIXME(remy): this -1 is based on nothing
         };
 
         self.computeViewport();
@@ -676,7 +676,7 @@ pub const WidgetTextEdit = struct {
             self.setInputMode(.Insert);
             return;
         }
-        
+
         self.selection.state = next_state;
     }
 
@@ -714,7 +714,7 @@ pub const WidgetTextEdit = struct {
         _ = ctrl;
         _ = cmd;
 
-        var move = @divTrunc(@intCast(i64, self.viewport.lines.b) - @intCast(i64, self.viewport.lines.a), 2);
+        var move = @divTrunc(@as(i64, @intCast(self.viewport.lines.b)) - @as(i64, @intCast(self.viewport.lines.a)), 2);
         if (move < 0) {
             move = 8;
         }
@@ -759,7 +759,7 @@ pub const WidgetTextEdit = struct {
             self.cursor.max_last_col_pos = col;
 
             if (self.cursor.pos.a < col) {
-                self.moveCursor(Vec2i{ .a = @intCast(i64, col - self.cursor.pos.a), .b = 0 }, false);
+                self.moveCursor(Vec2i{ .a = @as(i64, @intCast(col - self.cursor.pos.a)), .b = 0 }, false);
                 self.validateCursorPos(.Scroll);
             }
         }
@@ -899,7 +899,7 @@ pub const WidgetTextEdit = struct {
                         if (self.selection.state != .Inactive) {
                             if (self.buildSelectedText()) |selected_text| {
                                 if (selected_text.size() > 0) {
-                                    _ = c.SDL_SetClipboardText(@ptrCast([*:0]const u8, selected_text.data.items));
+                                    _ = c.SDL_SetClipboardText(@as([*:0]const u8, @ptrCast(selected_text.data.items)));
                                 }
                                 selected_text.deinit();
                             } else |err| {
@@ -1122,7 +1122,7 @@ pub const WidgetTextEdit = struct {
     /// deleteLine deletes the line where is the cursor.
     // TODO(remy): unit test
     pub fn deleteLine(self: *WidgetTextEdit) void {
-        self.editor.deleteLine(@intCast(usize, self.cursor.pos.b), .Input);
+        self.editor.deleteLine(@as(usize, @intCast(self.cursor.pos.b)), .Input);
         self.editor.historyEndBlock();
         self.validateCursorPos(.Scroll);
         self.stopSelection(.Inactive);
@@ -1390,7 +1390,7 @@ pub const WidgetTextEdit = struct {
                             break;
                         }
                     }
-                    self.moveCursor(Vec2i{ .a = @intCast(i64, i), .b = 0 }, true);
+                    self.moveCursor(Vec2i{ .a = @as(i64, @intCast(i)), .b = 0 }, true);
                 } else |_| {} // TODO(remy): do something with the error
             },
             .RespectPreviousLineIndent => {

@@ -257,12 +257,12 @@ pub const LSPThread = struct {
 
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
         if (std.json.parseFromSlice(LSPMessages.headerResponse, allocator, response[idx.?..], json_params)) |header| {
-            defer std.json.parseFree(LSPMessages.headerResponse, allocator, header);
+            defer header.deinit();
 
             // read the rest depending on the message type
 
-            if (requests.get(header.id)) |message_type| {
-                var rv = LSPResponse.init(allocator, header.id, message_type);
+            if (requests.get(header.value.id)) |message_type| {
+                var rv = LSPResponse.init(allocator, header.value.id, message_type);
                 errdefer rv.deinit();
 
                 switch (message_type) {
@@ -288,9 +288,9 @@ pub const LSPThread = struct {
         rv.*.completions = std.ArrayList(LSPCompletion).init(allocator);
 
         const completions = try std.json.parseFromSlice(LSPMessages.completionsResponse, allocator, response[json_start_idx..], json_params);
-        defer std.json.parseFree(LSPMessages.completionsResponse, allocator, completions);
+        defer completions.deinit();
 
-        if (completions.result) |result| {
+        if (completions.value.result) |result| {
             if (result.items) |items| {
                 for (items) |item| {
                     if (item.toLSPCompletion(allocator)) |completion| {
@@ -322,8 +322,8 @@ pub const LSPThread = struct {
 
         // single value JSON
         if (std.json.parseFromSlice(LSPMessages.definitionResponse, allocator, response[json_start_idx..], json_params)) |definition| {
-            defer std.json.parseFree(LSPMessages.definitionResponse, allocator, definition);
-            if (definition.result) |result| {
+            defer definition.deinit();
+            if (definition.value.result) |result| {
                 if (result.toLSPPosition(allocator)) |position| {
                     rv.*.definitions.?.append(position) catch |err| {
                         std.log.err("LSPThread.interpret: can't append position: {}", .{err});
@@ -335,9 +335,9 @@ pub const LSPThread = struct {
         } else |_| {
             // multiple value JSON, reset the JSON token stream
             if (std.json.parseFromSlice(LSPMessages.definitionsResponse, allocator, response[json_start_idx..], json_params)) |definitions| {
-                defer std.json.parseFree(LSPMessages.definitionsResponse, allocator, definitions);
+                defer definitions.deinit();
 
-                if (definitions.result) |results| {
+                if (definitions.value.result) |results| {
                     for (results) |result| {
                         if (result.toLSPPosition(allocator)) |position| {
                             rv.*.definitions.?.append(position) catch |err| {
@@ -366,9 +366,9 @@ pub const LSPThread = struct {
         rv.references = std.ArrayList(LSPPosition).init(allocator);
 
         const references = try std.json.parseFromSlice(LSPMessages.referencesResponse, allocator, response[json_start_idx..], json_params);
-        defer std.json.parseFree(LSPMessages.referencesResponse, allocator, references);
+        defer references.deinit();
 
-        if (references.result) |refs| {
+        if (references.value.result) |refs| {
             for (refs) |result| {
                 if (result.toLSPPosition(allocator)) |position| {
                     rv.references.?.append(position) catch |err| {
@@ -390,9 +390,9 @@ pub const LSPThread = struct {
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
         // read the header only
         const header = try std.json.parseFromSlice(LSPMessages.headerNotificationResponse, allocator, response[json_start_idx..], json_params);
-        defer std.json.parseFree(LSPMessages.headerNotificationResponse, allocator, header);
+        defer header.deinit();
 
-        std.log.debug("received an LSP notification: {s}", .{header.method});
+        std.log.debug("received an LSP notification: {s}", .{header.value.method});
         return LSPError.MissingRequestEntry;
     }
 };

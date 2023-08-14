@@ -384,7 +384,7 @@ pub const Editor = struct {
             try self.buffer.lines.append(new_line);
         }
 
-        var line = try self.buffer.getLine(@intCast(u64, pos.b));
+        var line = try self.buffer.getLine(@as(u64, @intCast(pos.b)));
 
         // since utf8 could be one or multiple bytes, we have to find
         // in bytes where to insert this new text in the slice.

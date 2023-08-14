@@ -171,8 +171,8 @@ pub const SyntaxHighlighter = struct {
         var it = try UTF8Iterator.init(line_content.bytes(), 0);
         while (true) {
             var ch: usize = it.glyph()[0];
-            
-            // immediately set this glyph color to the default color            
+
+            // immediately set this glyph color to the default color
             if (is_in_comment) {
                 try columns.append(Colors.gray);
             } else {
@@ -190,34 +190,36 @@ pub const SyntaxHighlighter = struct {
                 if (columns.items.len > 0) {
                     // TODO(remy): color previous char
                     if (previous_char == '/' and columns.items.len > 1) {
-                        columns.items[columns.items.len-2] = Colors.gray;
+                        columns.items[columns.items.len - 2] = Colors.gray;
                     }
-                    columns.items[columns.items.len-1] = Colors.gray;
+                    columns.items[columns.items.len - 1] = Colors.gray;
                 }
                 is_in_comment = true;
             } else if (is_in_quote > 0 and ch == is_in_quote and previous_char != '\\') {
                 // is in quote and leaving that same quote
                 is_in_quote = 0;
-                color_with(&columns, quote_start, current_pos+1, Colors.gray);
+                color_with(&columns, quote_start, current_pos + 1, Colors.gray);
             }
 
             // end of a word
-            if (!std.ascii.isAlphanumeric(@intCast(u8, ch)) and ch != '_') {
+            if (!std.ascii.isAlphanumeric(@as(u8, @intCast(ch))) and ch != '_') {
                 if (is_in_quote == 0) {
-                     if (std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "TODO") or
-                         std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "XXX") or
-                         std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "FIXME")) {
-                         color_with(&columns, word_start, current_pos, Colors.red);
-                     } else if (std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "DONE")) {
-                         color_with(&columns, word_start, current_pos, Colors.green);
-                     } else if (is_in_comment == false and (ch == '(' or ch == '{' or ch == '[' or char_before_word == '.')) {
-                         color_with(&columns, word_start, current_pos, Colors.white);
-                     }
+                    if (std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "TODO") or
+                        std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "XXX") or
+                        std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "FIXME"))
+                    {
+                        color_with(&columns, word_start, current_pos, Colors.red);
+                    } else if (std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "DONE")) {
+                        color_with(&columns, word_start, current_pos, Colors.green);
+                    } else if (is_in_comment == false and (ch == '(' or ch == '{' or ch == '[' or char_before_word == '.')) {
+                        color_with(&columns, word_start, current_pos, Colors.white);
+                    }
                 }
 
                 // maybe it is the highlighted word?
                 if (word_under_cursor != null and
-                        std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], word_under_cursor.?)) {
+                    std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], word_under_cursor.?))
+                {
                     color_with(&columns, word_start, current_pos, Colors.blue);
                 }
 

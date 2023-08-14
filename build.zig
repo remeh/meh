@@ -46,9 +46,9 @@ fn prepare(step: *std.build.LibExeObjStep) void {
 
     if (builtin.os.tag == .macos) {
         // find "SDL2/SDL2.h"
-        step.addIncludePath("/opt/homebrew/include");
+        step.addIncludePath(.{ .path = "/opt/homebrew/include" });
         // find libSDL2.dylib
-        step.addLibraryPath("/opt/homebrew/lib");
+        step.addLibraryPath(.{ .path = "/opt/homebrew/lib" });
     }
     // linked libraries
     step.linkSystemLibrary("SDL2");

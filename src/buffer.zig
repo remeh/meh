@@ -179,7 +179,7 @@ pub const Buffer = struct {
         if (line_number + 1 > self.lines.items.len) {
             return BufferError.OutOfBuffer;
         }
-        return self.lines.orderedRemove(@intCast(usize, line_number));
+        return self.lines.orderedRemove(@as(usize, @intCast(line_number)));
     }
 
     /// longestLine returns the size of the longest line in the lines visible

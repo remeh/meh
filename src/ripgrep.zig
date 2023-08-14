@@ -40,7 +40,7 @@ pub const RipgrepResult = struct {
 
 pub const RipgrepResultsIterator = struct {
     allocator: std.mem.Allocator,
-    it: TokenIterator(u8),
+    it: TokenIterator(u8, .any),
 
     pub fn next(self: *RipgrepResultsIterator) ?RipgrepResult {
         if (self.it.next()) |line| {

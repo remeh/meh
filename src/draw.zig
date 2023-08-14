@@ -14,17 +14,17 @@ pub const Draw = struct {
 
         _ = c.SDL_SetRenderDrawColor(
             sdl_renderer,
-            @intCast(u8, color.a),
-            @intCast(u8, color.b),
-            @intCast(u8, color.c),
-            @intCast(u8, color.d),
+            @as(u8, @intCast(color.a)),
+            @as(u8, @intCast(color.b)),
+            @as(u8, @intCast(color.c)),
+            @as(u8, @intCast(color.d)),
         );
 
         var r = c.SDL_Rect{
-            .x = @intCast(c_int, scaled_pos.a),
-            .y = @intCast(c_int, scaled_pos.b),
-            .w = @intCast(c_int, scaled_size.a),
-            .h = @intCast(c_int, scaled_size.b),
+            .x = @as(c_int, @intCast(scaled_pos.a)),
+            .y = @as(c_int, @intCast(scaled_pos.b)),
+            .w = @as(c_int, @intCast(scaled_size.a)),
+            .h = @as(c_int, @intCast(scaled_size.b)),
         };
 
         _ = c.SDL_RenderFillRect(sdl_renderer, &r);
@@ -36,17 +36,17 @@ pub const Draw = struct {
 
         _ = c.SDL_SetRenderDrawColor(
             sdl_renderer,
-            @intCast(u8, color.a),
-            @intCast(u8, color.b),
-            @intCast(u8, color.c),
-            @intCast(u8, color.d),
+            @as(u8, @intCast(color.a)),
+            @as(u8, @intCast(color.b)),
+            @as(u8, @intCast(color.c)),
+            @as(u8, @intCast(color.d)),
         );
 
         var r = c.SDL_Rect{
-            .x = @intCast(c_int, scaled_pos.a),
-            .y = @intCast(c_int, scaled_pos.b),
-            .w = @intCast(c_int, scaled_size.a),
-            .h = @intCast(c_int, scaled_size.b),
+            .x = @as(c_int, @intCast(scaled_pos.a)),
+            .y = @as(c_int, @intCast(scaled_pos.b)),
+            .w = @as(c_int, @intCast(scaled_size.a)),
+            .h = @as(c_int, @intCast(scaled_size.b)),
         };
 
         _ = c.SDL_RenderDrawRect(sdl_renderer, &r);
@@ -58,18 +58,18 @@ pub const Draw = struct {
 
         _ = c.SDL_SetRenderDrawColor(
             sdl_renderer,
-            @intCast(u8, color.a),
-            @intCast(u8, color.b),
-            @intCast(u8, color.c),
-            @intCast(u8, color.d),
+            @as(u8, @intCast(color.a)),
+            @as(u8, @intCast(color.b)),
+            @as(u8, @intCast(color.c)),
+            @as(u8, @intCast(color.d)),
         );
 
         _ = c.SDL_RenderDrawLine(
             sdl_renderer,
-            @intCast(c_int, scaled_start.a),
-            @intCast(c_int, scaled_start.b),
-            @intCast(c_int, scaled_end.a),
-            @intCast(c_int, scaled_end.b),
+            @as(c_int, @intCast(scaled_start.a)),
+            @as(c_int, @intCast(scaled_start.b)),
+            @as(c_int, @intCast(scaled_end.a)),
+            @as(c_int, @intCast(scaled_end.b)),
         );
     }
 

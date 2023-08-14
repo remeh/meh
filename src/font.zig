@@ -54,7 +54,7 @@ pub const Font = struct {
         var rwops: *c.SDL_RWops = c.SDL_RWFromConstMem(font_data, font_data.len);
 
         var font: *c.TTF_Font = undefined;
-        if (c.TTF_OpenFontRW(rwops, 1, @intCast(c_int, font_size))) |f| {
+        if (c.TTF_OpenFontRW(rwops, 1, @as(c_int, @intCast(font_size)))) |f| {
             font = f;
         } else {
             std.log.err("{s}", .{c.TTF_GetError()});
@@ -130,19 +130,19 @@ pub const Font = struct {
                 continue;
             }
 
-            var glyph_bytes_size = try std.unicode.utf8Encode(@intCast(u21, i), b[0..]);
+            var glyph_bytes_size = try std.unicode.utf8Encode(@as(u21, @intCast(i)), b[0..]);
             b[glyph_bytes_size] = 0;
 
             text = c.TTF_RenderUTF8_LCD(self.ttf_font, b[0..], white, bg);
 
             // we store the glyph size because we'll need it after having freed the text surface.
-            var glyph_size = Vec2u{ .a = @intCast(usize, text.w), .b = @intCast(usize, text.h) };
+            var glyph_size = Vec2u{ .a = @as(usize, @intCast(text.w)), .b = @as(usize, @intCast(text.h)) };
 
             var rect: c.SDL_Rect = c.SDL_Rect{
-                .x = @intCast(c_int, self.atlas.current_pos.a),
-                .y = @intCast(c_int, self.atlas.current_pos.b),
-                .w = @intCast(c_int, glyph_size.a),
-                .h = @intCast(c_int, glyph_size.b),
+                .x = @as(c_int, @intCast(self.atlas.current_pos.a)),
+                .y = @as(c_int, @intCast(self.atlas.current_pos.b)),
+                .w = @as(c_int, @intCast(glyph_size.a)),
+                .h = @as(c_int, @intCast(glyph_size.b)),
             };
             _ = c.SDL_BlitSurface(text, 0, surface, &rect);
             c.SDL_FreeSurface(text);
@@ -152,8 +152,8 @@ pub const Font = struct {
                 Vec4u{
                     .a = self.atlas.current_pos.a,
                     .b = self.atlas.current_pos.b,
-                    .c = @intCast(usize, glyph_size.a),
-                    .d = @intCast(usize, glyph_size.b),
+                    .c = @as(usize, @intCast(glyph_size.a)),
+                    .d = @as(usize, @intCast(glyph_size.b)),
                 },
             );
 
@@ -164,9 +164,9 @@ pub const Font = struct {
                 self.atlas.current_pos.b = self.atlas.next_y;
                 self.atlas.next_y = self.atlas.current_pos.b + self.font_size;
             } else {
-                self.atlas.current_pos.a += @intCast(usize, glyph_size.a);
+                self.atlas.current_pos.a += @as(usize, @intCast(glyph_size.a));
                 if (self.atlas.next_y - self.atlas.current_pos.b < glyph_size.b) {
-                    self.atlas.next_y = self.atlas.current_pos.b + @intCast(usize, glyph_size.b);
+                    self.atlas.next_y = self.atlas.current_pos.b + @as(usize, @intCast(glyph_size.b));
                 }
             }
         }
@@ -201,21 +201,21 @@ pub const Font = struct {
 
         var glyph_rect_in_atlas = self.glyphPos(str);
         var src_rect = c.SDL_Rect{
-            .x = @intCast(c_int, glyph_rect_in_atlas.a),
-            .y = @intCast(c_int, glyph_rect_in_atlas.b),
-            .w = @intCast(c_int, glyph_rect_in_atlas.c),
-            .h = @intCast(c_int, glyph_rect_in_atlas.d),
+            .x = @as(c_int, @intCast(glyph_rect_in_atlas.a)),
+            .y = @as(c_int, @intCast(glyph_rect_in_atlas.b)),
+            .w = @as(c_int, @intCast(glyph_rect_in_atlas.c)),
+            .h = @as(c_int, @intCast(glyph_rect_in_atlas.d)),
         };
 
         var dst_rect = c.SDL_Rect{
-            .x = @intCast(c_int, position.a),
-            .y = @intCast(c_int, position.b),
-            .w = @divTrunc(@intCast(c_int, self.font_size), 2),
-            .h = @intCast(c_int, self.font_size),
+            .x = @as(c_int, @intCast(position.a)),
+            .y = @as(c_int, @intCast(position.b)),
+            .w = @divTrunc(@as(c_int, @intCast(self.font_size)), 2),
+            .h = @as(c_int, @intCast(self.font_size)),
         };
         var pdst_rect: *c.SDL_Rect = &dst_rect; // XXX(remy): don't use me
 
-        _ = c.SDL_SetTextureColorMod(self.atlas.texture, @intCast(u8, color.a), @intCast(u8, color.b), @intCast(u8, color.c));
+        _ = c.SDL_SetTextureColorMod(self.atlas.texture, @as(u8, @intCast(color.a)), @as(u8, @intCast(color.b)), @as(u8, @intCast(color.c)));
         _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, pdst_rect);
     }
 
@@ -256,7 +256,7 @@ pub const Font = struct {
             return 0;
         }
         var unscaled = @divTrunc(self.font_size, 2) * text.len;
-        var scaled = @floatToInt(usize, @divTrunc(@intToFloat(f32, unscaled), scaler.scale));
+        var scaled = @as(usize, @intFromFloat(@divTrunc(@as(f32, @floatFromInt(unscaled)), scaler.scale)));
         return scaled;
     }
 };

@@ -174,8 +174,8 @@ pub const App = struct {
             "meh",
             c.SDL_WINDOWPOS_UNDEFINED,
             c.SDL_WINDOWPOS_UNDEFINED,
-            @intCast(c_int, window_size.a),
-            @intCast(c_int, window_size.b),
+            @as(c_int, @intCast(window_size.a)),
+            @as(c_int, @intCast(window_size.b)),
             c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_ALLOW_HIGHDPI,
         );
 
@@ -727,8 +727,8 @@ pub const App = struct {
                 self.current_font,
                 scaler,
                 self.window_scaled_size, // used for the overlay
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.1) },
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = 50 },
+                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.1)), .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.b)) * 0.1)) },
+                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.8)), .b = 50 },
                 one_char_size,
             ),
             .MessageBox => self.widget_messagebox.render(
@@ -736,8 +736,8 @@ pub const App = struct {
                 self.current_font,
                 scaler,
                 self.window_scaled_size, // used for the overlay
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.1) },
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = 50 },
+                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.1)), .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.b)) * 0.1)) },
+                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.8)), .b = 50 },
                 one_char_size,
             ),
             .Lookup => self.widget_lookup.render(
@@ -745,8 +745,8 @@ pub const App = struct {
                 self.current_font,
                 scaler,
                 self.window_scaled_size, // used for the overlay
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.1) },
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.8) },
+                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.1)), .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.b)) * 0.1)) },
+                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.8)), .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.b)) * 0.8)) },
                 one_char_size,
             ),
             .SearchResults => self.widget_search_results.render(
@@ -754,8 +754,8 @@ pub const App = struct {
                 self.current_font,
                 scaler,
                 self.window_scaled_size, // used for the overlay
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.1), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.1) },
-                Vec2u{ .a = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.a) * 0.8), .b = @floatToInt(usize, @intToFloat(f32, self.window_scaled_size.b) * 0.8) },
+                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.1)), .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.b)) * 0.1)) },
+                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.8)), .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.b)) * 0.8)) },
                 one_char_size,
             ),
             else => {}, // nothing more to render then
@@ -788,8 +788,8 @@ pub const App = struct {
         var gl_w: c_int = 0;
         var gl_h: c_int = 0;
         c.SDL_GL_GetDrawableSize(self.sdl_window, &gl_w, &gl_h);
-        self.window_pixel_size.a = @intCast(usize, gl_w);
-        self.window_pixel_size.b = @intCast(usize, gl_h);
+        self.window_pixel_size.a = @as(usize, @intCast(gl_w));
+        self.window_pixel_size.b = @as(usize, @intCast(gl_h));
     }
 
     /// refreshWindowScaledSize refreshes the window size (scaled).
@@ -797,8 +797,8 @@ pub const App = struct {
         var w: c_int = 0;
         var h: c_int = 0;
         c.SDL_GetWindowSize(self.sdl_window, &w, &h);
-        self.window_scaled_size.a = @intCast(usize, w);
-        self.window_scaled_size.b = @intCast(usize, h);
+        self.window_scaled_size.a = @as(usize, @intCast(w));
+        self.window_scaled_size.b = @as(usize, @intCast(h));
     }
 
     /// refreshDPIMode refreshes the DPI mode using the stored window pixel size
@@ -810,7 +810,7 @@ pub const App = struct {
 
         if ((self.window_pixel_size.a > self.window_scaled_size.a and self.window_pixel_size.b > self.window_scaled_size.b and self.font_mode != FontMode.HiDPI)) {
             // hidpi
-            self.window_scaling = @intToFloat(f32, self.window_pixel_size.a) / @intToFloat(f32, self.window_scaled_size.a);
+            self.window_scaling = @as(f32, @floatFromInt(self.window_pixel_size.a)) / @as(f32, @floatFromInt(self.window_scaled_size.a));
             self.setFontMode(FontMode.HiDPI);
         } else if (self.window_scaled_size.a == self.window_pixel_size.a and self.window_scaled_size.b == self.window_pixel_size.b) {
             // lowdpi
@@ -828,8 +828,8 @@ pub const App = struct {
     /// oneCharSize returns the bounding box of one text char.
     fn oneCharSize(self: App) Vec2u {
         return Vec2u{
-            .a = @floatToInt(usize, @intToFloat(f32, self.current_font.font_size / 2) / self.window_scaling),
-            .b = @floatToInt(usize, @intToFloat(f32, self.current_font.font_size) / self.window_scaling),
+            .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.current_font.font_size / 2)) / self.window_scaling)),
+            .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.current_font.font_size)) / self.window_scaling)),
         };
     }
 
@@ -1446,12 +1446,12 @@ pub const App = struct {
         if (x < 0) {
             rv.a = 0;
         } else {
-            rv.a = @intCast(usize, x);
+            rv.a = @as(usize, @intCast(x));
         }
         if (y < 0) {
             rv.b = 0;
         } else {
-            rv.b = @intCast(usize, y);
+            rv.b = @as(usize, @intCast(y));
         }
         return rv;
     }
