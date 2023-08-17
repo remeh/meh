@@ -238,6 +238,18 @@ pub const WidgetCommand = struct {
             return;
         }
 
+        if (std.mem.eql(u8, command, ":i")) {
+            if (app.lsp) |lsp| {
+                lsp.hover(&(app.currentWidgetTextEdit().editor.buffer), app.currentWidgetTextEdit().cursor.pos) catch |err| {
+                    std.log.err("WidgetCommand: can't exec ':def': {}", .{err});
+                    return;
+                };
+            } else {
+                app.showMessageBoxError("LSP not initialized.", .{});
+            }
+            return;
+        }
+
         // debug
         // -----
 

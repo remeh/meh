@@ -21,6 +21,7 @@ pub const LSPMessageType = enum {
     Completion,
     Definition,
     DidChange,
+    Hover,
     Initialize,
     Initialized,
     LogMessage,
@@ -44,9 +45,10 @@ pub const LSPRequest = struct {
 pub const LSPResponse = struct {
     allocator: std.mem.Allocator,
     message_type: LSPMessageType,
-    log_message: ?U8Slice,
+    log_message: ?U8Slice, // TODO(remy): shouldn't this be a list of U8Slice instead?
     completions: ?std.ArrayList(LSPCompletion),
     definitions: ?std.ArrayList(LSPPosition),
+    hover: ?std.ArrayList(U8Slice),
     references: ?std.ArrayList(LSPPosition),
     request_id: i64,
     pub fn init(allocator: std.mem.Allocator, request_id: i64, message_type: LSPMessageType) LSPResponse {
@@ -55,15 +57,13 @@ pub const LSPResponse = struct {
             .message_type = message_type,
             .request_id = request_id,
             .completions = null,
+            .hover = null,
             .definitions = null,
             .references = null,
             .log_message = null,
         };
     }
     pub fn deinit(self: LSPResponse) void {
-        if (self.log_message) |log_message| {
-            log_message.deinit();
-        }
         if (self.completions) |comps| {
             for (comps.items) |completion| {
                 completion.deinit();
@@ -75,6 +75,15 @@ pub const LSPResponse = struct {
                 def.deinit();
             }
             defs.deinit();
+        }
+        if (self.hover) |hover| {
+            for (hover.items) |item| {
+                item.deinit();
+            }
+            hover.deinit();
+        }
+        if (self.log_message) |log_message| {
+            log_message.deinit();
         }
         if (self.references) |refs| {
             for (refs.items) |ref| {
@@ -270,6 +279,7 @@ pub const LSP = struct {
         try self.sendMessage(request);
     }
 
+    // TODO(remy): refactor with definition/completion/etc.
     pub fn references(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
         if (self.context.is_running.load(.Acquire) == false) {
             return;
@@ -319,6 +329,24 @@ pub const LSP = struct {
         var request = LSPRequest{
             .json = json,
             .message_type = .Completion,
+            .request_id = msg_id,
+        };
+        try self.sendMessage(request);
+    }
+
+    pub fn hover(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
+        if (self.context.is_running.load(.Acquire) == false) {
+            return;
+        }
+
+        var msg_id = self.id();
+        var uri = try toUri(self.allocator, buffer.fullpath.bytes());
+        defer uri.deinit();
+
+        var json = try LSPWriter.textDocumentHover(self.allocator, msg_id, uri.bytes(), cursor);
+        var request = LSPRequest{
+            .json = json,
+            .message_type = .Hover,
             .request_id = msg_id,
         };
         try self.sendMessage(request);
@@ -402,11 +430,16 @@ pub const LSPWriter = struct {
                             .dynamicRegistration = true,
                             .completionItem = LSPMessages.completionItemCapabilities{
                                 .insertReplaceSupport = true,
+                                .documentationFormat = LSPMessages.markupKind,
                             },
                         },
                         .definition = LSPMessages.dynRegTrue,
                         .implementation = LSPMessages.dynRegTrue,
                         .references = LSPMessages.dynRegTrue,
+                        .hover = LSPMessages.hoverCapabilities{
+                            .dynamicRegistration = true,
+                            .contentFormat = LSPMessages.markupKind,
+                        },
                     },
                 },
                 .workspaceFolders = [1]LSPMessages.workspaceFolder{
@@ -512,6 +545,24 @@ pub const LSPWriter = struct {
             .method = "textDocument/completion",
             .id = msg_id,
             .params = LSPMessages.completionParams{
+                .textDocument = LSPMessages.textDocumentIdentifier{
+                    .uri = filepath,
+                },
+                .position = LSPMessages.position{
+                    .character = cursor_pos.a,
+                    .line = cursor_pos.b,
+                },
+            },
+        };
+        return try LSPWriter.toJson(allocator, m);
+    }
+
+    fn textDocumentHover(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, cursor_pos: Vec2u) !U8Slice {
+        const m = LSPMessages.textDocumentHover{
+            .jsonrpc = "2.0",
+            .method = "textDocument/hover",
+            .id = msg_id,
+            .params = LSPMessages.hoverParams{
                 .textDocument = LSPMessages.textDocumentIdentifier{
                     .uri = filepath,
                 },

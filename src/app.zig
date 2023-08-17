@@ -736,8 +736,6 @@ pub const App = struct {
                 self.current_font,
                 scaler,
                 self.window_scaled_size, // used for the overlay
-                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.1)), .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.b)) * 0.1)) },
-                Vec2u{ .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.window_scaled_size.a)) * 0.8)), .b = 50 },
                 one_char_size,
             ),
             .Lookup => self.widget_lookup.render(
@@ -848,7 +846,7 @@ pub const App = struct {
         };
         defer self.allocator.free(message);
 
-        self.widget_messagebox.set(message, .Error) catch |err| {
+        self.widget_messagebox.set(message, .Error, .WithOverlay) catch |err| {
             std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
             return;
         };
@@ -1004,6 +1002,17 @@ pub const App = struct {
                 } else {
                     self.showMessageBoxError("LSP: can't find definition.", .{});
                 }
+                return true;
+            },
+            .Hover => {
+                if (response.hover == null or response.hover.?.items.len == 0) {
+                    self.showMessageBoxError("LSP: empty hover.", .{});
+                }
+
+                if (response.hover) |hover| {
+                    self.showMessageBoxError("{s}", .{hover.items[0].bytes()});
+                }
+
                 return true;
             },
             .References => {

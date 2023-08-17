@@ -79,6 +79,12 @@ pub const completionCapabilities = struct {
 
 pub const completionItemCapabilities = struct {
     insertReplaceSupport: bool,
+    documentationFormat: [2][]const u8 = markupKind,
+};
+
+pub const hoverCapabilities = struct {
+    dynamicRegistration: bool,
+    contentFormat: [2][]const u8 = markupKind,
 };
 
 pub const initializeTextDocumentCapabilities = struct {
@@ -86,6 +92,7 @@ pub const initializeTextDocumentCapabilities = struct {
     definition: dynReg,
     implementation: dynReg,
     references: dynReg,
+    hover: hoverCapabilities,
 };
 
 pub const initializeCapabilities = struct {
@@ -103,6 +110,9 @@ pub const workspaceFolder = struct {
     uri: []const u8,
     name: []const u8,
 };
+
+// order in which we want to receive documentation and such
+pub const markupKind = [_][]const u8{ "plaintext", "markdown" };
 
 // message: textDocument/didOpen
 // -----------------------------
@@ -193,6 +203,21 @@ pub const textDocumentCompletion = struct {
 };
 
 pub const completionParams = struct {
+    textDocument: textDocumentIdentifier,
+    position: position,
+};
+
+// message: textDocument/hover
+// ---------------------------
+
+pub const textDocumentHover = struct {
+    jsonrpc: []const u8,
+    id: i64,
+    method: []const u8,
+    params: hoverParams,
+};
+
+pub const hoverParams = struct {
     textDocument: textDocumentIdentifier,
     position: position,
 };
@@ -328,6 +353,23 @@ pub const completionTextEdit = struct {
 };
 
 pub const completionResultDoc = struct {
+    kind: ?[]const u8 = null,
+    value: ?[]const u8 = null,
+};
+
+// Hover
+
+pub const hoverResponse = struct {
+    jsonrpc: []const u8,
+    id: i64,
+    result: ?hoverResult = null,
+};
+
+pub const hoverResult = struct {
+    contents: ?hoverContent = null,
+};
+
+pub const hoverContent = struct {
     kind: ?[]const u8 = null,
     value: ?[]const u8 = null,
 };

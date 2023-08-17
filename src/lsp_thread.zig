@@ -269,6 +269,7 @@ pub const LSPThread = struct {
                     .Completion => try LSPThread.interpretCompletion(allocator, &rv, response, idx.?),
                     .Definition => LSPThread.interpretDefinition(allocator, &rv, response, idx.?),
                     .References => try LSPThread.interpretReferences(allocator, &rv, response, idx.?),
+                    .Hover => try LSPThread.interpretHover(allocator, &rv, response, idx.?),
                     else => {},
                 }
 
@@ -361,6 +362,34 @@ pub const LSPThread = struct {
         }
     }
 
+    fn interpretHover(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
+
+        rv.*.hover = std.ArrayList(U8Slice).init(allocator);
+
+        const hoverResp = try std.json.parseFromSlice(LSPMessages.hoverResponse, allocator, response[json_start_idx..], json_params);
+        defer hoverResp.deinit();
+
+        if (hoverResp.value.result) |result| {
+            if (result.contents) |content| {
+                if (content.value) |value| {
+                    var slice = try U8Slice.initFromSlice(allocator, value);
+                    try rv.*.hover.?.append(slice);
+                }
+            }
+        }
+
+        if (rv.*.hover) |hover| {
+            if (hover.items.len == 0) {
+                for (hover.items) |item| {
+                    item.deinit();
+                }
+                hover.deinit();
+                rv.*.hover = null;
+            }
+        }
+    }
+
     fn interpretReferences(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
         rv.references = std.ArrayList(LSPPosition).init(allocator);
@@ -387,12 +416,24 @@ pub const LSPThread = struct {
     }
 
     fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
-        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
         // read the header only
-        const header = try std.json.parseFromSlice(LSPMessages.headerNotificationResponse, allocator, response[json_start_idx..], json_params);
+        const header = try std.json.parseFromSlice(
+            LSPMessages.headerNotificationResponse,
+            allocator,
+            response[json_start_idx..],
+            .{ .ignore_unknown_fields = true },
+        );
         defer header.deinit();
 
         std.log.debug("received an LSP notification: {s}", .{header.value.method});
+
+        // here we want to check what kind of notification we have to process
+        if (std.mem.eql(u8, header.value.method, "window/showMessage")) {
+            var rv = LSPResponse.init(allocator, 0, .LogMessage);
+            rv.log_message = try U8Slice.initFromSlice(allocator, "the log message to display");
+            return rv;
+        }
+
         return LSPError.MissingRequestEntry;
     }
 };
