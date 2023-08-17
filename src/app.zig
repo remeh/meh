@@ -18,6 +18,8 @@ const WidgetCommand = @import("widget_command.zig").WidgetCommand;
 const WidgetCommandError = @import("widget_command.zig").WidgetCommandError;
 const WidgetLookup = @import("widget_lookup.zig").WidgetLookup;
 const WidgetMessageBox = @import("widget_messagebox.zig").WidgetMessageBox;
+const WidgetMessageBoxOverlay = @import("widget_messagebox.zig").WidgetMessageBoxOverlay;
+const WidgetMessageBoxType = @import("widget_messagebox.zig").WidgetMessageBoxType;
 const WidgetSearchResults = @import("widget_search_results.zig").WidgetSearchResults;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
@@ -846,7 +848,18 @@ pub const App = struct {
         };
         defer self.allocator.free(message);
 
-        self.widget_messagebox.set(message, .Error, .WithOverlay) catch |err| {
+        self.widget_messagebox.set(label, .Error, .WithOverlay) catch |err| {
+            std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
+            return;
+        };
+
+        self.focused_widget = .MessageBox;
+    }
+
+    // TODO(remy): comment
+    // labels are copied in the messagebox, the caller is responsible of original labels memory.
+    pub fn showMessageBox(self: *App, labels: std.ArrayList(U8Slice), box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
+        self.widget_messagebox.setMultiple(labels, box_type, with_overlay) catch |err| {
             std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
             return;
         };
@@ -1010,7 +1023,7 @@ pub const App = struct {
                 }
 
                 if (response.hover) |hover| {
-                    self.showMessageBoxError("{s}", .{hover.items[0].bytes()});
+                    self.showMessageBox(hover, .LSPHover, .WithoutOverlay);
                 }
 
                 return true;
