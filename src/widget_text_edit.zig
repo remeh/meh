@@ -776,6 +776,24 @@ pub const WidgetTextEdit = struct {
                 }
             },
             .r, .Replace => {
+                // make sure we're not trying to replace the very last
+                // character of the current line, which is the \n of the
+                // line.
+                if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
+                    var utf8size = line.utf8size() catch 1;
+                    if (self.cursor.pos.a == utf8size - 1) {
+                        std.log.warn("WidgetTextEdit.onTextInput: tried to replace last character of the line", .{});
+                        // only one glyph to change in this mode
+                        if (self.input_mode == .r) {
+                            self.setInputMode(.Command);
+                        }
+
+                        return true;
+                    }
+                } else |err| {
+                    std.log.err("WidgetTextEdit.onTextInput: can't check if last character: {}", .{err});
+                }
+
                 self.editor.deleteGlyph(self.cursor.pos, .Right, .Input) catch |err| {
                     std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'r' input: {}", .{err});
                     return true;
@@ -929,14 +947,17 @@ pub const WidgetTextEdit = struct {
                         } else {
                             // edge-case: last char of the line
                             if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
-                                if (line.size() > 0 and
-                                    ((self.cursor.pos.a == line.size() - 1 and self.cursor.pos.b < self.editor.buffer.lines.items.len - 1) // normal line
-                                    or // normal line
-                                    (self.cursor.pos.a == line.size() and self.cursor.pos.b == self.editor.buffer.lines.items.len - 1)) // very last line
-                                ) {
-                                    // special case, we don't want to do delete anything
-                                    return true;
-                                }
+                                if (line.utf8size()) |size| {
+                                    const last_line: bool = (self.cursor.pos.b == (self.editor.buffer.lines.items.len - 1));
+                                    if ((self.cursor.pos.a == size - 1 and !last_line) // normal line
+                                        or // normal line
+                                        (self.cursor.pos.a == size and last_line))
+                                    { // very last line
+                                        std.log.debug("special case", .{});
+                                        // special case, we don't want to do delete anything
+                                        return true;
+                                    }
+                                } else |_| {}
                             } else |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't get line while executing 'x' input: {}", .{err});
                                 return true;
@@ -1503,7 +1524,7 @@ pub const WidgetTextEdit = struct {
 test "widget_text_edit moveCursor" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     // top of the file, moving up shouldn't do anything
@@ -1550,7 +1571,7 @@ test "widget_text_edit moveCursor" {
 test "widget_text_edit moveCursorSpecial" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
     widget.moveCursorSpecial(CursorMove.EndOfLine, true);
@@ -1572,7 +1593,7 @@ test "widget_text_edit moveCursorSpecial" {
     widget.deinit();
 
     buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
-    widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+    widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     // AfterIndentation
 
@@ -1609,14 +1630,14 @@ test "widget_text_edit moveCursorSpecial" {
 test "widget_text_edit init deinit" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.deinit();
 }
 
 test "widget_text_edit isSelected" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.startSelection(Vec2u{ .a = 3, .b = 0 }, .KeyboardSelection);
     widget.updateSelection(Vec2u{ .a = 13, .b = 1 });
@@ -1644,7 +1665,7 @@ test "widget_text_edit isSelected" {
 test "widget_text_edit scrollToCursor" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.viewport.columns = Vec2u{ .a = 0, .b = 5 };
     widget.viewport.lines = Vec2u{ .a = 0, .b = 5 };
@@ -1710,30 +1731,30 @@ test "widget_text_edit scrollToCursor" {
 test "widget_text_edit validate_cursor_pos" {
     const allocator = std.testing.allocator;
     var buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
-    var widget = WidgetTextEdit.initWithBuffer(allocator, buffer);
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
-    widget.setCursorPos(Vec2u{ .a = 3, .b = 4 }, true);
-    widget.validateCursorPos(true);
+    widget.setCursorPos(Vec2u{ .a = 3, .b = 4 }, .Scroll);
+    widget.validateCursorPos(.Scroll);
     try expect(widget.cursor.pos.a == 3);
     try expect(widget.cursor.pos.b == 4);
 
-    widget.setCursorPos(Vec2u{ .a = 54, .b = 2 }, true);
-    widget.validateCursorPos(true);
+    widget.setCursorPos(Vec2u{ .a = 54, .b = 2 }, .Scroll);
+    widget.validateCursorPos(.Scroll);
     try expect(widget.cursor.pos.a == 54);
     try expect(widget.cursor.pos.b == 2);
 
-    widget.setCursorPos(Vec2u{ .a = 200, .b = 6 }, true);
-    widget.validateCursorPos(true);
+    widget.setCursorPos(Vec2u{ .a = 200, .b = 6 }, .Scroll);
+    widget.validateCursorPos(.Scroll);
     try expect(widget.cursor.pos.a == 22);
     try expect(widget.cursor.pos.b == 6);
 
-    widget.setCursorPos(Vec2u{ .a = 200, .b = 5 }, true);
-    widget.validateCursorPos(true);
+    widget.setCursorPos(Vec2u{ .a = 200, .b = 5 }, .Scroll);
+    widget.validateCursorPos(.Scroll);
     try expect(widget.cursor.pos.a == 29);
     try expect(widget.cursor.pos.b == 5);
 
-    widget.setCursorPos(Vec2u{ .a = 200, .b = 9 }, true);
-    widget.validateCursorPos(true);
+    widget.setCursorPos(Vec2u{ .a = 200, .b = 9 }, .Scroll);
+    widget.validateCursorPos(.Scroll);
     try expect(widget.cursor.pos.a == 0);
     try expect(widget.cursor.pos.b == 9);
 
