@@ -14,6 +14,7 @@ const Vec4u = @import("vec.zig").Vec4u;
 pub const WidgetMessageBoxType = enum {
     LSPDiagnostic,
     LSPHover,
+    LSPMessage,
     Error,
 };
 
@@ -24,7 +25,7 @@ pub const WidgetMessageBoxOverlay = enum {
 
 pub const WidgetMessageBox = struct {
     allocator: std.mem.Allocator,
-    labels: std.ArrayList(U8Slice),
+    lines: std.ArrayList(U8Slice),
     message: WidgetMessageBoxType,
     overlay: WidgetMessageBoxOverlay,
 
@@ -34,46 +35,62 @@ pub const WidgetMessageBox = struct {
     pub fn init(allocator: std.mem.Allocator) WidgetMessageBox {
         return WidgetMessageBox{
             .allocator = allocator,
-            .labels = std.ArrayList(U8Slice).init(allocator),
+            .lines = std.ArrayList(U8Slice).init(allocator),
             .message = undefined,
             .overlay = .WithOverlay,
         };
     }
 
+    // TODO(remy): comment me
+    // TODO(remy): unit test
     pub fn deinit(self: *WidgetMessageBox) void {
-        self.resetLabels();
+        self.resetLines();
     }
 
-    fn resetLabels(self: *WidgetMessageBox) void {
-        for (self.labels.items) |item| {
+    // TODO(remy): comment me
+    // TODO(remy): unit test
+    fn resetLines(self: *WidgetMessageBox) void {
+        for (self.lines.items) |item| {
             item.deinit();
         }
-        self.labels.deinit();
+        self.lines.deinit();
     }
 
     // Methods
     // -------
 
-    pub fn set(self: *WidgetMessageBox, label: []const u8, message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
-        self.resetLabels();
-        self.labels = std.ArrayList(U8Slice).init(self.allocator);
-        const slice = try U8Slice.initFromSlice(self.allocator, label);
-        try self.labels.append(slice);
+    // TODO(remy): comment me
+    // TODO(remy): unit test
+    pub fn set(self: *WidgetMessageBox, line: []const u8, message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
+        self.resetLines();
+        self.lines = std.ArrayList(U8Slice).init(self.allocator);
+        const slice = try U8Slice.initFromSlice(self.allocator, line);
+        try self.lines.append(slice);
         self.message = message;
         self.overlay = overlay;
     }
 
-    pub fn setMultiple(self: *WidgetMessageBox, labels: std.ArrayList(U8Slice), message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
-        self.resetLabels();
-        self.labels = std.ArrayList(U8Slice).init(self.allocator);
-        for (labels.items) |label| {
-            const copy = try label.copy(self.allocator);
-            try self.labels.append(copy);
+    // TODO(remy): comment me
+    // TODO(remy): unit test
+    pub fn append(self: *WidgetMessageBox, line: []const u8) !void {
+        const slice = try U8Slice.initFromSlice(self.allocator, line);
+        try self.lines.append(slice);
+    }
+
+    // TODO(remy): comment me
+    // TODO(remy): unit test
+    pub fn setMultiple(self: *WidgetMessageBox, lines: std.ArrayList(U8Slice), message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
+        self.resetLines();
+        self.lines = std.ArrayList(U8Slice).init(self.allocator);
+        for (lines.items) |line| {
+            const copy = try line.copy(self.allocator);
+            try self.lines.append(copy);
         }
         self.message = message;
         self.overlay = overlay;
     }
 
+    // TODO(remy): comment me
     pub fn render(
         self: WidgetMessageBox,
         sdl_renderer: *c.SDL_Renderer,
@@ -88,10 +105,10 @@ pub const WidgetMessageBox = struct {
             Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Vec4u{ .a = 20, .b = 20, .c = 20, .d = 130 });
         }
 
-        const lines_to_draw = @min(10, self.labels.items.len);
+        const lines_to_draw = @min(10, self.lines.items.len);
 
         switch (self.message) {
-            .LSPDiagnostic, .LSPHover => {
+            .LSPDiagnostic, .LSPHover, .LSPMessage => {
                 var color = Colors.light_gray;
                 if (self.message == .LSPDiagnostic) {
                     color = Colors.red;
@@ -100,7 +117,7 @@ pub const WidgetMessageBox = struct {
                 const lines_pixel_height: usize = lines_to_draw * (one_char_size.b + 1);
                 const position = Vec2u{
                     .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(window_scaled_size.a)) * 0.05)),
-                    .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(window_scaled_size.b)) * 0.7)) - lines_pixel_height,
+                    .b = window_scaled_size.b - lines_pixel_height - 50,
                 };
                 const size = Vec2u{
                     .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(window_scaled_size.a)) * 0.9)),
@@ -114,8 +131,8 @@ pub const WidgetMessageBox = struct {
 
                 var y = position.b + 15;
                 var i: usize = 0;
-                for (self.labels.items) |label| {
-                    Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = y }, size.a - 30, color, label.bytes());
+                for (self.lines.items) |line| {
+                    Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = y }, size.a - 30, color, line.bytes());
                     y += one_char_size.b + 1;
                     i += 1;
                     if (i > 10) {
@@ -137,7 +154,7 @@ pub const WidgetMessageBox = struct {
                 Draw.fillRect(sdl_renderer, scaler, position, size, Vec4u{ .a = 20, .b = 20, .c = 20, .d = 240 });
 
                 // content
-                Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = position.b + 15 }, size.a - 30, Colors.white, self.labels.items[0].bytes());
+                Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = position.b + 15 }, size.a - 30, Colors.white, self.lines.items[0].bytes());
             },
         }
     }

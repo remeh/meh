@@ -858,11 +858,30 @@ pub const App = struct {
 
     // TODO(remy): comment
     // labels are copied in the messagebox, the caller is responsible of original labels memory.
-    pub fn showMessageBox(self: *App, labels: std.ArrayList(U8Slice), box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
-        self.widget_messagebox.setMultiple(labels, box_type, with_overlay) catch |err| {
-            std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
+    pub fn showMessageBoxMultiple(self: *App, lines: std.ArrayList(U8Slice), box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
+        self.widget_messagebox.setMultiple(lines, box_type, with_overlay) catch |err| {
+            std.log.err("App.showMessageBoxMultiple: can't open messagebox: {}", .{err});
             return;
         };
+
+        self.focused_widget = .MessageBox;
+    }
+
+    // TODO(remy): comment
+    // message content is copied in the messagebox, the caller is responsible of
+    // the original message memory.
+    pub fn showMessageBox(self: *App, message: U8Slice, box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
+        if (self.focused_widget == .MessageBox) {
+            self.widget_messagebox.append(message.bytes()) catch |err| {
+                std.log.err("App.showMessageBox: can't append line to messagebox: {}", .{err});
+                return;
+            };
+        } else {
+            self.widget_messagebox.set(message.bytes(), box_type, with_overlay) catch |err| {
+                std.log.err("App.showMessageBox: can't open messagebox: {}", .{err});
+                return;
+            };
+        }
 
         self.focused_widget = .MessageBox;
     }
@@ -1023,10 +1042,19 @@ pub const App = struct {
                 }
 
                 if (response.hover) |hover| {
-                    self.showMessageBox(hover, .LSPHover, .WithoutOverlay);
+                    self.showMessageBoxMultiple(hover, .LSPHover, .WithoutOverlay);
                 }
 
                 return true;
+            },
+            .LogMessage => {
+                if (response.log_message == null or response.log_message.?.isEmpty()) {
+                    return true;
+                }
+
+                if (response.log_message) |log_message| {
+                    self.showMessageBox(log_message, .LSPMessage, .WithOverlay);
+                }
             },
             .References => {
                 if (response.references == null or response.references.?.items.len == 0) {
