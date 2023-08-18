@@ -28,6 +28,8 @@ pub const WidgetMessageBox = struct {
     lines: std.ArrayList(U8Slice),
     message: WidgetMessageBoxType,
     overlay: WidgetMessageBoxOverlay,
+    x_offset: usize,
+    y_offset: usize,
 
     // Constructors
     // ------------
@@ -38,6 +40,8 @@ pub const WidgetMessageBox = struct {
             .lines = std.ArrayList(U8Slice).init(allocator),
             .message = undefined,
             .overlay = .WithOverlay,
+            .x_offset = 0,
+            .y_offset = 0,
         };
     }
 
@@ -68,6 +72,8 @@ pub const WidgetMessageBox = struct {
         try self.lines.append(slice);
         self.message = message;
         self.overlay = overlay;
+        self.x_offset = 0;
+        self.y_offset = 0;
     }
 
     // TODO(remy): comment me
@@ -88,6 +94,8 @@ pub const WidgetMessageBox = struct {
         }
         self.message = message;
         self.overlay = overlay;
+        self.x_offset = 0;
+        self.y_offset = 0;
     }
 
     // TODO(remy): comment me
@@ -132,10 +140,18 @@ pub const WidgetMessageBox = struct {
                 var y = position.b + 15;
                 var i: usize = 0;
                 for (self.lines.items) |line| {
-                    Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = y }, size.a - 30, color, line.bytes());
+                    if (self.y_offset > i) {
+                        i += 1;
+                        continue;
+                    }
+                    var text: []const u8 = ""; // TODO(remy): doesn't support utf8
+                    if (self.x_offset < line.size()) {
+                        text = line.bytes()[self.x_offset..];
+                    }
+                    Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = y }, size.a - 30, color, text);
                     y += one_char_size.b + 1;
                     i += 1;
-                    if (i > 10) {
+                    if (i > self.y_offset + 10) {
                         break;
                     }
                 }
@@ -153,8 +169,14 @@ pub const WidgetMessageBox = struct {
                 // dark background
                 Draw.fillRect(sdl_renderer, scaler, position, size, Vec4u{ .a = 20, .b = 20, .c = 20, .d = 240 });
 
+                const line = self.lines.items[0];
+                var text: []const u8 = ""; // TODO(remy): doesn't support utf8
+                if (self.x_offset < line.size()) {
+                    text = line.bytes()[self.x_offset..];
+                }
+
                 // content
-                Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = position.b + 15 }, size.a - 30, Colors.white, self.lines.items[0].bytes());
+                Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = position.b + 15 }, size.a - 30, Colors.white, text);
             },
         }
     }

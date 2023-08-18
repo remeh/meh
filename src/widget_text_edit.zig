@@ -950,10 +950,9 @@ pub const WidgetTextEdit = struct {
                                 if (line.utf8size()) |size| {
                                     const last_line: bool = (self.cursor.pos.b == (self.editor.buffer.lines.items.len - 1));
                                     if ((self.cursor.pos.a == size - 1 and !last_line) // normal line
-                                        or // normal line
-                                        (self.cursor.pos.a == size and last_line))
-                                    { // very last line
-                                        std.log.debug("special case", .{});
+                                        or
+                                        (self.cursor.pos.a == size and last_line)) // very last line
+                                    {
                                         // special case, we don't want to do delete anything
                                         return true;
                                     }

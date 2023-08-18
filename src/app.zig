@@ -854,6 +854,7 @@ pub const App = struct {
         };
 
         self.focused_widget = .MessageBox;
+        self.render();
     }
 
     // TODO(remy): comment
@@ -865,6 +866,7 @@ pub const App = struct {
         };
 
         self.focused_widget = .MessageBox;
+        self.render();
     }
 
     // TODO(remy): comment
@@ -884,6 +886,7 @@ pub const App = struct {
         }
 
         self.focused_widget = .MessageBox;
+        self.render();
     }
 
     /// onWindowResized is called when the windows has just been resized.
@@ -1201,6 +1204,26 @@ pub const App = struct {
                     },
                     c.SDLK_ESCAPE => {
                         self.focused_widget = .Editor;
+                    },
+                    c.SDLK_j, c.SDLK_DOWN => {
+                        self.widget_messagebox.y_offset += 1;
+                        self.render();
+                    },
+                    c.SDLK_k, c.SDLK_UP => {
+                        if (self.widget_messagebox.y_offset > 0) {
+                            self.widget_messagebox.y_offset -= 1;
+                        }
+                        self.render();
+                    },
+                    c.SDLK_l, c.SDLK_RIGHT => {
+                        self.widget_messagebox.x_offset += 1;
+                        self.render();
+                    },
+                    c.SDLK_h, c.SDLK_LEFT => {
+                        if (self.widget_messagebox.x_offset > 0) {
+                            self.widget_messagebox.x_offset -= 1;
+                        }
+                        self.render();
                     },
                     else => {},
                 }
