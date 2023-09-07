@@ -31,6 +31,7 @@ const Vec2itou = @import("vec.zig").Vec2itou;
 const itou = @import("vec.zig").itou;
 
 pub const AppError = error{
+    CantOpenFile,
     CantInit,
 };
 
@@ -301,7 +302,10 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         // make sure that the provided filepath is absolute
-        var path = try std.fs.realpathAlloc(self.allocator, filepath);
+        var path = std.fs.realpathAlloc(self.allocator, filepath) catch |err| {
+            std.log.err("App.openFile: can't open {s}: {}", .{filepath, err});
+            return AppError.CantOpenFile;
+        };
         defer self.allocator.free(path);
 
         // first, loop through all buffers to see if it's already opened or not
