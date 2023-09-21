@@ -7,6 +7,7 @@ const BufferPosition = @import("buffer.zig").BufferPosition;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const Font = @import("font.zig").Font;
+const LineStatus = @import("widget_text_edit.zig").LineStatus;
 const LSP = @import("lsp.zig").LSP;
 const LSPError = @import("lsp.zig").LSPError;
 const LSPResponse = @import("lsp.zig").LSPResponse;
@@ -303,7 +304,7 @@ pub const App = struct {
     pub fn openFile(self: *App, filepath: []const u8) !void {
         // make sure that the provided filepath is absolute
         var path = std.fs.realpathAlloc(self.allocator, filepath) catch |err| {
-            std.log.err("App.openFile: can't open {s}: {}", .{filepath, err});
+            std.log.err("App.openFile: can't open {s}: {}", .{ filepath, err });
             return AppError.CantOpenFile;
         };
         defer self.allocator.free(path);
@@ -627,7 +628,8 @@ pub const App = struct {
         self.focused_widget = .SearchResults;
     }
 
-    pub fn increaseFont(self: *App) void {
+    pub fn increaseFont(_: *App) void { return; }
+    pub fn increaseFont2(self: *App) void {
         var font = Font.init(self.allocator, self.sdl_renderer, "./res/UbuntuMono-Regular.ttf", self.current_font.font_size + 2) catch |err| {
             std.log.err("App.increaseFont: can't load temporary font: {}", .{err});
             return;
@@ -1072,6 +1074,61 @@ pub const App = struct {
                         self.showMessageBoxError("LSP: can't display references: {}", .{err});
                     };
                     self.focused_widget = .SearchResults;
+                }
+                return true;
+            },
+            .ClearDiagnostics => { // we still need one entry to get the filepath
+                if (response.diagnostics == null or response.diagnostics.?.items.len == 0) {
+                    return true;
+                }
+
+                for (response.diagnostics.?.items) |diagnostic| {
+                    // TODO(remy): implements App.getWidgetTextEditByFilepath()
+                    for (self.textedits.items) |*textedit| {
+                        if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), diagnostic.filepath.bytes())) {
+                            textedit.clearDiagnostics();
+                        }
+                    }
+                }
+
+                return true;
+            },
+            .Diagnostic => {
+                if (response.diagnostics == null or response.diagnostics.?.items.len == 0) {
+                    return true;
+                }
+                var first: bool = true;
+                for (response.diagnostics.?.items) |diagnostic| {
+                    // TODO(remy): implements App.getWidgetTextEditByFilepath()
+                    for (self.textedits.items) |*textedit| {
+                        if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), diagnostic.filepath.bytes())) {
+                            // when starting to process diagnostics, first thing we want to do
+                            // is to clear the map.
+                            if (first) {
+                                textedit.clearDiagnostics();
+                                first = false;
+                            }
+                            const message = diagnostic.message.copy(self.allocator) catch |err| {
+                                std.log.err("App.interpretLSPMessage: can't copy the message: {}", .{err});
+                                continue;
+                            };
+
+                            // there is an existing entry at this line, remove it first.
+                            // TODO(remy): we could have multiple entries
+                            if (textedit.lines_status.get(diagnostic.range.b)) |line_status| {
+                                if (textedit.lines_status.remove(diagnostic.range.b)) {
+                                    line_status.deinit();
+                                }
+                            }
+
+                            textedit.lines_status.put(diagnostic.range.b, LineStatus{
+                                .message = message,
+                                .type = .Diagnostic,
+                            }) catch |err| {
+                                std.log.err("App.interpretLSPMessage: can't add a diagnostic: {}", .{err});
+                            };
+                        }
+                    }
                 }
                 return true;
             },

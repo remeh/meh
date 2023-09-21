@@ -74,6 +74,21 @@ pub const SelectionState = enum {
     Active,
 };
 
+pub const LineStatusType = enum {
+    Diagnostic,
+};
+
+pub const LineStatus = struct {
+    type: LineStatusType,
+    message: ?U8Slice,
+
+    pub fn deinit(self: LineStatus) void {
+        if (self.message) |message| {
+            message.deinit();
+        }
+    }
+};
+
 /// ScrollBehavior is used to provide the scrolling behavior when moving the cursor: should
 /// we move scroll the viewport or immediately center it around the cursor.
 pub const ScrollBehavior = enum {
@@ -121,6 +136,9 @@ pub const WidgetTextEdit = struct {
     one_char_size: Vec2u,
     /// last_search contains the last search terms having been used in this WidgetTextEdit.
     last_search: U8Slice,
+    /// lines_status contains information on every line status (added (git),
+    /// with an diag (lsp), etc.).
+    lines_status: std.AutoHashMap(usize, LineStatus),
 
     // Constructors
     // ------------
@@ -149,11 +167,17 @@ pub const WidgetTextEdit = struct {
                 .state = .Inactive,
             },
             .last_search = U8Slice.initEmpty(allocator),
+            .lines_status = std.AutoHashMap(usize, LineStatus).init(allocator),
         };
     }
 
     pub fn deinit(self: *WidgetTextEdit) void {
         self.last_search.deinit();
+        var it = self.lines_status.valueIterator();
+        while (it.next()) |line_status| {
+            line_status.deinit();
+        }
+        self.lines_status.deinit();
         self.editor.deinit();
     }
 
@@ -251,6 +275,12 @@ pub const WidgetTextEdit = struct {
             var text_color = Colors.gray;
             if (i == self.cursor.pos.b) {
                 text_color = Colors.white;
+            }
+
+            if (self.lines_status.get(i)) |status| {
+                if (status.type == .Diagnostic) {
+                    text_color = Colors.red;
+                }
             }
 
             Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset }, 0, text_color, cbuff);
@@ -368,7 +398,7 @@ pub const WidgetTextEdit = struct {
                             if (self.syntax_highlight) {
                                 color = line_syntax_highlight.getForColumn(it.current_glyph);
                             }
-                            _ = Draw.glyph(
+                            Draw.glyph(
                                 font,
                                 scaler,
                                 Vec2u{
@@ -460,9 +490,34 @@ pub const WidgetTextEdit = struct {
                     move_done += 1;
                 }
 
+                if (self.lines_status.get(i)) |line_status| {
+                    if (move_done + 4 < self.viewport.columns.b) {
+                        const max_size = self.viewport.columns.b - (move_done + 4);
+                        if (line_status.message) |message| {
+                            Draw.text(font, scaler, Vec2u{
+                                .a = draw_pos.a + ((offset + 2) * one_char_size.a) + left_blank_offset,
+                                .b = draw_pos.b + y_offset,
+                            }, max_size * one_char_size.a, Colors.red, message.bytes());
+                        }
+                    }
+                }
+
                 y_offset += self.one_char_size.b;
             } else |err| {
                 std.log.err("WidgetTextEdit.renderLines: error while rendering lines: {}", .{err});
+            }
+        }
+
+        // special case where there is a diagnostic displayed after the last line
+        // of the text eidt
+        if (i < self.viewport.lines.b and i == self.editor.buffer.linesCount()) {
+            if (self.lines_status.get(i)) |line_status| {
+                if (line_status.message) |message| {
+                    Draw.text(font, scaler, Vec2u{
+                        .a = draw_pos.a + one_char_size.a + left_blank_offset,
+                        .b = draw_pos.b + y_offset,
+                    }, self.viewport.columns.b * one_char_size.a, Colors.red, message.bytes());
+                }
             }
         }
 
@@ -532,6 +587,15 @@ pub const WidgetTextEdit = struct {
         }
 
         return false;
+    }
+
+    /// clearDiagnostics empties the diagnostics map.
+    pub fn clearDiagnostics(self: *WidgetTextEdit) void {
+        var it = self.lines_status.valueIterator();
+        while (it.next()) |line_status| {
+            line_status.deinit();
+        }
+        self.lines_status.clearAndFree();
     }
 
     /// computeViewport is dependant on visible_cols_and_lines, which is computed every

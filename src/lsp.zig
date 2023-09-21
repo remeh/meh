@@ -18,8 +18,10 @@ pub const LSPError = error{
 
 // TODO(remy): comment
 pub const LSPMessageType = enum {
+    ClearDiagnostics,
     Completion,
     Definition,
+    Diagnostic,
     DidChange,
     Hover,
     Initialize,
@@ -47,6 +49,7 @@ pub const LSPResponse = struct {
     message_type: LSPMessageType,
     log_message: ?U8Slice, // TODO(remy): shouldn't this be a list of U8Slice instead?
     completions: ?std.ArrayList(LSPCompletion),
+    diagnostics: ?std.ArrayList(LSPDiagnostic),
     definitions: ?std.ArrayList(LSPPosition),
     hover: ?std.ArrayList(U8Slice),
     references: ?std.ArrayList(LSPPosition),
@@ -57,8 +60,9 @@ pub const LSPResponse = struct {
             .message_type = message_type,
             .request_id = request_id,
             .completions = null,
-            .hover = null,
+            .diagnostics = null,
             .definitions = null,
+            .hover = null,
             .references = null,
             .log_message = null,
         };
@@ -69,6 +73,12 @@ pub const LSPResponse = struct {
                 completion.deinit();
             }
             comps.deinit();
+        }
+        if (self.diagnostics) |diags| {
+            for (diags.items) |diag| {
+                diag.deinit();
+            }
+            diags.deinit();
         }
         if (self.definitions) |defs| {
             for (defs.items) |def| {
@@ -115,6 +125,16 @@ pub const LSPCompletion = struct {
         self.insert_text.deinit();
         self.label.deinit();
         self.sort_text.deinit();
+    }
+};
+
+pub const LSPDiagnostic = struct {
+    filepath: U8Slice,
+    message: U8Slice,
+    range: Vec4u,
+    pub fn deinit(self: LSPDiagnostic) void {
+        self.filepath.deinit();
+        self.message.deinit();
     }
 };
 
@@ -256,6 +276,8 @@ pub const LSP = struct {
             .message_type = .Initialized,
             .request_id = msg_id,
         };
+
+        // send the request
         try self.sendMessage(request);
     }
 
@@ -285,16 +307,20 @@ pub const LSP = struct {
             return;
         }
 
+        // identify the message and prepare some values
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
+        // write the request
         var json = try LSPWriter.textDocumentReference(self.allocator, msg_id, uri.bytes(), cursor);
         var request = LSPRequest{
             .json = json,
             .message_type = .References,
             .request_id = msg_id,
         };
+
+        // send the request
         try self.sendMessage(request);
     }
 
@@ -303,16 +329,20 @@ pub const LSP = struct {
             return;
         }
 
+        // identify the message and prepare some values
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
+        // write the request
         var json = try LSPWriter.textDocumentDefinition(self.allocator, msg_id, uri.bytes(), cursor);
         var request = LSPRequest{
             .json = json,
             .message_type = .Definition,
             .request_id = msg_id,
         };
+
+        // send the request
         try self.sendMessage(request);
     }
 
@@ -331,6 +361,8 @@ pub const LSP = struct {
             .message_type = .Completion,
             .request_id = msg_id,
         };
+
+        // send the request
         try self.sendMessage(request);
     }
 
@@ -349,6 +381,33 @@ pub const LSP = struct {
             .message_type = .Hover,
             .request_id = msg_id,
         };
+
+        // send the request
+        try self.sendMessage(request);
+    }
+
+    pub fn didChangeComplete(self: *LSP, buffer: *Buffer) !void {
+        if (self.context.is_running.load(.Acquire) == false) {
+            return;
+        }
+
+        // identify the request and prepare some values
+        var msg_id = self.id();
+        var uri = try toUri(self.allocator, buffer.fullpath.bytes());
+        defer uri.deinit();
+
+        var new_text = try buffer.fulltext();
+        defer new_text.deinit();
+
+        // write the request
+        var json = try LSPWriter.textDocumentDidChange(self.allocator, msg_id, uri.bytes(), null, new_text.bytes());
+        var request = LSPRequest{
+            .json = json,
+            .message_type = .DidChange,
+            .request_id = msg_id,
+        };
+
+        // send the request
         try self.sendMessage(request);
     }
 
@@ -357,41 +416,58 @@ pub const LSP = struct {
             return;
         }
 
+        // identify the request and prepare some values
         var msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
+        // new text
         var new_text = U8Slice.initEmpty(self.allocator);
         var i: usize = lines_range.a;
         var last_line_size: usize = 0;
         errdefer new_text.deinit();
 
         while (i <= lines_range.b) : (i += 1) {
-            var line = try buffer.getLine(i);
+            var line = buffer.getLine(i) catch {
+                break;
+            };
             last_line_size = line.size();
             try new_text.appendConst(line.bytes());
         }
 
         defer new_text.deinit();
 
+        // range changed
+        //        var range = if ((lines_range.b + 1) < buffer.linesCount()) Vec4u{
+        //            .a = 0, .b = lines_range.a,
+        //            .c = 0, .d = lines_range.b + 1,
+        //        } else Vec4u{
+        //            .a = 0, .b = lines_range.a,
+        //            .c = last_line_size, .d = lines_range.b,
+        //        };
         var range = Vec4u{
             .a = 0,
             .b = lines_range.a,
-            .c = last_line_size,
-            .d = lines_range.b,
+            .c = 0,
+            .d = lines_range.b + 1,
         };
 
+        // write the request
         var json = try LSPWriter.textDocumentDidChange(self.allocator, msg_id, uri.bytes(), range, new_text.bytes());
         var request = LSPRequest{
             .json = json,
             .message_type = .DidChange,
             .request_id = msg_id,
         };
+
+        // send the request
         try self.sendMessage(request);
     }
 
     // -
 
+    /// sendMessage sends the message to the other thread
+    /// which will write the content on stdin.
     fn sendMessage(self: LSP, request: LSPRequest) !void {
         if (self.context.is_running.load(.Acquire) == false) {
             return;
@@ -439,6 +515,12 @@ pub const LSPWriter = struct {
                         .hover = LSPMessages.hoverCapabilities{
                             .dynamicRegistration = true,
                             .contentFormat = LSPMessages.markupKind,
+                        },
+                        .publishDiagnostics = LSPMessages.publishDiagnosticsCapabilities{
+                            .relatedInformation = false,
+                            .codeDescriptionSupport = false,
+                            .versionSupport = false,
+                            .dataSupport = false,
                         },
                     },
                 },
@@ -517,12 +599,15 @@ pub const LSPWriter = struct {
         return try LSPWriter.toJson(allocator, m);
     }
 
-    fn textDocumentDidChange(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, range: Vec4u, new_text: []const u8) !U8Slice {
-        var content_change = LSPMessages.contentChange{
+    fn textDocumentDidChange(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, range: ?Vec4u, new_text: []const u8) !U8Slice {
+        var content_change = if (range) |r| LSPMessages.contentChange{
             .range = LSPMessages.range{
-                .start = LSPMessages.position{ .character = range.a, .line = range.b },
-                .end = LSPMessages.position{ .character = range.c, .line = range.d },
+                .start = LSPMessages.position{ .character = r.a, .line = r.b },
+                .end = LSPMessages.position{ .character = r.c, .line = r.d },
             },
+            .text = new_text,
+        } else LSPMessages.contentChange{
+            .range = null,
             .text = new_text,
         };
         var m = LSPMessages.textDocumentDidChange{

@@ -87,12 +87,21 @@ pub const hoverCapabilities = struct {
     contentFormat: [2][]const u8 = markupKind,
 };
 
+pub const publishDiagnosticsCapabilities = struct {
+    relatedInformation: bool,
+    // TODO(remy): tagSupport
+    versionSupport: bool,
+    codeDescriptionSupport: bool,
+    dataSupport: bool,
+};
+
 pub const initializeTextDocumentCapabilities = struct {
     completion: completionCapabilities,
     definition: dynReg,
     implementation: dynReg,
     references: dynReg,
     hover: hoverCapabilities,
+    publishDiagnostics: publishDiagnosticsCapabilities,
 };
 
 pub const initializeCapabilities = struct {
@@ -188,7 +197,7 @@ pub const didChangeParams = struct {
 };
 
 pub const contentChange = struct {
-    range: range,
+    range: ?range,
     text: []const u8,
 };
 
@@ -276,6 +285,24 @@ pub const definitionsResponse = struct {
     result: ?[]positionResponse = null,
 };
 
+// PublishDiagnostics
+
+pub const publishDiagnosticsNotification = struct {
+    jsonrpc: []const u8,
+    method: []const u8,
+    params: ?publishDiagnosticsParams = null,
+};
+
+pub const publishDiagnosticsParams = struct {
+    uri: []const u8,
+    diagnostics: []diagnostic,
+};
+
+pub const diagnostic = struct {
+    message: []const u8,
+    range: range,
+};
+
 // Completion
 
 pub const completionsResponse = struct {
@@ -311,6 +338,8 @@ pub const completionItem = struct {
         errdefer label.deinit();
         if (self.label) |l| {
             try label.appendConst(l);
+        } else {
+            return LSPError.IncompleteCompletionEntry;
         }
 
         var sort_text = U8Slice.initEmpty(allocator);
@@ -318,7 +347,9 @@ pub const completionItem = struct {
         if (self.sortText) |i| {
             try sort_text.appendConst(i);
         } else {
-            return LSPError.IncompleteCompletionEntry;
+            // from the lsp documentation:
+            //   When omitted the label is used as the sort text for this item.
+            try sort_text.appendConst(label.bytes());
         }
 
         var rv = LSPCompletion{

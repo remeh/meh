@@ -146,7 +146,7 @@ pub const Editor = struct {
         }
 
         if (self.lsp) |lsp| { // refresh the whole document
-            try lsp.didChange(&self.buffer, Vec2u{ .a = 0, .b = self.linesCount() - 1 });
+            try lsp.didChangeComplete(&self.buffer);
         }
 
         self.has_changes_compared_to_disk = true;
@@ -175,8 +175,9 @@ pub const Editor = struct {
         self.historyEndBlock();
         self.has_changes_compared_to_disk = true;
 
-        if (self.lsp) |lsp| { // refresh the whole document
-            try lsp.didChange(&self.buffer, Vec2u{ .a = 0, .b = self.linesCount() - 1 });
+        if (self.lsp) |lsp| {
+            // refresh the whole document
+            try lsp.didChangeComplete(&self.buffer);
         }
 
         self.has_changes_compared_to_disk = true;
@@ -204,12 +205,13 @@ pub const Editor = struct {
             return;
         }
         var deleted_line = self.buffer.lines.orderedRemove(line_pos);
+
         // history
         self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2u{ .a = 0, .b = line_pos }, triggerer);
 
         if (self.lsp) |lsp| {
             if (triggerer == .Input) {
-                lsp.didChange(&self.buffer, Vec2u{ .a = line_pos, .b = self.linesCount() - 1 }) catch |err| {
+                lsp.didChangeComplete(&self.buffer) catch |err| {
                     std.log.err("Editor.deleteLine: can't send didChange message to the LSP: {}", .{err});
                 };
             }
@@ -367,8 +369,8 @@ pub const Editor = struct {
         // lsp
         if (self.lsp) |lsp| {
             if (triggerer == .Input) {
-                lsp.didChange(&self.buffer, Vec2u{ .a = pos.b, .b = self.linesCount() - 1 }) catch |err| {
-                    std.log.err("Editor.deleteLine: can't send didChange message to the LSP: {}", .{err});
+                lsp.didChangeComplete(&self.buffer) catch |err| {
+                    std.log.err("Editor.newLine: can't send didChange message to the LSP: {}", .{err});
                 };
             }
         }
@@ -475,7 +477,7 @@ pub const Editor = struct {
         }
 
         if (self.lsp) |lsp| {
-            try lsp.didChange(&self.buffer, Vec2u{ .a = position.b, .b = insert_pos.b });
+            try lsp.didChangeComplete(&self.buffer);
         }
 
         return insert_pos;

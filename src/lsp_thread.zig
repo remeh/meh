@@ -3,12 +3,14 @@ const Queue = std.atomic.Queue;
 
 const LSPContext = @import("lsp.zig").LSPContext;
 const LSPCompletion = @import("lsp.zig").LSPCompletion;
+const LSPDiagnostic = @import("lsp.zig").LSPDiagnostic;
 const LSPError = @import("lsp.zig").LSPError;
 const LSPMessages = @import("lsp_messages.zig");
 const LSPMessageType = @import("lsp.zig").LSPMessageType;
 const LSPPosition = @import("lsp.zig").LSPPosition;
 const LSPResponse = @import("lsp.zig").LSPResponse;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const Vec4u = @import("vec.zig").Vec4u;
 
 /// stdoutThreadContext is used by the thread reading on stdout to communicate
 /// with the LSP server thread.
@@ -176,7 +178,7 @@ pub const LSPThread = struct {
         const block_size = 64 * 1024;
         var array: [block_size]u8 = undefined;
         var buff = &array;
-        var read: usize = block_size;
+        var read: usize = 0;
 
         std.log.debug("reading thread started", .{});
 
@@ -190,13 +192,14 @@ pub const LSPThread = struct {
         while (true) {
             const events = try std.os.poll(&poll_fds, timeout);
             if (events == 0) {
-                continue; // timeout
+                continue; // std.os.poll has timeout
             }
 
             if (ctx.child.stdout == null) {
                 break;
             }
 
+            // when there is data to read
             if (poll_fds[0].revents & std.os.POLL.IN != 0) {
                 // one of the error happened, most likely the lsp server which has been
                 // teared down, just leave.
@@ -248,6 +251,8 @@ pub const LSPThread = struct {
         return;
     }
 
+    // TODO(remy): unit test
+    // TODO(remy): comment me
     fn interpret(allocator: std.mem.Allocator, requests: *std.AutoHashMap(i64, LSPMessageType), response: []const u8) !LSPResponse {
         // isolate the json
         var idx = std.mem.indexOf(u8, response, "{");
@@ -283,11 +288,100 @@ pub const LSPThread = struct {
         return LSPError.MissingRequestEntry;
     }
 
+    // TODO(remy): unit test
+    // TODO(remy): comment me
+    fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
+        // read the header only
+        const header = try std.json.parseFromSlice(
+            LSPMessages.headerNotificationResponse,
+            allocator,
+            response[json_start_idx..],
+            .{ .ignore_unknown_fields = true },
+        );
+        defer header.deinit();
+
+        // here we want to check what kind of notification we have to process
+        if (std.mem.eql(u8, header.value.method, "window/showMessage")) {
+            var rv = LSPResponse.init(allocator, 0, .LogMessage);
+            errdefer rv.deinit();
+            LSPThread.interpretShowMessage(allocator, &rv, response, json_start_idx) catch |err| {
+                return err;
+            };
+
+            return rv;
+        }
+
+        if (std.mem.eql(u8, header.value.method, "textDocument/publishDiagnostics")) {
+            var rv = LSPResponse.init(allocator, 0, .Diagnostic);
+            errdefer rv.deinit();
+            LSPThread.interpretPublishDiagnostics(allocator, &rv, response, json_start_idx) catch |err| {
+                return err;
+            };
+
+            return rv;
+        }
+
+        return LSPError.MissingRequestEntry;
+    }
+
+    fn interpretShowMessage(allocator: std.mem.Allocator, rv: *LSPResponse, _: []const u8, _: usize) !void {
+        // TODO(remy): implement me
+        rv.log_message = try U8Slice.initFromSlice(allocator, "the log message to display");
+    }
+
+    fn interpretPublishDiagnostics(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
+
+        rv.*.diagnostics = std.ArrayList(LSPDiagnostic).init(allocator);
+        errdefer rv.*.diagnostics.?.deinit();
+
+        const notification = try std.json.parseFromSlice(LSPMessages.publishDiagnosticsNotification, allocator, response[json_start_idx..], json_params);
+        defer notification.deinit();
+
+        if (notification.value.params) |params| {
+            var filepath = U8Slice.initEmpty(allocator);
+            defer filepath.deinit();
+            // remove file:// from the filename
+            if (params.uri.len > 7 and std.mem.eql(u8, params.uri[0..7], "file://")) {
+                try filepath.appendConst(params.uri[7..params.uri.len]);
+            } else {
+                try filepath.appendConst(params.uri);
+            }
+
+            // if the list of diagnostic is empty, it means we want to clear all diagnostics
+            // for the given file.
+            if (params.diagnostics.len == 0) {
+                // TODO(remy): implement me
+                rv.*.message_type = .ClearDiagnostics; // change the message type
+                try rv.*.diagnostics.?.append(LSPDiagnostic{
+                    .filepath = try filepath.copy(allocator),
+                    .message = U8Slice.initEmpty(allocator),
+                    .range = Vec4u{ .a = 0, .b = 0, .c = 0, .d = 0 },
+                });
+            } else {
+                for (params.diagnostics) |diagnostic| {
+                    try rv.*.diagnostics.?.append(LSPDiagnostic{
+                        .filepath = try filepath.copy(allocator),
+                        .message = try U8Slice.initFromSlice(allocator, diagnostic.message),
+                        .range = diagnostic.range.vec4u(),
+                    });
+                }
+            }
+        }
+
+        if (rv.*.diagnostics) |diags| {
+            if (diags.items.len == 0) {
+                diags.deinit();
+                rv.*.diagnostics = null;
+            }
+        }
+    }
+
     fn interpretCompletion(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
         rv.*.completions = std.ArrayList(LSPCompletion).init(allocator);
-
+        errdefer rv.*.completions.?.deinit();
         const completions = try std.json.parseFromSlice(LSPMessages.completionsResponse, allocator, response[json_start_idx..], json_params);
         defer completions.deinit();
 
@@ -366,6 +460,7 @@ pub const LSPThread = struct {
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
         rv.*.hover = std.ArrayList(U8Slice).init(allocator);
+        errdefer rv.*.hover.?.deinit();
 
         const hoverResp = try std.json.parseFromSlice(LSPMessages.hoverResponse, allocator, response[json_start_idx..], json_params);
         defer hoverResp.deinit();
@@ -422,27 +517,5 @@ pub const LSPThread = struct {
             rv.references.?.deinit();
             rv.references = null;
         }
-    }
-
-    fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
-        // read the header only
-        const header = try std.json.parseFromSlice(
-            LSPMessages.headerNotificationResponse,
-            allocator,
-            response[json_start_idx..],
-            .{ .ignore_unknown_fields = true },
-        );
-        defer header.deinit();
-
-        std.log.debug("received an LSP notification: {s}", .{header.value.method});
-
-        // here we want to check what kind of notification we have to process
-        if (std.mem.eql(u8, header.value.method, "window/showMessage")) {
-            var rv = LSPResponse.init(allocator, 0, .LogMessage);
-            rv.log_message = try U8Slice.initFromSlice(allocator, "the log message to display");
-            return rv;
-        }
-
-        return LSPError.MissingRequestEntry;
     }
 };
