@@ -1004,6 +1004,12 @@ pub const WidgetTextEdit = struct {
                     // others
                     'z' => self.centerCursor(),
                     'D' => self.editor.deleteAfter(self.cursor.pos),
+                    'J' => {
+                        self.moveCursorSpecial(CursorMove.EndOfLine, true);
+                        self.editor.appendNextLine(self.cursor.pos) catch |err| {
+                            std.log.err("WidgetTextEdit.onTextInput: can't append next line: {}", .{err});
+                        };
+                    },
                     'E' => self.deleteLine(),
                     'x' => {
                         if (self.selection.state != .Inactive) {

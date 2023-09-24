@@ -358,7 +358,6 @@ pub const LSPThread = struct {
             // if the list of diagnostic is empty, it means we want to clear all diagnostics
             // for the given file.
             if (params.diagnostics.len == 0) {
-                // TODO(remy): implement me
                 rv.*.message_type = .ClearDiagnostics; // change the message type
                 try rv.*.diagnostics.?.append(LSPDiagnostic{
                     .filepath = try filepath.copy(allocator),

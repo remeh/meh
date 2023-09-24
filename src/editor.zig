@@ -379,6 +379,32 @@ pub const Editor = struct {
         try self.syntax_highlighter.insertNewLine(pos.b);
     }
 
+    pub fn appendNextLine(self: *Editor, pos: Vec2u) !void {
+        if (pos.b == self.buffer.linesCount() - 1) {
+            return;
+        }
+
+        const current_line = try self.buffer.getLine(pos.b);
+        const end_of_current_line = try current_line.utf8size();
+        const next_line = try self.buffer.getLine(pos.b + 1);
+
+        // remove first space chars
+        var to_append = try U8Slice.initFromChar(self.allocator, ' ');
+        defer to_append.deinit();
+        var start: bool = true;
+        for (next_line.data.items) |ch| {
+            if (start and (ch == ' ' or ch == '\t')) {
+                continue;
+            }
+            if (ch == '\n') { break; }
+            start = false;
+            try to_append.data.append(ch);
+        }
+
+        try self.insertUtf8Text(Vec2u{ .a = end_of_current_line - 1, .b = pos.b }, to_append.bytes(), .Input);
+        self.deleteLine(pos.b + 1, .Input);
+    }
+
     /// insertUtf8Text inserts the given UTF8 `text` at the given position.
     pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8, triggerer: Triggerer) !void {
         if (self.buffer.lines.items.len == 0) {
@@ -390,12 +416,11 @@ pub const Editor = struct {
 
         // since utf8 could be one or multiple bytes, we have to find
         // in bytes where to insert this new text in the slice.
-        var insert_pos = try line.utf8pos(pos.a);
+        const insert_pos = try line.utf8pos(pos.a);
 
         // insert the new text
         try line.data.insertSlice(insert_pos, txt);
-
-        var utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
+        const utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
 
         // history
         self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), utf8_pos, triggerer);
