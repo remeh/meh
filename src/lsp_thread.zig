@@ -324,9 +324,16 @@ pub const LSPThread = struct {
         return LSPError.MissingRequestEntry;
     }
 
-    fn interpretShowMessage(allocator: std.mem.Allocator, rv: *LSPResponse, _: []const u8, _: usize) !void {
+    fn interpretShowMessage(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
         // TODO(remy): implement me
-        rv.log_message = try U8Slice.initFromSlice(allocator, "the log message to display");
+        const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
+
+        const notification = try std.json.parseFromSlice(LSPMessages.showMessageNotification, allocator, response[json_start_idx..], json_params);
+        defer notification.deinit();
+
+        if (notification.value.params) |params| {
+            rv.log_message = try U8Slice.initFromSlice(allocator, params.message);
+        }
     }
 
     fn interpretPublishDiagnostics(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {

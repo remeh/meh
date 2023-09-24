@@ -303,6 +303,16 @@ pub const diagnostic = struct {
     range: range,
 };
 
+pub const showMessageNotification = struct {
+    jsonrpc: []const u8,
+    method: []const u8,
+    params: ?showMessageParams,
+};
+
+pub const showMessageParams = struct {
+    message: []const u8,
+};
+
 // Completion
 
 pub const completionsResponse = struct {
