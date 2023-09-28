@@ -1165,7 +1165,7 @@ pub const WidgetTextEdit = struct {
                 };
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
             },
-            .Command => {
+            .Command, .Replace => {
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
             },
             else => {},
