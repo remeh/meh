@@ -628,7 +628,9 @@ pub const App = struct {
         self.focused_widget = .SearchResults;
     }
 
-    pub fn increaseFont(_: *App) void { return; }
+    pub fn increaseFont(_: *App) void {
+        return;
+    }
     pub fn increaseFont2(self: *App) void {
         var font = Font.init(self.allocator, self.sdl_renderer, "./res/UbuntuMono-Regular.ttf", self.current_font.font_size + 2) catch |err| {
             std.log.err("App.increaseFont: can't load temporary font: {}", .{err});

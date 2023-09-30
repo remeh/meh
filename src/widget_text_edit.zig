@@ -1131,7 +1131,21 @@ pub const WidgetTextEdit = struct {
     /// onReturn is called when the user has pressed Return.
     pub fn onReturn(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
-            .Insert => self.newLine(),
+            .Insert => {
+                self.newLine();
+                if (self.cursor.pos.b > 0) {
+                    var line = self.editor.buffer.getLine(self.cursor.pos.b - 1) catch {
+                        std.log.err("WidgetTextEdit.onReturn: can't get previous line", .{});
+                        return;
+                    };
+                    if (line.isOnlyWhitespace()) {
+                        line.reset();
+                        line.appendConst("\n") catch {
+                            std.log.err("WidgetTextEdit.onReturn: can't recreate previous empty line properly", .{});
+                        };
+                    }
+                }
+            },
             else => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
         }
     }
@@ -1150,6 +1164,19 @@ pub const WidgetTextEdit = struct {
 
         // do not highlight anything anymore
         _ = self.editor.syntax_highlighter.setHighlightWord(null);
+
+        // check if we want to clear current line from whitespaces
+        if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
+            if (line.isOnlyWhitespace()) {
+                line.reset();
+                line.appendConst("\n") catch |err| {
+                    std.log.err("WidgetTextEdit.onEscape: can't properly reset line: {}", .{err});
+                };
+                self.setCursorPos(Vec2u{ .a = 0, .b = self.cursor.pos.b }, .Scroll);
+            }
+        } else |err| {
+            std.log.err("WidgetTextEdit.onEscape: can't get current line to reset whitespaces: {}", .{err});
+        }
 
         self.input_mode = InputMode.Command;
     }

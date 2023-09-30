@@ -234,6 +234,22 @@ pub const U8Slice = struct {
         return bytes_pos;
     }
 
+    pub fn isOnlyWhitespace(self: U8Slice) bool {
+        var it = UTF8Iterator.init(self.bytes(), 0) catch {
+            std.log.err("U8Slice.isOnlyWhitespace: can't create an iterator", .{});
+            return false;
+        };
+        while (true) {
+            if (!std.mem.eql(u8, it.glyph(), string_space) and !std.mem.eql(u8, it.glyph(), string_tab) and !std.mem.eql(u8, it.glyph(), "\n")) {
+                return false;
+            }
+            if (!it.next()) {
+                break;
+            }
+        }
+        return true;
+    }
+
     /// reset resets the content of the U8Slice to not contain anything.
     pub fn reset(self: *U8Slice) void {
         self.data.deinit();

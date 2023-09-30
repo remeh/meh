@@ -396,7 +396,9 @@ pub const Editor = struct {
             if (start and (ch == ' ' or ch == '\t')) {
                 continue;
             }
-            if (ch == '\n') { break; }
+            if (ch == '\n') {
+                break;
+            }
             start = false;
             try to_append.data.append(ch);
         }
