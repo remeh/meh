@@ -422,10 +422,10 @@ pub const Editor = struct {
 
         // insert the new text
         try line.data.insertSlice(insert_pos, txt);
-        const utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
+//        const utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
 
         // history
-        self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), utf8_pos, triggerer);
+        self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), pos, triggerer);
 
         // lsp
         if (self.lsp) |lsp| {
@@ -839,6 +839,7 @@ test "editor word_pos" {
 test "editor delete_chunk" {
     const allocator = std.testing.allocator;
     var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    defer editor.deinit();
 
     // complete first line, complete second, chunk of the third
     // -----------
@@ -884,13 +885,12 @@ test "editor delete_chunk" {
     try expect(editor.buffer.linesCount() == 12);
     line = try editor.buffer.getLine(5);
     try expect(std.mem.eql(u8, line.bytes(), "    Four spaces for this\n"));
-
-    editor.deinit();
 }
 
 test "editor paste and undo/redo" {
     const allocator = std.testing.allocator;
     var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    defer editor.deinit();
 
     var text = try U8Slice.initFromSlice(allocator, "text 👻 copied\nwith return line");
     defer text.deinit();
@@ -898,11 +898,15 @@ test "editor paste and undo/redo" {
     try expect(editor.buffer.linesCount() == 12);
 
     var cursor = try editor.paste(Vec2u{ .a = 0, .b = 9 }, text);
+    // it should have added a line
     try expect(editor.buffer.linesCount() == 13);
+    // the cursor should have moved to the end of the pasted text
     try expect(cursor.a == 16);
     try expect(cursor.b == 10);
+    // lines should look like this
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(9)).*.bytes(), "text 👻 copied\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(10)).*.bytes(), "with return line\n"));
+    // let's undo everything
     _ = try editor.undo();
     try expect(editor.buffer.linesCount() == 12);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(9)).*.bytes(), "\n"));
@@ -918,6 +922,4 @@ test "editor paste and undo/redo" {
     _ = try editor.undo();
     try expect(editor.buffer.linesCount() == 12);
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(6)).*.bytes(), "\tOne tab for this one.\n"));
-
-    editor.deinit();
 }

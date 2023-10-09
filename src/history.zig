@@ -76,7 +76,7 @@ pub const Change = struct {
             },
             .InsertUtf8Text => {
                 var end = self.pos;
-                end.a += self.data.size();
+                end.a += try self.data.utf8size();
                 _ = try editor.deleteChunk(self.pos, end, .Undo);
             },
             .DeleteGlyph => {
