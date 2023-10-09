@@ -31,14 +31,16 @@ pub fn build(b: *std.build.Builder) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    const test_step = b.step("test", "Run unit tests");
     const meh_tests = b.addTest(.{
+        .name = "meh unit tests",
         .root_source_file = .{ .path = "src/tests.zig" },
         .target = target,
         .optimize = optimize,
     });
+    const run_tests = b.addRunArtifact(meh_tests);
     prepare(meh_tests);
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&meh_tests.step);
+    test_step.dependOn(&run_tests.step);
 }
 
 fn prepare(step: *std.build.LibExeObjStep) void {
