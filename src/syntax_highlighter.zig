@@ -190,11 +190,12 @@ pub const SyntaxHighlighter = struct {
                 // entering a quoted text
                 is_in_quote = ch;
                 quote_start = current_pos;
-            } else if (is_in_quote == 0 and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' '))) {
+            } else if (is_in_quote == 0 and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' ')
+                      or (previous_char == '#' and ch == '#') or (previous_char == '#' and ch == '\n'))) {
                 // entering a comment
                 if (columns.items.len > 0) {
                     // TODO(remy): color previous char
-                    if (previous_char == '/' and columns.items.len > 1) {
+                    if ((previous_char == '/' or previous_char == '#') and columns.items.len > 1) {
                         columns.items[columns.items.len - 2] = Colors.gray;
                     }
                     columns.items[columns.items.len - 1] = Colors.gray;
