@@ -412,6 +412,7 @@ pub const Editor = struct {
         if (self.buffer.lines.items.len == 0) {
             var new_line = U8Slice.initEmpty(self.allocator);
             try self.buffer.lines.append(new_line);
+            try self.syntax_highlighter.insertNewLine(0);
         }
 
         var line = try self.buffer.getLine(@as(u64, @intCast(pos.b)));
@@ -422,7 +423,6 @@ pub const Editor = struct {
 
         // insert the new text
         try line.data.insertSlice(insert_pos, txt);
-//        const utf8_pos = Vec2u{ .a = insert_pos, .b = pos.b };
 
         // history
         self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), pos, triggerer);

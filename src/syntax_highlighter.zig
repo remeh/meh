@@ -85,9 +85,10 @@ pub const SyntaxHighlighter = struct {
     pub fn setDirty(self: *SyntaxHighlighter, line_range: Vec2u) void {
         var line_pos = line_range.a;
         while (line_pos <= line_range.b) : (line_pos += 1) {
-            var line = self.getLine(line_pos);
-            line.dirty = true;
-            self.lines.items[line_pos] = line;
+            if (line_pos >= self.lines.items.len) {
+                break;
+            }
+            self.lines.items[line_pos].dirty = true;
         }
     }
 
@@ -123,6 +124,10 @@ pub const SyntaxHighlighter = struct {
 
     // TODO(remy): comment me
     pub fn refresh(self: *SyntaxHighlighter, line_number: usize, line_content: *U8Slice) !bool {
+        if (self.lines.items.len == 0) {
+            return false;
+        }
+
         // if existing and not dirty, nothing to do the highlight is already ok
         var existing = self.lines.items[line_number];
         if (!existing.dirty) {
