@@ -1150,26 +1150,14 @@ pub const App = struct {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
                     c.SDLK_RETURN => {
-                        if (self.widget_autocomplete.select()) |entry| {
-                            const wt = self.currentWidgetTextEdit();
-                            // remove the filter if any has been entered
-                            if (self.widget_autocomplete.list.input.text()) |text| {
-                                // first remove the extra text inserted while filtering
-                                var remove_start = Vec2u{ .a = wt.cursor.pos.a - text.size(), .b = wt.cursor.pos.b };
-                                var remove_end = wt.cursor.pos;
-                                if (wt.editor.deleteChunk(
-                                    remove_start,
-                                    remove_end,
-                                    .Input,
-                                )) |new_pos| {
-                                    wt.setCursorPos(new_pos, .Scroll);
-                                } else |_| {}
-
-                                // then, if any, remove the range provided by the lsp completion entry
-                                if (entry.?.data_range) |range| {
-                                    remove_start = Vec2u{ .a = range.a, .b = range.b };
-                                    remove_end = Vec2u{ .a = range.c, .b = range.d };
-
+                        if (self.widget_autocomplete.select()) |autocomplete_entry| {
+                            if (autocomplete_entry) |entry| {
+                                const wt = self.currentWidgetTextEdit();
+                                // remove the filter if any has been entered
+                                if (self.widget_autocomplete.list.input.text()) |text| {
+                                    // first remove the extra text inserted while filtering
+                                    var remove_start = Vec2u{ .a = wt.cursor.pos.a - text.size(), .b = wt.cursor.pos.b };
+                                    var remove_end = wt.cursor.pos;
                                     if (wt.editor.deleteChunk(
                                         remove_start,
                                         remove_end,
@@ -1177,13 +1165,27 @@ pub const App = struct {
                                     )) |new_pos| {
                                         wt.setCursorPos(new_pos, .Scroll);
                                     } else |_| {}
-                                }
-                            } else |_| {}
-                            // insert the completion
-                            wt.editor.insertUtf8Text(wt.cursor.pos, entry.?.data.bytes(), .Input) catch |err| {
-                                self.showMessageBoxError("LSP: can't insert value (insert completion): {}", .{err});
-                            };
-                            wt.setCursorPos(Vec2u{ .a = wt.cursor.pos.a + entry.?.data.size(), .b = wt.cursor.pos.b }, .Scroll);
+
+                                    // then, if any, remove the range provided by the lsp completion entry
+                                    if (entry.data_range) |range| {
+                                        remove_start = Vec2u{ .a = range.a, .b = range.b };
+                                        remove_end = Vec2u{ .a = range.c, .b = range.d };
+
+                                        if (wt.editor.deleteChunk(
+                                            remove_start,
+                                            remove_end,
+                                            .Input,
+                                        )) |new_pos| {
+                                            wt.setCursorPos(new_pos, .Scroll);
+                                        } else |_| {}
+                                    }
+                                } else |_| {}
+                                // insert the completion
+                                wt.editor.insertUtf8Text(wt.cursor.pos, entry.data.bytes(), .Input) catch |err| {
+                                    self.showMessageBoxError("LSP: can't insert value (insert completion): {}", .{err});
+                                };
+                                wt.setCursorPos(Vec2u{ .a = wt.cursor.pos.a + entry.data.size(), .b = wt.cursor.pos.b }, .Scroll);
+                            }
                         } else |err| {
                             self.showMessageBoxError("LSP: can't insert value: {}", .{err});
                         }
