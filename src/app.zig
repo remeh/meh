@@ -315,6 +315,7 @@ pub const App = struct {
             // already opened, just switch to it
             if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), path)) {
                 self.setCurrentFocusedWidgetTextEditIndex(idx);
+                self.refreshWindowTitle() catch {};
                 return;
             }
             idx += 1;
@@ -346,6 +347,8 @@ pub const App = struct {
         // immediately trigger its rendering in order to have the WidgetTextEdit
         // compute its viewport.
         self.render();
+
+        self.refreshWindowTitle() catch {};
     }
 
     /// close closes the current opened editor/buffer.
@@ -413,6 +416,8 @@ pub const App = struct {
                 self.current_widget_text_edit = text_edit;
             }
         }
+
+        self.refreshWindowTitle() catch {};
     }
 
     /// startLSPClient identifies and starts an LSP server if none has been spawned for the
@@ -447,6 +452,15 @@ pub const App = struct {
             return &self.textedits.items[self.current_widget_text_edit_alt];
         }
         return &self.textedits.items[self.current_widget_text_edit];
+    }
+
+    fn refreshWindowTitle(self: App) !void {
+        var wte = self.currentWidgetTextEdit();
+        var title = try U8Slice.initFromSlice(self.allocator, "meh - ");
+        defer title.deinit();
+        try title.appendSlice(wte.editor.buffer.fullpath);
+        try title.data.append(0); // turn it into a C string
+        c.SDL_SetWindowTitle(self.sdl_window, @as([*:0]const u8, @ptrCast(title.data.items)));
     }
 
     /// setCurrentFocusedWidgetTextEditIndex is used to set the active WidgetTextEdit index (the
