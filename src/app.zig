@@ -454,6 +454,8 @@ pub const App = struct {
         return &self.textedits.items[self.current_widget_text_edit];
     }
 
+    /// refreshWindowTitle refreshes the WM window title using the currently
+    /// focused WidgetText editor information.
     fn refreshWindowTitle(self: App) !void {
         var wte = self.currentWidgetTextEdit();
         var title = try U8Slice.initFromSlice(self.allocator, "meh - ");
@@ -484,6 +486,8 @@ pub const App = struct {
         if (!self.has_split_view) {
             self.focused_editor = .Left;
         }
+
+        self.refreshWindowTitle() catch {};
     }
 
     /// storeBufferPosition stores the current position of the cursor in the active buffer.
@@ -1489,6 +1493,7 @@ pub const App = struct {
                                     } else {
                                         self.focused_editor = .Left;
                                     }
+                                    self.refreshWindowTitle() catch {};
                                 },
                                 c.SDLK_n => {
                                     self.focused_widget = FocusedWidget.Autocomplete;
