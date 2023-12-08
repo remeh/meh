@@ -460,7 +460,16 @@ pub const App = struct {
         var wte = self.currentWidgetTextEdit();
         var title = try U8Slice.initFromSlice(self.allocator, "meh - ");
         defer title.deinit();
-        try title.appendSlice(wte.editor.buffer.fullpath);
+
+
+        if (std.fs.path.dirname(wte.editor.buffer.fullpath.data.items)) |dir| {
+            try title.appendConst(std.fs.path.basename(dir)); // we only want the dir right before
+            try title.appendConst("/");
+        }
+
+        const file = std.fs.path.basename(wte.editor.buffer.fullpath.data.items);
+        try title.appendConst(file);
+
         try title.data.append(0); // turn it into a C string
         c.SDL_SetWindowTitle(self.sdl_window, @as([*:0]const u8, @ptrCast(title.data.items)));
     }
