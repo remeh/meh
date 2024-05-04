@@ -65,7 +65,7 @@ pub const WidgetLookup = struct {
                 try self.current_path.appendConst("/");
                 try self.current_path.appendSlice(entry.label);
                 // make sure it is absolute
-                var fullpath = try std.fs.realpathAlloc(self.allocator, self.current_path.bytes());
+                const fullpath = try std.fs.realpathAlloc(self.allocator, self.current_path.bytes());
                 defer self.allocator.free(fullpath);
                 self.current_path.deinit();
                 // store it as the fullpath
@@ -95,7 +95,7 @@ pub const WidgetLookup = struct {
             .type = .Directory,
         });
 
-        var dir = try std.fs.cwd().openIterableDir(self.current_path.bytes(), std.fs.Dir.OpenDirOptions{ .access_sub_paths = false });
+        var dir = try std.fs.cwd().openDir(self.current_path.bytes(), std.fs.Dir.OpenDirOptions{ .access_sub_paths = false, .iterate = true });
         defer dir.close();
         var it = dir.iterate();
         while (try it.next()) |entry| {

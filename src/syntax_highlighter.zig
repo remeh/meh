@@ -137,7 +137,7 @@ pub const SyntaxHighlighter = struct {
         // refresh this line syntax highlighting
         existing.deinit();
 
-        var line_syntax_highlight = try SyntaxHighlighter.compute(self.allocator, line_content, self.word_under_cursor);
+        const line_syntax_highlight = try SyntaxHighlighter.compute(self.allocator, line_content, self.word_under_cursor);
         self.lines.items[line_number] = line_syntax_highlight;
         return true;
     }
@@ -175,7 +175,7 @@ pub const SyntaxHighlighter = struct {
 
         var it = try UTF8Iterator.init(line_content.bytes(), 0);
         while (true) {
-            var ch: usize = it.glyph()[0];
+            const ch: usize = it.glyph()[0];
 
             // immediately set this glyph color to the default color
             if (is_in_comment) {
@@ -190,8 +190,7 @@ pub const SyntaxHighlighter = struct {
                 // entering a quoted text
                 is_in_quote = ch;
                 quote_start = current_pos;
-            } else if (is_in_quote == 0 and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' ')
-                      or (previous_char == '#' and ch == '#') or (previous_char == '#' and ch == '\n'))) {
+            } else if (is_in_quote == 0 and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' ') or (previous_char == '#' and ch == '#') or (previous_char == '#' and ch == '\n'))) {
                 // entering a comment
                 if (columns.items.len > 0) {
                     // TODO(remy): color previous char

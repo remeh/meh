@@ -133,7 +133,7 @@ pub const Editor = struct {
         }
 
         var change = self.history.pop();
-        var t = change.block_id;
+        const t = change.block_id;
         try change.undo(self);
         try self.history_redo.append(change);
         var pos = change.pos;
@@ -160,7 +160,7 @@ pub const Editor = struct {
         }
 
         var change = self.history_redo.pop();
-        var t = change.block_id;
+        const t = change.block_id;
         try change.redo(self);
         var pos = change.pos;
         change.deinit();
@@ -204,7 +204,7 @@ pub const Editor = struct {
             std.log.warn("Editor.deleteLine: can't delete line {d}, out of buffer", .{line_pos});
             return;
         }
-        var deleted_line = self.buffer.lines.orderedRemove(line_pos);
+        const deleted_line = self.buffer.lines.orderedRemove(line_pos);
 
         // history
         self.historyAppend(ChangeType.DeleteLine, deleted_line, Vec2u{ .a = 0, .b = line_pos }, triggerer);
@@ -233,7 +233,7 @@ pub const Editor = struct {
             return;
         };
 
-        var line_size = line.utf8size() catch |err| {
+        const line_size = line.utf8size() catch |err| {
             std.log.err("Editor.deleteAfter: can't compute line size: {}", .{err});
             return;
         };
@@ -290,7 +290,7 @@ pub const Editor = struct {
         var line_removed: usize = 0;
         while (i <= end_pos.b) : (i += 1) {
             var line = try self.buffer.getLine(i - line_removed);
-            var line_size = try line.utf8size();
+            const line_size = try line.utf8size();
 
             // starting line has to be completely cleaned
             if (i == start_pos.b and start_pos.a == 0 and (end_pos.b > start_pos.b or end_pos.a == line_size - 1)) {
@@ -357,8 +357,8 @@ pub const Editor = struct {
     /// line and inserting a new line (U8Slice) in the buffer.
     pub fn newLine(self: *Editor, pos: Vec2u, triggerer: Triggerer) !void {
         var line = try self.buffer.getLine(pos.b);
-        var rest = line.data.items[try line.utf8pos(pos.a)..line.size()];
-        var new_line = try U8Slice.initFromSlice(self.allocator, rest);
+        const rest = line.data.items[try line.utf8pos(pos.a)..line.size()];
+        const new_line = try U8Slice.initFromSlice(self.allocator, rest);
         line.data.shrinkAndFree(try line.utf8pos(pos.a));
         try line.data.append('\n');
         try self.buffer.lines.insert(pos.b + 1, new_line);
@@ -410,7 +410,7 @@ pub const Editor = struct {
     /// insertUtf8Text inserts the given UTF8 `text` at the given position.
     pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8, triggerer: Triggerer) !void {
         if (self.buffer.lines.items.len == 0) {
-            var new_line = U8Slice.initEmpty(self.allocator);
+            const new_line = U8Slice.initEmpty(self.allocator);
             try self.buffer.lines.append(new_line);
             try self.syntax_highlighter.insertNewLine(0);
         }
@@ -463,11 +463,11 @@ pub const Editor = struct {
             var to_remove: u3 = try std.unicode.utf8ByteSequenceLength(line.data.items[remove_pos]);
             var removed = U8Slice.initEmpty(self.allocator);
             while (to_remove > 0) : (to_remove -= 1) {
-                var ch = line.data.orderedRemove(remove_pos);
+                const ch = line.data.orderedRemove(remove_pos);
                 try removed.data.append(ch);
             }
 
-            var utf8_pos = Vec2u{ .a = remove_pos, .b = pos.b };
+            const utf8_pos = Vec2u{ .a = remove_pos, .b = pos.b };
             self.historyAppend(ChangeType.DeleteGlyph, removed, utf8_pos, triggerer);
 
             if (self.lsp) |lsp| {
@@ -497,7 +497,7 @@ pub const Editor = struct {
                 continue;
             }
             // not a new line
-            var to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
+            const to_add: u3 = try std.unicode.utf8ByteSequenceLength(txt.data.items[i]);
             try self.insertUtf8Text(insert_pos, txt.data.items[i .. i + to_add], .Paste);
             insert_pos.a += 1;
             i += to_add;
@@ -538,7 +538,7 @@ pub const Editor = struct {
         // left
         it = try UTF8Iterator.init(line.bytes(), position.a);
         while (true) {
-            var it_pos = it.current_byte;
+            const it_pos = it.current_byte;
             it.prev();
             if (it_pos == it.current_byte) {
                 break;
@@ -561,7 +561,7 @@ pub const Editor = struct {
     /// is owned by the WidgetTextEdit and should not be freed by
     /// the caller.
     pub fn wordAt(self: Editor, position: Vec2u) ![]const u8 {
-        var pos = try self.wordPosAt(position);
+        const pos = try self.wordPosAt(position);
         if (pos.a == pos.b) {
             return EditorError.NoWordHere;
         }
@@ -603,7 +603,7 @@ pub const Editor = struct {
             var it = try UTF8Iterator.init(line.bytes(), start_pos.a);
             var idx: usize = start_pos.a;
             while (true) {
-                var current_byte = it.current_byte;
+                const current_byte = it.current_byte;
                 it.prev();
                 if (it.current_byte == current_byte) {
                     return start_pos;
@@ -707,7 +707,7 @@ test "editor new_line and undo/redo" {
     try expect(editor.buffer.lines.items.len == 3);
     try editor.newLine(Vec2u{ .a = 3, .b = 1 }, .Input);
     try expect(editor.buffer.lines.items.len == 4);
-    var line = (try editor.buffer.getLine(2)).bytes();
+    const line = (try editor.buffer.getLine(2)).bytes();
     std.log.debug("{s}", .{line});
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(0)).bytes(), "hello world\n"));
     try expect(std.mem.eql(u8, (try editor.buffer.getLine(1)).bytes(), "and\n"));

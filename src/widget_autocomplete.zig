@@ -99,7 +99,7 @@ pub const WidgetAutocomplete = struct {
     ) void {
         // check in which part of the screen the cursor is currently at,
         // with this information, decide where to draw the autocomplete
-        var third_window_scaled_size = Vec2u{
+        const third_window_scaled_size = Vec2u{
             .a = @divTrunc(window_scaled_size.a, 3),
             .b = @divTrunc(window_scaled_size.b, 3),
         };

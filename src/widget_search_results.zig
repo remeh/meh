@@ -98,7 +98,7 @@ pub const WidgetSearchResults = struct {
         self.list.reset();
 
         for (references.items) |reference| {
-            var line = try app.peekLine(reference.filepath.bytes(), reference.start.b);
+            const line = try app.peekLine(reference.filepath.bytes(), reference.start.b);
             const pos = Vec2i{ .a = utoi(reference.start.a), .b = utoi(reference.start.b) };
             try self.list.entries.append(WidgetListEntry{
                 .label = line,

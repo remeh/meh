@@ -37,7 +37,7 @@ pub const Buffer = struct {
     /// init_empty initializes an empty buffer.
     /// Creates an initial first line.
     pub fn initEmpty(allocator: std.mem.Allocator) !Buffer {
-        var empty_line = U8Slice.initEmpty(allocator);
+        const empty_line = U8Slice.initEmpty(allocator);
         var buff = Buffer{
             .allocator = allocator,
             .in_ram_only = true,
@@ -54,7 +54,7 @@ pub const Buffer = struct {
     // TODO(remy): some refactoring (see `App.peekLine`) would be nice here.
     pub fn initFromFile(allocator: std.mem.Allocator, filepath: []const u8) !Buffer {
         // make sure that the provided fullpath is absolute
-        var path = try std.fs.realpathAlloc(allocator, filepath);
+        const path = try std.fs.realpathAlloc(allocator, filepath);
         defer allocator.free(path);
         var fullpath = U8Slice.initEmpty(allocator);
         try fullpath.appendConst(path);
@@ -195,7 +195,7 @@ pub const Buffer = struct {
         while (i < line_end) : (i += 1) {
             if (i < self.lines.items.len) {
                 if (self.getLine(i)) |line| {
-                    var utf8size = try line.utf8size();
+                    const utf8size = try line.utf8size();
                     rv = @max(utf8size, rv);
                 } else |_| {}
             }
@@ -237,7 +237,7 @@ test "buffer init_from_file" {
     var working_dir = U8Slice.initEmpty(allocator);
     defer working_dir.deinit();
     // read cwd
-    var working_path = try std.fs.realpathAlloc(allocator, ".");
+    const working_path = try std.fs.realpathAlloc(allocator, ".");
     defer allocator.free(working_path);
     try working_dir.appendConst(working_path);
 

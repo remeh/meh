@@ -9,7 +9,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{
         .stack_trace_frames = 8,
     }){};
-    var allocator = gpa.allocator();
+    const allocator = gpa.allocator();
     defer _ = gpa.detectLeaks();
 
     // app
@@ -25,7 +25,7 @@ pub fn main() !void {
         var i: usize = 1;
         while (i < std.os.argv.len) : (i += 1) {
             var arg = std.os.argv[i];
-            var len = std.mem.len(arg);
+            const len = std.mem.len(arg);
             app.openFile(arg[0..len]) catch {
                 if (std.os.argv.len == 2) {
                     // do not open the app if there is only one file to open

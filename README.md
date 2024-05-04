@@ -15,8 +15,8 @@ Use `zig 0.11.0` to compile.
 * HiDPI support, smooth font rendering. SDL2 accelerated rendering.
 * LSP support: go to definition, references, completion, info/doc.
 * Ripgrep integration.
-* Hard-coded fast syntax highlighter as a feature.
-* Highlight the word clicked on using the mouse.
+* Hard-coded fast syntax highlighter. No tree-sitter integration.
+* Highlight a word using the mouse.
 * Open files navigating through directories. No fuzzy search.
 * Vertical split. One. No horizontal split.
 * Undo & redo.

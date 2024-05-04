@@ -100,7 +100,7 @@ pub const Cursor = struct {
     // TODO(remy): comment
     // TODO(remy): unit test
     pub fn posInPixel(cursor: Cursor, text_edit: *WidgetTextEdit, one_char_size: Vec2u) Vec2u {
-        var rv = Vec2u{
+        const rv = Vec2u{
             .a = text_edit.line_numbers_offset + (cursor.pos.a * one_char_size.a) - (text_edit.viewport.columns.a * one_char_size.a),
             .b = cursor.pos.b * one_char_size.b - (text_edit.viewport.lines.a * one_char_size.b),
         };
@@ -116,7 +116,7 @@ pub const Cursor = struct {
         // position in char in window
         // --
 
-        var in_editor = Vec2u{
+        const in_editor = Vec2u{
             .a = itou(@max(utoi(click_window_pos.a - draw_pos.a) - utoi(text_edit.line_numbers_offset), 0)) / text_edit.one_char_size.a,
             .b = (click_window_pos.b - draw_pos.b) / text_edit.one_char_size.b,
         };
@@ -158,7 +158,7 @@ pub const Cursor = struct {
             return rv;
         };
 
-        var utf8size = line.utf8size() catch |err| {
+        const utf8size = line.utf8size() catch |err| {
             std.log.err("Cursor.posFromWindowPos: can't get current line utf8size {d}: {}", .{ rv.b, err });
             return rv;
         };

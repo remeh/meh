@@ -31,7 +31,7 @@ pub const WidgetCommand = struct {
     // ------------
 
     pub fn init(allocator: std.mem.Allocator) !WidgetCommand {
-        var rv = WidgetCommand{
+        const rv = WidgetCommand{
             .allocator = allocator,
             .input = try WidgetInput.init(allocator),
         };
@@ -84,7 +84,7 @@ pub const WidgetCommand = struct {
             Vec4u{ .a = 20, .b = 20, .c = 20, .d = 240 },
         );
 
-        var margin: Vec2u = Vec2u{ .a = 15, .b = 15 };
+        const margin: Vec2u = Vec2u{ .a = 15, .b = 15 };
 
         // text edit
         var pos = draw_pos;
@@ -101,7 +101,7 @@ pub const WidgetCommand = struct {
     }
 
     pub fn interpret(self: *WidgetCommand, app: *App) !void {
-        var prompt = self.getArg(0);
+        const prompt = self.getArg(0);
 
         if (prompt == null) {
             return;
@@ -192,8 +192,8 @@ pub const WidgetCommand = struct {
         if (std.mem.eql(u8, command, ":rg")) {
             if (self.countArgs() == 1) {
                 var text_edit = app.currentWidgetTextEdit();
-                var word = try text_edit.editor.wordAt(text_edit.cursor.pos);
-                var results = Ripgrep.search(app.allocator, word, app.working_dir.bytes()) catch |err| {
+                const word = try text_edit.editor.wordAt(text_edit.cursor.pos);
+                const results = Ripgrep.search(app.allocator, word, app.working_dir.bytes()) catch |err| {
                     std.log.err("WidgetCommand: can't exec 'rg {s}': {}", .{ word, err });
                     return;
                 };
@@ -201,7 +201,7 @@ pub const WidgetCommand = struct {
                 return;
             }
             if (self.rest(1)) |parameters| {
-                var results = Ripgrep.search(app.allocator, parameters, app.working_dir.bytes()) catch |err| {
+                const results = Ripgrep.search(app.allocator, parameters, app.working_dir.bytes()) catch |err| {
                     std.log.err("WidgetCommand: can't exec 'rg {s}': {}", .{ parameters, err });
                     return;
                 };
@@ -315,7 +315,7 @@ pub const WidgetCommand = struct {
             std.log.err("WidgetCommand.countArgs: can't get line 0: {}", .{err});
             return 0;
         };
-        var buff = line.bytes();
+        const buff = line.bytes();
 
         while (i < buff.len) : (i += 1) {
             if (buff[i] == 0) {

@@ -41,7 +41,7 @@ pub const UTF8Iterator = struct {
             return UTF8IteratorError.GlyphOutOfBuffer;
         }
 
-        var glyph_size: usize = std.unicode.utf8ByteSequenceLength(text[0]) catch {
+        const glyph_size: usize = std.unicode.utf8ByteSequenceLength(text[0]) catch {
             return UTF8IteratorError.InvalidByte;
         };
 
@@ -103,7 +103,7 @@ pub const UTF8Iterator = struct {
 
         self.current_byte += self.current_glyph_size;
 
-        var glyph_size: usize = std.unicode.utf8ByteSequenceLength(self.text[self.current_byte]) catch |err| {
+        const glyph_size: usize = std.unicode.utf8ByteSequenceLength(self.text[self.current_byte]) catch |err| {
             std.log.err("UTF8Iterator.next: can't get glyph size: {}", .{err});
             // best effort
             self.current_byte += 1;

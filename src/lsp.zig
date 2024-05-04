@@ -1,6 +1,7 @@
 const std = @import("std");
 const Queue = std.atomic.Queue;
 
+const AtomicQueue = @import("atomic_queue.zig").AtomicQueue;
 const Buffer = @import("buffer.zig").Buffer;
 const LSPMessages = @import("lsp_messages.zig");
 const LSPThread = @import("lsp_thread.zig").LSPThread;
@@ -143,11 +144,11 @@ pub const LSPContext = struct {
     allocator: std.mem.Allocator,
     server_exec: []const u8,
     // queue used to communicate from the LSP thread to the main thread.
-    response_queue: std.atomic.Queue(LSPResponse),
+    response_queue: AtomicQueue(LSPResponse),
     // queue used to communicate from the main thread to the LSP thread.
-    send_queue: std.atomic.Queue(LSPRequest),
+    send_queue: AtomicQueue(LSPRequest),
     // LSP server thread is running
-    is_running: std.atomic.Atomic(bool),
+    is_running: std.atomic.Value(bool),
 };
 
 // TODO(remy): comment
@@ -164,13 +165,13 @@ pub const LSP = struct {
         // create two queues for bidirectional communication
         var ctx = try allocator.create(LSPContext);
         ctx.allocator = allocator;
-        ctx.response_queue = Queue(LSPResponse).init();
-        ctx.send_queue = Queue(LSPRequest).init();
+        ctx.response_queue = AtomicQueue(LSPResponse).init();
+        ctx.send_queue = AtomicQueue(LSPRequest).init();
         ctx.server_exec = server_exec;
 
         // spawn the LSP thread
         const thread = try std.Thread.spawn(std.Thread.SpawnConfig{}, LSPThread.run, .{ctx});
-        ctx.is_running = std.atomic.Atomic(bool).init(true);
+        ctx.is_running = std.atomic.Value(bool).init(true);
 
         var uri_working_dir = try U8Slice.initFromSlice(allocator, "file://");
         try uri_working_dir.appendConst(working_dir);
@@ -192,7 +193,7 @@ pub const LSP = struct {
         // it'll process it and close the thread
         // --------------------------------------
 
-        var is_running = self.context.is_running.load(.Acquire);
+        const is_running = self.context.is_running.load(.acquire);
         if (is_running) {
             // send an exit message if the lsp thread is still running
 
@@ -201,7 +202,7 @@ pub const LSP = struct {
                 std.log.err("LSP.deinit: can't allocate the bytes to send the exit message: {}", .{err});
                 return;
             };
-            var node = self.allocator.create(Queue(LSPRequest).Node) catch |err| {
+            var node = self.allocator.create(AtomicQueue(LSPRequest).Node) catch |err| {
                 std.log.err("LSP.deinit: can't allocate the node to send the exit message: {}", .{err});
                 return;
             };
@@ -258,9 +259,9 @@ pub const LSP = struct {
     // ------------
 
     pub fn initialize(self: *LSP) !void {
-        var msg_id = self.id();
-        var json = try LSPWriter.initialize(self.allocator, msg_id, self.uri_working_dir.bytes());
-        var request = LSPRequest{
+        const msg_id = self.id();
+        const json = try LSPWriter.initialize(self.allocator, msg_id, self.uri_working_dir.bytes());
+        const request = LSPRequest{
             .json = json,
             .message_type = .Initialize,
             .request_id = msg_id,
@@ -269,9 +270,9 @@ pub const LSP = struct {
     }
 
     pub fn initialized(self: *LSP) !void {
-        var msg_id = self.id();
-        var json = try LSPWriter.initialized(self.allocator);
-        var request = LSPRequest{
+        const msg_id = self.id();
+        const json = try LSPWriter.initialized(self.allocator);
+        const request = LSPRequest{
             .json = json,
             .message_type = .Initialized,
             .request_id = msg_id,
@@ -282,18 +283,18 @@ pub const LSP = struct {
     }
 
     pub fn openFile(self: *LSP, buffer: *Buffer) !void {
-        if (self.context.is_running.load(.Acquire) == false) {
+        if (self.context.is_running.load(.acquire) == false) {
             return;
         }
 
-        var msg_id = self.id();
+        const msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
         var fulltext = try buffer.fulltext();
         defer fulltext.deinit();
 
-        var json = try LSPWriter.textDocumentDidOpen(self.allocator, uri.bytes(), self.language_id.bytes(), fulltext.bytes());
-        var request = LSPRequest{
+        const json = try LSPWriter.textDocumentDidOpen(self.allocator, uri.bytes(), self.language_id.bytes(), fulltext.bytes());
+        const request = LSPRequest{
             .json = json,
             .message_type = .TextDocumentDidOpen,
             .request_id = msg_id,
@@ -303,18 +304,18 @@ pub const LSP = struct {
 
     // TODO(remy): refactor with definition/completion/etc.
     pub fn references(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
-        if (self.context.is_running.load(.Acquire) == false) {
+        if (self.context.is_running.load(.acquire) == false) {
             return;
         }
 
         // identify the message and prepare some values
-        var msg_id = self.id();
+        const msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
         // write the request
-        var json = try LSPWriter.textDocumentReference(self.allocator, msg_id, uri.bytes(), cursor);
-        var request = LSPRequest{
+        const json = try LSPWriter.textDocumentReference(self.allocator, msg_id, uri.bytes(), cursor);
+        const request = LSPRequest{
             .json = json,
             .message_type = .References,
             .request_id = msg_id,
@@ -325,18 +326,18 @@ pub const LSP = struct {
     }
 
     pub fn definition(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
-        if (self.context.is_running.load(.Acquire) == false) {
+        if (self.context.is_running.load(.acquire) == false) {
             return;
         }
 
         // identify the message and prepare some values
-        var msg_id = self.id();
+        const msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
         // write the request
-        var json = try LSPWriter.textDocumentDefinition(self.allocator, msg_id, uri.bytes(), cursor);
-        var request = LSPRequest{
+        const json = try LSPWriter.textDocumentDefinition(self.allocator, msg_id, uri.bytes(), cursor);
+        const request = LSPRequest{
             .json = json,
             .message_type = .Definition,
             .request_id = msg_id,
@@ -347,16 +348,16 @@ pub const LSP = struct {
     }
 
     pub fn completion(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
-        if (self.context.is_running.load(.Acquire) == false) {
+        if (self.context.is_running.load(.acquire) == false) {
             return;
         }
 
-        var msg_id = self.id();
+        const msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
-        var json = try LSPWriter.textDocumentCompletion(self.allocator, msg_id, uri.bytes(), cursor);
-        var request = LSPRequest{
+        const json = try LSPWriter.textDocumentCompletion(self.allocator, msg_id, uri.bytes(), cursor);
+        const request = LSPRequest{
             .json = json,
             .message_type = .Completion,
             .request_id = msg_id,
@@ -367,16 +368,16 @@ pub const LSP = struct {
     }
 
     pub fn hover(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
-        if (self.context.is_running.load(.Acquire) == false) {
+        if (self.context.is_running.load(.acquire) == false) {
             return;
         }
 
-        var msg_id = self.id();
+        const msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
-        var json = try LSPWriter.textDocumentHover(self.allocator, msg_id, uri.bytes(), cursor);
-        var request = LSPRequest{
+        const json = try LSPWriter.textDocumentHover(self.allocator, msg_id, uri.bytes(), cursor);
+        const request = LSPRequest{
             .json = json,
             .message_type = .Hover,
             .request_id = msg_id,
@@ -387,12 +388,12 @@ pub const LSP = struct {
     }
 
     pub fn didChangeComplete(self: *LSP, buffer: *Buffer) !void {
-        if (self.context.is_running.load(.Acquire) == false) {
+        if (self.context.is_running.load(.acquire) == false) {
             return;
         }
 
         // identify the request and prepare some values
-        var msg_id = self.id();
+        const msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
@@ -400,8 +401,8 @@ pub const LSP = struct {
         defer new_text.deinit();
 
         // write the request
-        var json = try LSPWriter.textDocumentDidChange(self.allocator, msg_id, uri.bytes(), null, new_text.bytes());
-        var request = LSPRequest{
+        const json = try LSPWriter.textDocumentDidChange(self.allocator, msg_id, uri.bytes(), null, new_text.bytes());
+        const request = LSPRequest{
             .json = json,
             .message_type = .DidChange,
             .request_id = msg_id,
@@ -412,12 +413,12 @@ pub const LSP = struct {
     }
 
     pub fn didChange(self: *LSP, buffer: *Buffer, lines_range: Vec2u) !void {
-        if (self.context.is_running.load(.Acquire) == false) {
+        if (self.context.is_running.load(.acquire) == false) {
             return;
         }
 
         // identify the request and prepare some values
-        var msg_id = self.id();
+        const msg_id = self.id();
         var uri = try toUri(self.allocator, buffer.fullpath.bytes());
         defer uri.deinit();
 
@@ -445,7 +446,7 @@ pub const LSP = struct {
         //            .a = 0, .b = lines_range.a,
         //            .c = last_line_size, .d = lines_range.b,
         //        };
-        var range = Vec4u{
+        const range = Vec4u{
             .a = 0,
             .b = lines_range.a,
             .c = 0,
@@ -453,8 +454,8 @@ pub const LSP = struct {
         };
 
         // write the request
-        var json = try LSPWriter.textDocumentDidChange(self.allocator, msg_id, uri.bytes(), range, new_text.bytes());
-        var request = LSPRequest{
+        const json = try LSPWriter.textDocumentDidChange(self.allocator, msg_id, uri.bytes(), range, new_text.bytes());
+        const request = LSPRequest{
             .json = json,
             .message_type = .DidChange,
             .request_id = msg_id,
@@ -469,11 +470,11 @@ pub const LSP = struct {
     /// sendMessage sends the message to the other thread
     /// which will write the content on stdin.
     fn sendMessage(self: LSP, request: LSPRequest) !void {
-        if (self.context.is_running.load(.Acquire) == false) {
+        if (self.context.is_running.load(.acquire) == false) {
             return;
         }
 
-        var node = try self.allocator.create(Queue(LSPRequest).Node);
+        var node = try self.allocator.create(AtomicQueue(LSPRequest).Node);
         node.data = request;
         // send the JSON data to the other thread
         self.context.send_queue.put(node);
@@ -494,7 +495,7 @@ pub const LSP = struct {
 
 pub const LSPWriter = struct {
     fn initialize(allocator: std.mem.Allocator, request_id: i64, uri_working_dir: []const u8) !U8Slice {
-        var m = LSPMessages.initialize{
+        const m = LSPMessages.initialize{
             .jsonrpc = "2.0",
             .id = request_id,
             .method = "initialize",
@@ -536,7 +537,7 @@ pub const LSPWriter = struct {
     }
 
     fn initialized(allocator: std.mem.Allocator) !U8Slice {
-        var m = LSPMessages.initialized{
+        const m = LSPMessages.initialized{
             .jsonrpc = "2.0",
             .params = LSPMessages.emptyStruct{},
             .method = "initialized",
@@ -545,7 +546,7 @@ pub const LSPWriter = struct {
     }
 
     fn textDocumentDidOpen(allocator: std.mem.Allocator, uri: []const u8, language_id: []const u8, text: []const u8) !U8Slice {
-        var m = LSPMessages.textDocumentDidOpen{
+        const m = LSPMessages.textDocumentDidOpen{
             .jsonrpc = "2.0",
             .method = "textDocument/didOpen",
             .params = LSPMessages.textDocumentDidOpenParams{
@@ -561,7 +562,7 @@ pub const LSPWriter = struct {
     }
 
     fn textDocumentReference(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, cursor_pos: Vec2u) !U8Slice {
-        var m = LSPMessages.textDocumentReferences{
+        const m = LSPMessages.textDocumentReferences{
             .jsonrpc = "2.0",
             .method = "textDocument/references",
             .id = msg_id,
@@ -582,7 +583,7 @@ pub const LSPWriter = struct {
     }
 
     fn textDocumentDefinition(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, cursor_pos: Vec2u) !U8Slice {
-        var m = LSPMessages.textDocumentDefinition{
+        const m = LSPMessages.textDocumentDefinition{
             .jsonrpc = "2.0",
             .method = "textDocument/definition",
             .id = msg_id,
@@ -600,7 +601,7 @@ pub const LSPWriter = struct {
     }
 
     fn textDocumentDidChange(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, range: ?Vec4u, new_text: []const u8) !U8Slice {
-        var content_change = if (range) |r| LSPMessages.contentChange{
+        const content_change = if (range) |r| LSPMessages.contentChange{
             .range = LSPMessages.range{
                 .start = LSPMessages.position{ .character = r.a, .line = r.b },
                 .end = LSPMessages.position{ .character = r.c, .line = r.d },
@@ -610,7 +611,7 @@ pub const LSPWriter = struct {
             .range = null,
             .text = new_text,
         };
-        var m = LSPMessages.textDocumentDidChange{
+        const m = LSPMessages.textDocumentDidChange{
             .jsonrpc = "2.0",
             .method = "textDocument/didChange",
             .params = LSPMessages.didChangeParams{
@@ -625,7 +626,7 @@ pub const LSPWriter = struct {
     }
 
     fn textDocumentCompletion(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, cursor_pos: Vec2u) !U8Slice {
-        var m = LSPMessages.textDocumentCompletion{
+        const m = LSPMessages.textDocumentCompletion{
             .jsonrpc = "2.0",
             .method = "textDocument/completion",
             .id = msg_id,

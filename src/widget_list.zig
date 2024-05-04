@@ -184,7 +184,7 @@ pub const WidgetList = struct {
     /// Slices in `filtered_entries` are pointing to values in `entries`.
     pub fn filter(self: *WidgetList) !void {
         self.filtered_entries.shrinkAndFree(0);
-        var entered_filter = (try self.input.text()).bytes();
+        const entered_filter = (try self.input.text()).bytes();
         for (self.entries.items) |entry| {
             var add = (entered_filter.len == 0);
             if (entered_filter.len > 0) {
@@ -238,8 +238,8 @@ pub const WidgetList = struct {
         // ----
 
         if (self.filter_type != .Autocomplete) {
-            var input_pos = Vec2u{ .a = position.a + 5, .b = position.b + 5 };
-            var input_size = Vec2u{ .a = widget_size.a, .b = input_height };
+            const input_pos = Vec2u{ .a = position.a + 5, .b = position.b + 5 };
+            const input_size = Vec2u{ .a = widget_size.a, .b = input_height };
 
             self.input.render(sdl_renderer, font, scaler, input_pos, input_size, one_char_size);
         }
@@ -248,15 +248,15 @@ pub const WidgetList = struct {
         // ----
 
         if (self.filter_type != .Autocomplete) {
-            var label_pos = Vec2u{ .a = position.a + one_char_size.a, .b = position.b + (one_char_size.b * 2) };
+            const label_pos = Vec2u{ .a = position.a + one_char_size.a, .b = position.b + (one_char_size.b * 2) };
             Draw.text(font, scaler, label_pos, widget_size.a, Colors.white, self.label.bytes());
         }
 
         // list the entries
         // ----
 
+        const visible_entries: usize = (widget_size.b - (input_height + entry_sep_margin)) / (one_char_size.b + input_sep_margin);
         var offset: usize = 0;
-        var visible_entries: usize = (widget_size.b - (input_height + entry_sep_margin)) / (one_char_size.b + input_sep_margin);
         var entry_offset: usize = 0;
 
         // offset what we're looking at if the selected entry would not be visible.
@@ -266,9 +266,9 @@ pub const WidgetList = struct {
 
         var idx: usize = entry_offset;
         while (idx < self.filtered_entries.items.len) {
-            var entry = self.filtered_entries.items[idx];
-            var pos = Vec2u{ .a = position.a, .b = position.b + input_height + label_sep_margin + entry_sep_margin + offset };
-            var size = Vec2u{ .a = widget_size.a, .b = one_char_size.b + entry_sep_margin + 1 };
+            const entry = self.filtered_entries.items[idx];
+            const pos = Vec2u{ .a = position.a, .b = position.b + input_height + label_sep_margin + entry_sep_margin + offset };
+            const size = Vec2u{ .a = widget_size.a, .b = one_char_size.b + entry_sep_margin + 1 };
 
             self.renderEntry(
                 sdl_renderer,
@@ -305,16 +305,16 @@ pub const WidgetList = struct {
         }
 
         // maximum amount if visible glyph
-        var total_visible_glyph_count = @divTrunc(scaler.Scaleu(size.a), @divTrunc(font.font_size, 2)) - 1;
+        const total_visible_glyph_count = @divTrunc(scaler.Scaleu(size.a), @divTrunc(font.font_size, 2)) - 1;
 
         switch (entry.type) {
             .SearchResult => {
-                var base = std.fs.path.basename(entry.data.bytes());
-                var filename = std.fmt.allocPrint(self.allocator, "{s}:{d}  ", .{ base, entry.data_pos.b }) catch |err| {
+                const base = std.fs.path.basename(entry.data.bytes());
+                const filename = std.fmt.allocPrint(self.allocator, "{s}:{d}  ", .{ base, entry.data_pos.b }) catch |err| {
                     std.log.err("WidgetList.renderEntry: can't create filename with line number string: {}", .{err});
                     return;
                 };
-                var filename_size = font.textPixelSize(scaler, filename);
+                const filename_size = font.textPixelSize(scaler, filename);
 
                 Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, size.a, Colors.white, filename);
 
@@ -335,8 +335,9 @@ pub const WidgetList = struct {
                     return;
                 };
 
-                var start_bytes_offset = it.current_byte;
+                const start_bytes_offset = it.current_byte;
                 var glyphs_count: usize = 0;
+
                 while (glyphs_count <= content_visible_glyph_count and it.next()) {
                     glyphs_count += 1;
                 }
@@ -357,7 +358,7 @@ pub const WidgetList = struct {
             else => {
                 var content = entry.label.bytes();
 
-                var it = UTF8Iterator.init(content, self.x_offset) catch |err| {
+                const it = UTF8Iterator.init(content, self.x_offset) catch |err| {
                     std.log.err("WidgetList.renderEntry: can't create an UTF8Iterator: {}", .{err});
                     return;
                 };

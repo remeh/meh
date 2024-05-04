@@ -1,6 +1,6 @@
 const std = @import("std");
-const Queue = std.atomic.Queue;
 
+const AtomicQueue = @import("atomic_queue.zig").AtomicQueue;
 const LSPContext = @import("lsp.zig").LSPContext;
 const LSPCompletion = @import("lsp.zig").LSPCompletion;
 const LSPDiagnostic = @import("lsp.zig").LSPDiagnostic;
@@ -17,8 +17,8 @@ const Vec4u = @import("vec.zig").Vec4u;
 const stdoutThreadContext = struct {
     allocator: std.mem.Allocator,
     child: *std.ChildProcess,
-    is_running: std.atomic.Atomic(bool),
-    queue: std.atomic.Queue(U8Slice),
+    is_running: std.atomic.Value(bool),
+    queue: AtomicQueue(U8Slice),
 };
 
 pub const LSPThread = struct {
@@ -47,8 +47,8 @@ pub const LSPThread = struct {
         var stdout_ctx = stdoutThreadContext{
             .allocator = ctx.allocator,
             .child = &child,
-            .queue = std.atomic.Queue(U8Slice).init(),
-            .is_running = std.atomic.Atomic(bool).init(true),
+            .queue = AtomicQueue(U8Slice).init(),
+            .is_running = std.atomic.Value(bool).init(true),
         };
 
         const stdout_thread = try std.Thread.spawn(
@@ -67,7 +67,7 @@ pub const LSPThread = struct {
             // the lsp server thread is useless and should stop.
             // ---------------------------------------------
 
-            var stdout_thread_is_running = stdout_ctx.is_running.load(.Acquire);
+            const stdout_thread_is_running = stdout_ctx.is_running.load(.acquire);
             if (!stdout_thread_is_running) {
                 running = false;
             }
@@ -83,7 +83,7 @@ pub const LSPThread = struct {
 
                 if (LSPThread.interpret(ctx.allocator, &requests, node.data.bytes())) |response| {
                     // send it back to the main thread, converted to an LSPResponse
-                    if (ctx.allocator.create(Queue(LSPResponse).Node)) |new_node| {
+                    if (ctx.allocator.create(AtomicQueue(LSPResponse).Node)) |new_node| {
                         new_node.data = response;
                         ctx.response_queue.put(new_node);
                     } else |err| {
@@ -114,7 +114,7 @@ pub const LSPThread = struct {
                     // another kind of message, write it on the lsp server stdin
                     if (child.stdin != null) {
                         // format and write the data on stdin
-                        var header = try std.fmt.allocPrint(ctx.allocator, "Content-Length: {d}\r\n\r\n", .{node.data.json.bytes().len});
+                        const header = try std.fmt.allocPrint(ctx.allocator, "Content-Length: {d}\r\n\r\n", .{node.data.json.bytes().len});
                         // std.log.debug("request dump: {s}{s}", .{ header, node.data.json.bytes() });
                         _ = try child.stdin.?.write(header);
                         ctx.allocator.free(header);
@@ -133,10 +133,10 @@ pub const LSPThread = struct {
                 ctx.allocator.destroy(node);
             }
 
-            std.os.nanosleep(0, 100_000_000); // TODO(remy): replace with epoll/kqueue?
+            std.posix.nanosleep(0, 100_000_000); // TODO(remy): replace with epoll/kqueue?
         }
 
-        ctx.is_running.store(false, .Release);
+        ctx.is_running.store(false, .release);
 
         // kill the LSP server process
         _ = try child.kill();
@@ -182,15 +182,15 @@ pub const LSPThread = struct {
 
         std.log.debug("reading thread started", .{});
 
-        var poll_fds = [_]std.os.pollfd{
-            .{ .fd = ctx.child.stdout.?.handle, .events = std.os.POLL.IN, .revents = undefined },
+        var poll_fds = [_]std.posix.pollfd{
+            .{ .fd = ctx.child.stdout.?.handle, .events = std.posix.POLL.IN, .revents = undefined },
         };
 
         const timeout = 1000; // ms
-        const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
+        const err_mask = std.posix.POLL.ERR | std.posix.POLL.NVAL | std.posix.POLL.HUP;
 
         while (true) {
-            const events = try std.os.poll(&poll_fds, timeout);
+            const events = try std.posix.poll(&poll_fds, timeout);
             if (events == 0) {
                 continue; // std.os.poll has timeout
             }
@@ -200,7 +200,7 @@ pub const LSPThread = struct {
             }
 
             // when there is data to read
-            if (poll_fds[0].revents & std.os.POLL.IN != 0) {
+            if (poll_fds[0].revents & std.posix.POLL.IN != 0) {
                 // one of the error happened, most likely the lsp server which has been
                 // teared down, just leave.
                 if (poll_fds[0].revents & err_mask != 0) {
@@ -208,7 +208,7 @@ pub const LSPThread = struct {
                 }
 
                 // read available data
-                read = std.os.read(ctx.child.stdout.?.handle, buff) catch |err| {
+                read = std.posix.read(ctx.child.stdout.?.handle, buff) catch |err| {
                     // it has been closed since, it means that the LSP server has been teared down.
                     if (err == error.NotOpenForReading) {
                         break;
@@ -223,7 +223,7 @@ pub const LSPThread = struct {
                     try slice.appendConst(buff[0..read]);
 
                     // send the data to the lsp server thread
-                    if (ctx.allocator.create(std.atomic.Queue(U8Slice).Node)) |new_node| {
+                    if (ctx.allocator.create(AtomicQueue(U8Slice).Node)) |new_node| {
                         if (slice.copy(ctx.allocator)) |copy| {
                             new_node.data = copy;
                             ctx.queue.put(new_node);
@@ -245,7 +245,7 @@ pub const LSPThread = struct {
             }
         }
 
-        ctx.is_running.store(false, .Release);
+        ctx.is_running.store(false, .release);
         std.log.debug("reading thread stopped", .{});
 
         return;
@@ -255,7 +255,7 @@ pub const LSPThread = struct {
     // TODO(remy): comment me
     fn interpret(allocator: std.mem.Allocator, requests: *std.AutoHashMap(i64, LSPMessageType), response: []const u8) !LSPResponse {
         // isolate the json
-        var idx = std.mem.indexOf(u8, response, "{");
+        const idx = std.mem.indexOf(u8, response, "{");
         if (idx == null) {
             return LSPError.MalformedResponse;
         }

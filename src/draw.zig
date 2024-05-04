@@ -9,8 +9,8 @@ const Vec2u = @import("vec.zig").Vec2u;
 
 pub const Draw = struct {
     pub fn fillRect(sdl_renderer: *c.SDL_Renderer, scaler: Scaler, position: Vec2u, size: Vec2u, color: Vec4u) void {
-        var scaled_pos = scaler.Scale2u(position);
-        var scaled_size = scaler.Scale2u(size);
+        const scaled_pos = scaler.Scale2u(position);
+        const scaled_size = scaler.Scale2u(size);
 
         _ = c.SDL_SetRenderDrawColor(
             sdl_renderer,
@@ -31,8 +31,8 @@ pub const Draw = struct {
     }
 
     pub fn rect(sdl_renderer: *c.SDL_Renderer, scaler: Scaler, position: Vec2u, size: Vec2u, color: Vec4u) void {
-        var scaled_pos = scaler.Scale2u(position);
-        var scaled_size = scaler.Scale2u(size);
+        const scaled_pos = scaler.Scale2u(position);
+        const scaled_size = scaler.Scale2u(size);
 
         _ = c.SDL_SetRenderDrawColor(
             sdl_renderer,
@@ -53,8 +53,8 @@ pub const Draw = struct {
     }
 
     pub fn line(sdl_renderer: *c.SDL_Renderer, scaler: Scaler, start: Vec2u, end: Vec2u, color: Vec4u) void {
-        var scaled_start = scaler.Scale2u(start);
-        var scaled_end = scaler.Scale2u(end);
+        const scaled_start = scaler.Scale2u(start);
+        const scaled_end = scaler.Scale2u(end);
 
         _ = c.SDL_SetRenderDrawColor(
             sdl_renderer,
@@ -78,8 +78,8 @@ pub const Draw = struct {
             return;
         }
 
-        var scaled_pos = scaler.Scale2u(position);
-        var scaled_max_width = scaler.Scaleu(max_width);
+        const scaled_pos = scaler.Scale2u(position);
+        const scaled_max_width = scaler.Scaleu(max_width);
         font.drawText(scaled_pos, scaled_max_width, color, str);
     }
 
@@ -94,7 +94,7 @@ pub const Draw = struct {
             return;
         }
 
-        var scaled_pos = scaler.Scale2u(position);
+        const scaled_pos = scaler.Scale2u(position);
         font.drawGlyph(scaled_pos, color, str);
     }
 };

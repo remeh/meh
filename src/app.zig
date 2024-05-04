@@ -173,8 +173,8 @@ pub const App = struct {
 
         // create the SDL Window
 
-        var window_size = Vec2u{ .a = 800, .b = 800 };
-        var sdl_window = c.SDL_CreateWindow(
+        const window_size = Vec2u{ .a = 800, .b = 800 };
+        const sdl_window = c.SDL_CreateWindow(
             "meh",
             c.SDL_WINDOWPOS_UNDEFINED,
             c.SDL_WINDOWPOS_UNDEFINED,
@@ -194,7 +194,7 @@ pub const App = struct {
 
         // create the renderer
 
-        var sdl_renderer: ?*c.SDL_Renderer = c.SDL_CreateRenderer(sdl_window, -1, c.SDL_RENDERER_ACCELERATED);
+        const sdl_renderer: ?*c.SDL_Renderer = c.SDL_CreateRenderer(sdl_window, -1, c.SDL_RENDERER_ACCELERATED);
         if (sdl_renderer == null) {
             std.log.err("App.init: can't create an SDL Renderer.", .{});
             return AppError.CantInit;
@@ -208,14 +208,14 @@ pub const App = struct {
 
         // load the fonts
 
-        var font_lowdpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 18);
-        var font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 22);
-        var font_hidpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 32);
+        const font_lowdpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 18);
+        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 22);
+        const font_hidpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 32);
 
         // working directory
 
         var working_dir = U8Slice.initEmpty(allocator);
-        var fullpath = try std.fs.realpathAlloc(allocator, ".");
+        const fullpath = try std.fs.realpathAlloc(allocator, ".");
         defer allocator.free(fullpath);
         try working_dir.appendConst(fullpath);
 
@@ -303,7 +303,7 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         // make sure that the provided filepath is absolute
-        var path = std.fs.realpathAlloc(self.allocator, filepath) catch |err| {
+        const path = std.fs.realpathAlloc(self.allocator, filepath) catch |err| {
             std.log.err("App.openFile: can't open {s}: {}", .{ filepath, err });
             return AppError.CantOpenFile;
         };
@@ -430,7 +430,7 @@ pub const App = struct {
         std.log.debug("App.startLSPClient: starting an LSP client for {s}", .{fullpath});
 
         var extension = std.fs.path.extension(fullpath);
-        var lsp_server = LSP.serverFromExtension(extension) catch |err| {
+        const lsp_server = LSP.serverFromExtension(extension) catch |err| {
             if (err != LSPError.UnknownExtension) {
                 std.log.err("App.startLSPClient: can't start an LSP server: {}", .{err});
             }
@@ -457,10 +457,9 @@ pub const App = struct {
     /// refreshWindowTitle refreshes the WM window title using the currently
     /// focused WidgetText editor information.
     fn refreshWindowTitle(self: App) !void {
-        var wte = self.currentWidgetTextEdit();
+        const wte = self.currentWidgetTextEdit();
         var title = try U8Slice.initFromSlice(self.allocator, "meh - ");
         defer title.deinit();
-
 
         if (std.fs.path.dirname(wte.editor.buffer.fullpath.data.items)) |dir| {
             try title.appendConst(std.fs.path.basename(dir)); // we only want the dir right before
@@ -506,7 +505,7 @@ pub const App = struct {
         }
 
         const textedit = self.currentWidgetTextEdit();
-        var buffer_pos = BufferPosition{
+        const buffer_pos = BufferPosition{
             .fullpath = textedit.editor.buffer.fullpath.copy(self.allocator) catch |err| {
                 std.log.err("App.storeBufferPosition: can't copy buffer fullpath: {}", .{err});
                 return;
@@ -583,7 +582,7 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn peekLine(self: *App, filepath: []const u8, line: usize) !U8Slice {
         // make sure that the provided fullpath is absolute
-        var fullpath = try std.fs.realpathAlloc(self.allocator, filepath);
+        const fullpath = try std.fs.realpathAlloc(self.allocator, filepath);
         defer self.allocator.free(fullpath);
 
         // check if we have this data in loaded buffers
@@ -659,7 +658,7 @@ pub const App = struct {
         return;
     }
     pub fn increaseFont2(self: *App) void {
-        var font = Font.init(self.allocator, self.sdl_renderer, "./res/UbuntuMono-Regular.ttf", self.current_font.font_size + 2) catch |err| {
+        const font = Font.init(self.allocator, self.sdl_renderer, "./res/UbuntuMono-Regular.ttf", self.current_font.font_size + 2) catch |err| {
             std.log.err("App.increaseFont: can't load temporary font: {}", .{err});
             return;
         };
@@ -680,8 +679,8 @@ pub const App = struct {
         self.refreshWindowPixelSize();
         self.refreshWindowScaledSize();
         self.refreshDPIMode();
-        var scaler = Scaler{ .scale = self.window_scaling };
-        var one_char_size = self.oneCharSize();
+        const scaler = Scaler{ .scale = self.window_scaling };
+        const one_char_size = self.oneCharSize();
 
         // render list
         // -----------
@@ -839,7 +838,7 @@ pub const App = struct {
     /// refreshDPIMode refreshes the DPI mode using the stored window pixel size
     /// and stored window scaled size.
     fn refreshDPIMode(self: *App) void {
-        var display_index: c_int = c.SDL_GetWindowDisplayIndex(self.sdl_window);
+        const display_index: c_int = c.SDL_GetWindowDisplayIndex(self.sdl_window);
         var desktop_resolution: c.SDL_DisplayMode = undefined;
         _ = c.SDL_GetDesktopDisplayMode(display_index, &desktop_resolution); // get the resolution
 
@@ -877,7 +876,7 @@ pub const App = struct {
 
     /// showMessageBoxError displays a small error message closable with Escape or Return.
     pub fn showMessageBoxError(self: *App, comptime label: []const u8, args: anytype) void {
-        var message = std.fmt.allocPrint(self.allocator, label, args) catch |err| {
+        const message = std.fmt.allocPrint(self.allocator, label, args) catch |err| {
             std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
             return;
         };
@@ -1171,8 +1170,8 @@ pub const App = struct {
     // -----------------------
 
     fn autocompleteEvents(self: *App, event: c.SDL_Event) void {
-        var input_state = c.SDL_GetKeyboardState(null);
-        var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
+        const input_state = c.SDL_GetKeyboardState(null);
+        const ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
@@ -1325,8 +1324,8 @@ pub const App = struct {
     }
 
     fn searchResultsEvents(self: *App, event: c.SDL_Event) void {
-        var input_state = c.SDL_GetKeyboardState(null);
-        var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
+        const input_state = c.SDL_GetKeyboardState(null);
+        const ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
@@ -1390,8 +1389,8 @@ pub const App = struct {
     }
 
     fn lookupEvents(self: *App, event: c.SDL_Event) void {
-        var input_state = c.SDL_GetKeyboardState(null);
-        var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
+        const input_state = c.SDL_GetKeyboardState(null);
+        const ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
         //        var shift: bool = input_state[c.SDL_SCANCODE_LSHIFT] == 1 or input_state[c.SDL_SCANCODE_RSHIFT] == 1;
         //        var cmd: bool = input_state[c.SDL_SCANCODE_LGUI] == 1 or input_state[c.SDL_SCANCODE_RGUI] == 1;
         switch (event.type) {
@@ -1458,10 +1457,10 @@ pub const App = struct {
     }
 
     fn editorEvents(self: *App, event: c.SDL_Event) void {
-        var input_state = c.SDL_GetKeyboardState(null);
-        var ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
-        var shift: bool = input_state[c.SDL_SCANCODE_LSHIFT] == 1 or input_state[c.SDL_SCANCODE_RSHIFT] == 1;
-        var cmd: bool = input_state[c.SDL_SCANCODE_LGUI] == 1 or input_state[c.SDL_SCANCODE_RGUI] == 1;
+        const input_state = c.SDL_GetKeyboardState(null);
+        const ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
+        const shift: bool = input_state[c.SDL_SCANCODE_LSHIFT] == 1 or input_state[c.SDL_SCANCODE_RSHIFT] == 1;
+        const cmd: bool = input_state[c.SDL_SCANCODE_LGUI] == 1 or input_state[c.SDL_SCANCODE_RGUI] == 1;
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
@@ -1566,7 +1565,7 @@ pub const App = struct {
                 _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
             },
             c.SDL_MOUSEMOTION => {
-                var mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
+                const mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
                 var widget_pos = self.widget_text_edit_pos;
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
@@ -1574,7 +1573,7 @@ pub const App = struct {
                 self.currentWidgetTextEdit().onMouseMove(mouse_coord, widget_pos);
             },
             c.SDL_MOUSEBUTTONDOWN => {
-                var mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
+                const mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
                 var widget_pos = self.widget_text_edit_pos;
                 // on click, see if we should change the editor selection
                 if (self.has_split_view) {
@@ -1590,7 +1589,7 @@ pub const App = struct {
                 self.currentWidgetTextEdit().onMouseStartSelection(mouse_coord, widget_pos);
             },
             c.SDL_MOUSEBUTTONUP => {
-                var mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
+                const mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
                 var widget_pos = self.widget_text_edit_pos;
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;

@@ -51,7 +51,7 @@ pub const Font = struct {
         // TODO(remy): load the font from filepath (instead of using the font_data const)
 
         // will be cleaned up by the TTF_OpenFontRW call (the second parameter set to 1).
-        var rwops: *c.SDL_RWops = c.SDL_RWFromConstMem(font_data, font_data.len);
+        const rwops: *c.SDL_RWops = c.SDL_RWFromConstMem(font_data, font_data.len);
 
         var font: *c.TTF_Font = undefined;
         if (c.TTF_OpenFontRW(rwops, 1, @as(c_int, @intCast(font_size)))) |f| {
@@ -76,7 +76,7 @@ pub const Font = struct {
 
         // create the font atlas
 
-        var surface: *c.SDL_Surface = c.SDL_CreateRGBSurface(0, atlas_size, atlas_size, 32, 0x00, 0x00, 0x00, 0x00);
+        const surface: *c.SDL_Surface = c.SDL_CreateRGBSurface(0, atlas_size, atlas_size, 32, 0x00, 0x00, 0x00, 0x00);
         _ = c.SDL_SetSurfaceBlendMode(surface, c.SDL_BLENDMODE_BLEND);
         _ = c.SDL_SetColorKey(surface, c.SDL_TRUE, c.SDL_MapRGBA(surface.format, 0, 0, 0, 255));
 
@@ -104,7 +104,7 @@ pub const Font = struct {
     /// bindTexture generates a texture from the given SDL surface and stores it
     /// in the font atlas.
     fn bindTexture(self: *Font, surface: *c.SDL_Surface) !void {
-        var texture = c.SDL_CreateTextureFromSurface(self.sdl_renderer, surface);
+        const texture = c.SDL_CreateTextureFromSurface(self.sdl_renderer, surface);
         if (texture == null) {
             std.log.err("Font.buildAtlas: can't create texture for font {s} size {d}", .{ self.filepath.bytes(), self.font_size });
             return FontError.CantBuildAtlas;
@@ -118,8 +118,8 @@ pub const Font = struct {
     fn buildAtlasRange(self: *Font, surface: *c.SDL_Surface, start: u21, end: u21) !void {
         var text: *c.SDL_Surface = undefined;
 
-        var white = c.SDL_Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
-        var bg = c.SDL_Color{ .r = 0, .g = 0, .b = 0, .a = 0 };
+        const white = c.SDL_Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
+        const bg = c.SDL_Color{ .r = 0, .g = 0, .b = 0, .a = 0 };
 
         var i: u21 = start;
         var b: [5]u8 = std.mem.zeroes([5]u8);
@@ -130,13 +130,13 @@ pub const Font = struct {
                 continue;
             }
 
-            var glyph_bytes_size = try std.unicode.utf8Encode(@as(u21, @intCast(i)), b[0..]);
+            const glyph_bytes_size = try std.unicode.utf8Encode(@as(u21, @intCast(i)), b[0..]);
             b[glyph_bytes_size] = 0;
 
             text = c.TTF_RenderUTF8_LCD(self.ttf_font, b[0..], white, bg);
 
             // we store the glyph size because we'll need it after having freed the text surface.
-            var glyph_size = Vec2u{ .a = @as(usize, @intCast(text.w)), .b = @as(usize, @intCast(text.h)) };
+            const glyph_size = Vec2u{ .a = @as(usize, @intCast(text.w)), .b = @as(usize, @intCast(text.h)) };
 
             var rect: c.SDL_Rect = c.SDL_Rect{
                 .x = @as(c_int, @intCast(self.atlas.current_pos.a)),
@@ -179,12 +179,12 @@ pub const Font = struct {
             return Vec4u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
         }
 
-        var g: u21 = std.unicode.utf8Decode(glyph) catch |err| {
+        const g: u21 = std.unicode.utf8Decode(glyph) catch |err| {
             std.log.err("Font.glyphPos: can't decode utf8 glyph: {s}: {}", .{ glyph, err });
             return Vec4u{ .a = 0, .b = 0, .c = self.font_size / 2, .d = self.font_size };
         };
 
-        var glyph_pos = self.atlas.glyph_pos.get(g);
+        const glyph_pos = self.atlas.glyph_pos.get(g);
         if (glyph_pos != null) {
             return glyph_pos.?;
         }
@@ -199,7 +199,7 @@ pub const Font = struct {
             return;
         }
 
-        var glyph_rect_in_atlas = self.glyphPos(str);
+        const glyph_rect_in_atlas = self.glyphPos(str);
         var src_rect = c.SDL_Rect{
             .x = @as(c_int, @intCast(glyph_rect_in_atlas.a)),
             .y = @as(c_int, @intCast(glyph_rect_in_atlas.b)),
@@ -213,7 +213,7 @@ pub const Font = struct {
             .w = @divTrunc(@as(c_int, @intCast(self.font_size)), 2),
             .h = @as(c_int, @intCast(self.font_size)),
         };
-        var pdst_rect: *c.SDL_Rect = &dst_rect; // XXX(remy): don't use me
+        const pdst_rect: *c.SDL_Rect = &dst_rect; // XXX(remy): don't use me
 
         _ = c.SDL_SetTextureColorMod(self.atlas.texture, @as(u8, @intCast(color.a)), @as(u8, @intCast(color.b)), @as(u8, @intCast(color.c)));
         _ = c.SDL_RenderCopy(self.sdl_renderer, self.atlas.texture, &src_rect, pdst_rect);
@@ -255,8 +255,8 @@ pub const Font = struct {
         if (text.len == 0) {
             return 0;
         }
-        var unscaled = @divTrunc(self.font_size, 2) * text.len;
-        var scaled = @as(usize, @intFromFloat(@divTrunc(@as(f32, @floatFromInt(unscaled)), scaler.scale)));
+        const unscaled = @divTrunc(self.font_size, 2) * text.len;
+        const scaled = @as(usize, @intFromFloat(@divTrunc(@as(f32, @floatFromInt(unscaled)), scaler.scale)));
         return scaled;
     }
 };

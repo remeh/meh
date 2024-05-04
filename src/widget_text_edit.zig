@@ -236,10 +236,10 @@ pub const WidgetTextEdit = struct {
     /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
     /// Returns x offset introduced by drawing the lines numbers
     fn renderLineNumbers(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
-        var text_pos_x: usize = draw_pos.a + one_char_size.a;
+        const text_pos_x: usize = draw_pos.a + one_char_size.a;
 
         var carray: [128]u8 = std.mem.zeroes([128]u8);
-        var cbuff = &carray;
+        const cbuff = &carray;
 
         var i: usize = self.viewport.lines.a;
         var y_offset: usize = draw_pos.b;
@@ -252,7 +252,7 @@ pub const WidgetTextEdit = struct {
             max_digits += 1;
             line_count /= 10;
         }
-        var width = (max_digits + 2) * one_char_size.a;
+        const width = (max_digits + 2) * one_char_size.a;
 
         // render the separation line
 
@@ -322,7 +322,7 @@ pub const WidgetTextEdit = struct {
     fn renderLines(self: WidgetTextEdit, font: Font, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u, focused: bool) usize {
         var i: usize = self.viewport.lines.a;
         var y_offset: usize = 0;
-        var left_blank_offset: usize = 5;
+        const left_blank_offset: usize = 5;
 
         // if there is nothing to render, it means we have opened a completely
         // empty buffer. Still, we want to render a cursor or it looks strange.
@@ -527,10 +527,10 @@ pub const WidgetTextEdit = struct {
     /// TODO(remy): comment me
     fn refreshSyntaxHighlighting(self: *WidgetTextEdit) void {
         var line_start = @max(0, self.viewport.lines.a);
-        var line_end = @min(self.viewport.lines.b, self.editor.linesCount());
+        const line_end = @min(self.viewport.lines.b, self.editor.linesCount());
 
         while (line_start < line_end) : (line_start += 1) {
-            var line = self.editor.buffer.getLine(line_start) catch |err| {
+            const line = self.editor.buffer.getLine(line_start) catch |err| {
                 std.log.err("WidgetTextEdit.refreshSyntaxHighlighting: can't getLine: {}", .{err});
                 continue;
             };
@@ -618,26 +618,26 @@ pub const WidgetTextEdit = struct {
 
         // the cursor is below
         if (self.cursor.pos.b + glyph_offset_before_move > self.viewport.lines.b) {
-            var distance = self.cursor.pos.b + glyph_offset_before_move - self.viewport.lines.b;
+            const distance = self.cursor.pos.b + glyph_offset_before_move - self.viewport.lines.b;
             self.viewport.lines.a += distance;
             self.viewport.lines.b += distance;
         }
 
         // the cursor is above
         if (self.cursor.pos.b < self.viewport.lines.a) {
-            var count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
+            const count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
             self.viewport.lines.a = self.cursor.pos.b;
             self.viewport.lines.b = self.viewport.lines.a + count_lines_visible;
         }
 
         // start by reseting the viewport to 0
-        var count_col_visible = self.viewport.columns.b - self.viewport.columns.a;
+        const count_col_visible = self.viewport.columns.b - self.viewport.columns.a;
         self.viewport.columns.a = 0;
         self.viewport.columns.b = count_col_visible;
 
         // the cursor is on the right
         if (self.cursor.pos.a + offset_before_move > self.viewport.columns.b) {
-            var distance = self.cursor.pos.a + offset_before_move - self.viewport.columns.b;
+            const distance = self.cursor.pos.a + offset_before_move - self.viewport.columns.b;
             self.viewport.columns.a += distance;
             self.viewport.columns.b += distance;
         }
@@ -648,7 +648,7 @@ pub const WidgetTextEdit = struct {
     pub fn centerCursor(self: *WidgetTextEdit) void {
         self.computeViewport();
 
-        var count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
+        const count_lines_visible = self.viewport.lines.b - self.viewport.lines.a;
         if (self.editor.buffer.lines.items.len <= count_lines_visible) {
             // no need to center, the whole file is visible
             return;
@@ -758,13 +758,13 @@ pub const WidgetTextEdit = struct {
     /// paste is writing what's available in the clipboard in the WidgetTextEdit.
     pub fn paste(self: *WidgetTextEdit) !void {
         // read data from the clipboard
-        var data = c.SDL_GetClipboardText();
+        const data = c.SDL_GetClipboardText();
         defer c.SDL_free(data);
         // turn into an U8Slice
         var str = try U8Slice.initFromCSlice(self.allocator, data);
         defer str.deinit();
         // paste in the editor
-        var new_cursor_pos = try self.editor.paste(self.cursor.pos, str);
+        const new_cursor_pos = try self.editor.paste(self.cursor.pos, str);
         self.editor.historyEndBlock();
         // move the cursor
         self.setCursorPos(new_cursor_pos, .Scroll);
@@ -819,7 +819,7 @@ pub const WidgetTextEdit = struct {
 
         // restore the column on up/down movement
         if (direction == .Up or direction == .Down) {
-            var col = @max(self.cursor.max_last_col_pos, self.cursor.pos.a);
+            const col = @max(self.cursor.max_last_col_pos, self.cursor.pos.a);
             self.cursor.max_last_col_pos = col;
 
             if (self.cursor.pos.a < col) {
@@ -844,7 +844,7 @@ pub const WidgetTextEdit = struct {
                 // character of the current line, which is the \n of the
                 // line.
                 if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
-                    var utf8size = line.utf8size() catch 1;
+                    const utf8size = line.utf8size() catch 1;
                     if (self.cursor.pos.a == utf8size - 1) {
                         std.log.warn("WidgetTextEdit.onTextInput: tried to replace last character of the line", .{});
                         // only one glyph to change in this mode
@@ -880,7 +880,7 @@ pub const WidgetTextEdit = struct {
                 if (self.input_mode == .F) {
                     direction = SearchDirection.Before;
                 }
-                var new_pos = self.editor.findGlyphInLine(
+                const new_pos = self.editor.findGlyphInLine(
                     self.cursor.pos,
                     txt,
                     direction,
@@ -895,11 +895,11 @@ pub const WidgetTextEdit = struct {
                 switch (txt[0]) {
                     // delete the word under the cursor
                     'i' => {
-                        var word_pos = self.editor.wordPosAt(self.cursor.pos) catch |err| {
+                        const word_pos = self.editor.wordPosAt(self.cursor.pos) catch |err| {
                             std.log.err("WidgetTextEdit.onTextInput: di: {}", .{err});
                             return true;
                         };
-                        var cursor_pos = self.editor.deleteChunk(
+                        const cursor_pos = self.editor.deleteChunk(
                             Vec2u{ .a = word_pos.a, .b = self.cursor.pos.b },
                             Vec2u{ .a = word_pos.b, .b = self.cursor.pos.b },
                             .Input,
@@ -1063,7 +1063,7 @@ pub const WidgetTextEdit = struct {
             },
             else => {
                 var i: usize = 0;
-                var pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
+                const pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
                 if (shift) {
                     if (self.editor.buffer.getLine(pos.b)) |line| {
                         while (i < tab_spaces) : (i += 1) {
@@ -1122,7 +1122,7 @@ pub const WidgetTextEdit = struct {
             return;
         }
 
-        var cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
+        const cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
 
         self.updateSelection(cursor_pos);
         self.setCursorPos(cursor_pos, .Scroll);
@@ -1208,15 +1208,15 @@ pub const WidgetTextEdit = struct {
         }
 
         // move the mouse on the click
-        var cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
+        const cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
         self.setCursorPos(cursor_pos, .None); // no need to scroll here we scroll next line
         self.validateCursorPos(.Scroll);
 
         // use the position (which may have been corrected) as the selection start position
         self.startSelection(self.cursor.pos, .MouseSelection);
 
-        var word: ?[]const u8 = self.editor.wordAt(self.cursor.pos) catch null;
-        var has_changed = self.editor.syntax_highlighter.setHighlightWord(word);
+        const word: ?[]const u8 = self.editor.wordAt(self.cursor.pos) catch null;
+        const has_changed = self.editor.syntax_highlighter.setHighlightWord(word);
         if (has_changed) {
             self.refreshSyntaxHighlighting();
         }
@@ -1261,15 +1261,15 @@ pub const WidgetTextEdit = struct {
             var line = try self.editor.buffer.getLine(i);
             if (i == self.selection.start.b and i != self.selection.stop.b) {
                 // selection starting somewhere in the first line
-                var start_pos = try line.utf8pos(self.selection.start.a);
+                const start_pos = try line.utf8pos(self.selection.start.a);
                 try rv.appendConst(line.bytes()[start_pos..line.size()]);
             } else if (i == self.selection.start.b and i == self.selection.stop.b) {
                 // selection starting somewhere in the first line and ending in the same
-                var start_pos = try line.utf8pos(self.selection.start.a);
-                var end_pos = try line.utf8pos(self.selection.stop.a);
+                const start_pos = try line.utf8pos(self.selection.start.a);
+                const end_pos = try line.utf8pos(self.selection.stop.a);
                 try rv.appendConst(line.bytes()[start_pos..end_pos]);
             } else if (i != self.selection.start.b and i == self.selection.stop.b) {
-                var end_pos = try line.utf8pos(self.selection.stop.a);
+                const end_pos = try line.utf8pos(self.selection.stop.a);
                 try rv.appendConst(line.bytes()[0..end_pos]);
             } else {
                 try rv.appendConst(line.bytes());
@@ -1344,7 +1344,7 @@ pub const WidgetTextEdit = struct {
     /// using `validateCursorPos`. Note that `validateCursorPos(.Scroll)` is
     /// called if `scroll` is set to true.
     pub fn moveCursor(self: *WidgetTextEdit, move: Vec2i, scroll: bool) void {
-        var cursor_pos = Vec2utoi(self.cursor.pos);
+        const cursor_pos = Vec2utoi(self.cursor.pos);
         var line: *U8Slice = undefined;
         var utf8size: usize = 0;
 
@@ -1374,7 +1374,7 @@ pub const WidgetTextEdit = struct {
         if (cursor_pos.a + move.a <= 0 or line.size() == 0) {
             self.cursor.pos.a = 0;
         } else {
-            var after_move: usize = itou(cursor_pos.a + move.a);
+            const after_move: usize = itou(cursor_pos.a + move.a);
             if (UTF8Iterator.init(line.bytes(), after_move)) |it| {
                 self.cursor.pos.a = it.current_glyph;
             } else |err| {
@@ -1518,7 +1518,7 @@ pub const WidgetTextEdit = struct {
                     if (line.size() == 0) {
                         return;
                     }
-                    var start_line_pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
+                    const start_line_pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
                     var it = UTF8Iterator.init(line.bytes(), 0) catch |err| {
                         std.log.err("WidgetTextEdit: can't create an iterator for RespectPreviousLineIndent: {}", .{err});
                         return;
@@ -1574,7 +1574,7 @@ pub const WidgetTextEdit = struct {
     /// goToLine moves the cursor to the given line.
     /// First line starts at 0.
     pub fn goToLine(self: *WidgetTextEdit, line_number: usize, scroll: ScrollBehavior) void {
-        var new_pos = Vec2u{ .a = self.cursor.pos.a, .b = line_number };
+        const new_pos = Vec2u{ .a = self.cursor.pos.a, .b = line_number };
         self.setCursorPos(new_pos, .None); // no need to scroll here, we'll do it next function call
         self.validateCursorPos(scroll);
     }
@@ -1582,7 +1582,7 @@ pub const WidgetTextEdit = struct {
     /// goToCol moves the cursor to the given column.
     /// First column starts at 0.
     pub fn goToColumn(self: *WidgetTextEdit, col: usize, scroll: ScrollBehavior) void {
-        var new_pos = Vec2u{ .a = col, .b = self.cursor.pos.b };
+        const new_pos = Vec2u{ .a = col, .b = self.cursor.pos.b };
         self.setCursorPos(new_pos, .None); // no need to scroll here, we'll do it next function call
         self.validateCursorPos(scroll);
     }
@@ -1725,14 +1725,14 @@ test "widget_text_edit moveCursorSpecial" {
 
 test "widget_text_edit init deinit" {
     const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
+    const buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.deinit();
 }
 
 test "widget_text_edit isSelected" {
     const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    const buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.startSelection(Vec2u{ .a = 3, .b = 0 }, .KeyboardSelection);
@@ -1760,7 +1760,7 @@ test "widget_text_edit isSelected" {
 
 test "widget_text_edit scrollToCursor" {
     const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    const buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.viewport.columns = Vec2u{ .a = 0, .b = 5 };
@@ -1826,7 +1826,7 @@ test "widget_text_edit scrollToCursor" {
 
 test "widget_text_edit validate_cursor_pos" {
     const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    const buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.setCursorPos(Vec2u{ .a = 3, .b = 4 }, .Scroll);
