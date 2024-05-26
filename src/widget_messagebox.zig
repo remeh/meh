@@ -45,29 +45,24 @@ pub const WidgetMessageBox = struct {
         };
     }
 
-    // TODO(remy): comment me
-    // TODO(remy): unit test
     pub fn deinit(self: *WidgetMessageBox) void {
         self.resetLines();
     }
 
-    // TODO(remy): comment me
-    // TODO(remy): unit test
+    // resetLines frees memory of all managed lines and empties the lines list.
     fn resetLines(self: *WidgetMessageBox) void {
         for (self.lines.items) |item| {
             item.deinit();
         }
-        self.lines.deinit();
+        self.lines.shrinkAndFree(0);
     }
 
     // Methods
     // -------
 
-    // TODO(remy): comment me
-    // TODO(remy): unit test
+    // set prepares the messagebox to display a single line.
     pub fn set(self: *WidgetMessageBox, line: []const u8, message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
         self.resetLines();
-        self.lines = std.ArrayList(U8Slice).init(self.allocator);
         const slice = try U8Slice.initFromSlice(self.allocator, line);
         try self.lines.append(slice);
         self.message = message;
@@ -76,18 +71,15 @@ pub const WidgetMessageBox = struct {
         self.y_offset = 0;
     }
 
-    // TODO(remy): comment me
-    // TODO(remy): unit test
+    // append inserts a new line at the end.
     pub fn append(self: *WidgetMessageBox, line: []const u8) !void {
         const slice = try U8Slice.initFromSlice(self.allocator, line);
         try self.lines.append(slice);
     }
 
-    // TODO(remy): comment me
-    // TODO(remy): unit test
+    // setMultiple prepares the messagebox to display multiple lines.
     pub fn setMultiple(self: *WidgetMessageBox, lines: std.ArrayList(U8Slice), message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
         self.resetLines();
-        self.lines = std.ArrayList(U8Slice).init(self.allocator);
         for (lines.items) |line| {
             const copy = try line.copy(self.allocator);
             try self.lines.append(copy);
@@ -98,7 +90,7 @@ pub const WidgetMessageBox = struct {
         self.y_offset = 0;
     }
 
-    // TODO(remy): comment me
+    // render renders the messagebox on the given renderer.
     pub fn render(
         self: WidgetMessageBox,
         sdl_renderer: *c.SDL_Renderer,
@@ -181,3 +173,41 @@ pub const WidgetMessageBox = struct {
         }
     }
 };
+
+test "widget_message_box main tests" {
+    const allocator = std.testing.allocator;
+    var msgbox = WidgetMessageBox.init(allocator);
+    defer msgbox.deinit();
+
+    try msgbox.append("hello");
+    try msgbox.append("world");
+    try std.testing.expectEqual(2, msgbox.lines.items.len);
+    try std.testing.expectEqualStrings("hello", msgbox.lines.items[0].bytes());
+    try std.testing.expectEqualStrings("world", msgbox.lines.items[1].bytes());
+
+    msgbox.resetLines();
+    try msgbox.append("hello world");
+    try std.testing.expectEqual(1, msgbox.lines.items.len);
+    try std.testing.expectEqualStrings("hello world", msgbox.lines.items[0].bytes());
+
+    try msgbox.append("second line");
+    try std.testing.expectEqual(2, msgbox.lines.items.len);
+
+    try msgbox.set("an lsp diagnostic", .LSPDiagnostic, .WithOverlay);
+    try std.testing.expectEqual(1, msgbox.lines.items.len);
+    try std.testing.expectEqualStrings("an lsp diagnostic", msgbox.lines.items[0].bytes());
+
+    var lines = std.ArrayList(U8Slice).init(allocator);
+    try lines.append(try U8Slice.initFromSlice(allocator, "hello"));
+    try lines.append(try U8Slice.initFromSlice(allocator, "world"));
+    try msgbox.setMultiple(lines, .LSPDiagnostic, .WithOverlay);
+    try std.testing.expectEqual(2, msgbox.lines.items.len);
+    try std.testing.expectEqualStrings("hello", msgbox.lines.items[0].bytes());
+    try std.testing.expectEqualStrings("world", msgbox.lines.items[1].bytes());
+
+    for (lines.items) |line| {
+        line.deinit();
+    }
+    lines.deinit();
+}
+

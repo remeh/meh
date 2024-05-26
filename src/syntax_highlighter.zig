@@ -122,7 +122,7 @@ pub const SyntaxHighlighter = struct {
         return has_changed;
     }
 
-    // TODO(remy): comment me
+    // refresh re-compute the syntax highlighting for the given line.
     pub fn refresh(self: *SyntaxHighlighter, line_number: usize, line_content: *U8Slice) !bool {
         if (self.lines.items.len == 0) {
             return false;
