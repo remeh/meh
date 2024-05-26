@@ -373,7 +373,14 @@ pub const completionItem = struct {
         var insert_text = U8Slice.initEmpty(allocator);
         errdefer insert_text.deinit();
         if (self.textEdit) |text_edit| {
-            rv.range = text_edit.range.vec4u();
+            // TODO(remy): implement support for replace
+            if (text_edit.range) |r| {
+                rv.range = r.vec4u();
+            } else if (text_edit.insert) |i| {
+                rv.range = i.vec4u();
+            } else {
+                return LSPError.IncompleteCompletionEntry;
+            }
             try insert_text.appendConst(text_edit.newText);
         } else {
             if (self.insertText) |i| {
@@ -389,7 +396,9 @@ pub const completionItem = struct {
 };
 
 pub const completionTextEdit = struct {
-    range: range,
+    range: ?range = null,
+    insert: ?range = null,
+    // TODO(remy): add support for replace
     newText: []const u8,
 };
 
