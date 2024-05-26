@@ -1123,9 +1123,13 @@ pub const WidgetTextEdit = struct {
         }
 
         const cursor_pos = self.cursor.posFromWindowPos(self, mouse_window_pos, draw_pos);
-
-        self.updateSelection(cursor_pos);
         self.setCursorPos(cursor_pos, .Scroll);
+
+        // validateCursorPos will validate that the cursor is at a proper position
+        // updating self.cursor.pos if necessary.
+        // WARNING: after this call, cursor_pos should not be used anymore.
+        self.validateCursorPos(.None);
+        self.updateSelection(self.cursor.pos);
     }
 
     /// onReturn is called when the user has pressed Return.

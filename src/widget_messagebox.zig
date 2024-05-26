@@ -49,7 +49,7 @@ pub const WidgetMessageBox = struct {
         self.resetLines();
     }
 
-    // resetLines frees memory of all managed lines and empties the lines list.
+    /// resetLines frees memory of all managed lines and empties the lines list.
     fn resetLines(self: *WidgetMessageBox) void {
         for (self.lines.items) |item| {
             item.deinit();
@@ -60,7 +60,7 @@ pub const WidgetMessageBox = struct {
     // Methods
     // -------
 
-    // set prepares the messagebox to display a single line.
+    /// set prepares the messagebox to display a single line.
     pub fn set(self: *WidgetMessageBox, line: []const u8, message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
         self.resetLines();
         const slice = try U8Slice.initFromSlice(self.allocator, line);
@@ -71,13 +71,13 @@ pub const WidgetMessageBox = struct {
         self.y_offset = 0;
     }
 
-    // append inserts a new line at the end.
+    /// append inserts a new line at the end.
     pub fn append(self: *WidgetMessageBox, line: []const u8) !void {
         const slice = try U8Slice.initFromSlice(self.allocator, line);
         try self.lines.append(slice);
     }
 
-    // setMultiple prepares the messagebox to display multiple lines.
+    /// setMultiple prepares the messagebox to display multiple lines.
     pub fn setMultiple(self: *WidgetMessageBox, lines: std.ArrayList(U8Slice), message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
         self.resetLines();
         for (lines.items) |line| {
@@ -90,7 +90,7 @@ pub const WidgetMessageBox = struct {
         self.y_offset = 0;
     }
 
-    // render renders the messagebox on the given renderer.
+    /// render renders the messagebox on the given renderer.
     pub fn render(
         self: WidgetMessageBox,
         sdl_renderer: *c.SDL_Renderer,
