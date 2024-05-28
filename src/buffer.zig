@@ -164,8 +164,8 @@ pub const Buffer = struct {
     // Methods
     // -------
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
+    /// getLine returns a pointer in the buffer to a given line.
+    /// `line_number` starts with 0.
     /// Returns a pointer for the caller to be able to modify the line, however, the
     /// pointer should never be null.
     pub fn getLine(self: Buffer, line_number: usize) !*U8Slice {
@@ -317,3 +317,27 @@ test "buffer write_file" {
     buffer_first.deinit();
     buffer_second.deinit();
 }
+
+test "buffer getLine" {
+    const allocator = std.testing.allocator;
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    defer buffer.deinit();
+
+    // two get should always return the same pointer
+    const first_time = try buffer.getLine(0);
+    const second_time = try buffer.getLine(0);
+
+    try std.testing.expectEqual(first_time, second_time);
+    try std.testing.expectEqualStrings("hello world\n", first_time.bytes());
+    try std.testing.expectEqualStrings("hello world\n", second_time.bytes());
+
+    var line = try buffer.getLine(1);
+    try std.testing.expectEqualStrings("and a second line\n", line.bytes());
+    line = try buffer.getLine(2);
+    try std.testing.expectEqualStrings("and a third", line.bytes());
+
+    // can't get more than what's in the buffer
+    try std.testing.expectError(BufferError.OutOfBuffer, buffer.getLine(3));
+    try std.testing.expectError(BufferError.OutOfBuffer, buffer.getLine(100));
+}
+
