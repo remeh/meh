@@ -354,7 +354,7 @@ pub const WidgetCommand = struct {
         }
 
         var arg: ?[]const u8 = undefined;
-        var it = std.mem.splitScalar(u8, buff[0..size], ' '); // TODO(remy): use tokenize instead
+        var it = std.mem.splitScalar(u8, buff[0..size], ' ');
         var i: usize = 0;
         arg = it.first();
         while (arg != null) {

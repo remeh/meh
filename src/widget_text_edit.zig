@@ -720,7 +720,11 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    // TODO(remy): unit test
+    /// stopSelection stops current selection and switch to `next_state` instead.
+    /// `next_state` is possibly a different selectino state.
+    /// If the selection state was a `MouseSelection` and stopping the selection
+    /// happens to be on the same position as where it has started,
+    /// enters in Input mode instead.
     fn stopSelection(self: *WidgetTextEdit, next_state: SelectionState) void {
         if (self.selection.state == .Inactive) {
             return;
@@ -1241,7 +1245,6 @@ pub const WidgetTextEdit = struct {
     // -------------------
 
     /// deleteLine deletes the line where is the cursor.
-    // TODO(remy): unit test
     pub fn deleteLine(self: *WidgetTextEdit) void {
         self.editor.deleteLine(@as(usize, @intCast(self.cursor.pos.b)), .Input);
         self.editor.historyEndBlock();
@@ -1758,6 +1761,21 @@ test "widget_text_edit isSelected" {
     defer txt.deinit();
 
     try expect(txt.size() == 23);
+    try expect(widget.selection.state == .KeyboardSelection);
+
+    widget.deinit();
+}
+
+test "widget_text_edit stopSelection enters Input" {
+    const allocator = std.testing.allocator;
+    const buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
+
+    widget.startSelection(Vec2u{ .a = 3, .b = 0 }, .MouseSelection);
+    widget.stopSelection(.KeyboardSelection);
+
+    try expect(widget.input_mode == .Insert);
+    try expect(widget.selection.state == .Inactive);
 
     widget.deinit();
 }
@@ -1860,3 +1878,38 @@ test "widget_text_edit validate_cursor_pos" {
 
     widget.deinit();
 }
+
+test "widget_text_edit deleteLine" {
+    const allocator = std.testing.allocator;
+    const buffer = try Buffer.initFromFile(allocator, "tests/sample_4");
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
+    defer widget.deinit();
+
+    try std.testing.expectEqual(400, widget.editor.buffer.linesCount());
+
+    // delete the first line
+    widget.deleteLine();
+    try std.testing.expectEqual(399, widget.editor.buffer.linesCount());
+    try std.testing.expectEqual(0, widget.cursor.pos.a);
+    try std.testing.expectEqual(0, widget.cursor.pos.b);
+
+    // delete a line in between
+
+    widget.moveCursor(Vec2i{ .a = 5, .b = 15 }, true);
+    try std.testing.expectEqual(5, widget.cursor.pos.a);
+    try std.testing.expectEqual(15, widget.cursor.pos.b);
+    widget.deleteLine();
+    try std.testing.expectEqual(398, widget.editor.buffer.linesCount());
+    try std.testing.expectEqual(5, widget.cursor.pos.a);
+    try std.testing.expectEqual(15, widget.cursor.pos.b);
+
+    // delete the very last line
+
+    widget.moveCursor(Vec2i{ .a = 0, .b = @as(i64, @intCast(widget.editor.buffer.linesCount()+100)) }, true);
+    try std.testing.expectEqual(5, widget.cursor.pos.a);
+    try std.testing.expectEqual(widget.editor.buffer.linesCount() - 1, widget.cursor.pos.b);
+    widget.deleteLine();
+    try std.testing.expectEqual(5, widget.cursor.pos.a);
+    try std.testing.expectEqual(widget.editor.buffer.linesCount() - 1, widget.cursor.pos.b);
+}
+
