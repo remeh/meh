@@ -893,6 +893,10 @@ pub const WidgetTextEdit = struct {
                     return true;
                 };
                 self.setCursorPos(new_pos, .Scroll);
+                if (self.selection.state != .Inactive) {
+                    self.updateSelection(new_pos);
+                }
+
                 self.setInputMode(.Command);
             },
             .d => {
@@ -1905,11 +1909,10 @@ test "widget_text_edit deleteLine" {
 
     // delete the very last line
 
-    widget.moveCursor(Vec2i{ .a = 0, .b = @as(i64, @intCast(widget.editor.buffer.linesCount()+100)) }, true);
+    widget.moveCursor(Vec2i{ .a = 0, .b = @as(i64, @intCast(widget.editor.buffer.linesCount() + 100)) }, true);
     try std.testing.expectEqual(5, widget.cursor.pos.a);
     try std.testing.expectEqual(widget.editor.buffer.linesCount() - 1, widget.cursor.pos.b);
     widget.deleteLine();
     try std.testing.expectEqual(5, widget.cursor.pos.a);
     try std.testing.expectEqual(widget.editor.buffer.linesCount() - 1, widget.cursor.pos.b);
 }
-

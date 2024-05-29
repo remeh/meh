@@ -340,4 +340,3 @@ test "buffer getLine" {
     try std.testing.expectError(BufferError.OutOfBuffer, buffer.getLine(3));
     try std.testing.expectError(BufferError.OutOfBuffer, buffer.getLine(100));
 }
-
