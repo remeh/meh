@@ -9,10 +9,15 @@ Executes `ripgrep` to search through files.
 
 Use `zig 0.12.0` to compile.
 
+## Demo Video
+
+[Link to YouTube](https://www.youtube.com/watch?v=ewE9DWePxZ4)
+
 ## Features
 
 * Modal vim-ish editor. Not vim-compliant: remeh-compliant.
 * HiDPI support, smooth font rendering. SDL2 accelerated rendering.
+* UTF8.
 * LSP support: go to definition, references, completion, info/doc.
 * Ripgrep integration.
 * Hard-coded fast syntax highlighter. No tree-sitter integration.
