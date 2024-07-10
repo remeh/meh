@@ -39,6 +39,8 @@ pub const WidgetListFilterType = enum {
 pub const WidgetListEntry = struct {
     label: U8Slice,
     data: U8Slice,
+    /// use this one if you need to display extra information in a message box
+    extra_info: ?U8Slice,
     data_pos: Vec2i,
     data_range: ?Vec4u = null,
 
@@ -47,6 +49,9 @@ pub const WidgetListEntry = struct {
     pub fn deinit(self: *WidgetListEntry) void {
         self.label.deinit();
         self.data.deinit();
+        if (self.extra_info) |extra| {
+            extra.deinit();
+        }
     }
 };
 

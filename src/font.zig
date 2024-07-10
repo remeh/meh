@@ -35,7 +35,6 @@ pub const FontAtlas = struct {
 };
 
 pub const Font = struct {
-    filepath: U8Slice,
     font_size: usize,
     ttf_font: *c.TTF_Font,
     atlas: FontAtlas,
@@ -44,12 +43,7 @@ pub const Font = struct {
     /// init loads the font at filepath and immediately
     /// creates a font atlas in a texture.
     /// filepath must be null-terminated.
-    pub fn init(allocator: std.mem.Allocator, sdl_renderer: *c.SDL_Renderer, filepath: []const u8, font_size: usize) !Font {
-        var fp = U8Slice.initEmpty(allocator);
-        try fp.appendConst(filepath);
-
-        // TODO(remy): load the font from filepath (instead of using the font_data const)
-
+    pub fn init(allocator: std.mem.Allocator, sdl_renderer: *c.SDL_Renderer, font_size: usize) !Font {
         // will be cleaned up by the TTF_OpenFontRW call (the second parameter set to 1).
         const rwops: *c.SDL_RWops = c.SDL_RWFromConstMem(font_data, font_data.len);
 
@@ -62,7 +56,6 @@ pub const Font = struct {
         }
 
         var rv = Font{
-            .filepath = fp,
             .font_size = font_size,
             .ttf_font = font,
             .atlas = FontAtlas{
@@ -92,7 +85,6 @@ pub const Font = struct {
     }
 
     pub fn deinit(self: *Font) void {
-        self.filepath.deinit();
         self.atlas.glyph_pos.deinit();
         c.SDL_DestroyTexture(self.atlas.texture);
         c.TTF_CloseFont(self.ttf_font);
@@ -106,7 +98,7 @@ pub const Font = struct {
     fn bindTexture(self: *Font, surface: *c.SDL_Surface) !void {
         const texture = c.SDL_CreateTextureFromSurface(self.sdl_renderer, surface);
         if (texture == null) {
-            std.log.err("Font.buildAtlas: can't create texture for font {s} size {d}", .{ self.filepath.bytes(), self.font_size });
+            std.log.err("Font.buildAtlas: can't create texture for font size {d}", .{self.font_size});
             return FontError.CantBuildAtlas;
         }
 

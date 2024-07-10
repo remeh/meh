@@ -83,6 +83,7 @@ pub const WidgetSearchResults = struct {
                 .label = result.content,
                 .data = result.filename,
                 .data_pos = Vec2i{ .a = utoi(result.column) - 1, .b = utoi(result.line_number) - 1 },
+                .extra_info = null,
                 .type = .SearchResult,
             });
         }
@@ -104,6 +105,7 @@ pub const WidgetSearchResults = struct {
                 .label = line,
                 .data = try U8Slice.initFromSlice(self.allocator, reference.filepath.bytes()),
                 .data_pos = pos,
+                .extra_info = null,
                 .type = .SearchResult,
             });
         }

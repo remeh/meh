@@ -288,8 +288,8 @@ pub const LSPThread = struct {
         return LSPError.MissingRequestEntry;
     }
 
+    /// readNotification reads the LSP notification and returns an LSPResponse.
     // TODO(remy): unit test
-    // TODO(remy): comment me
     fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
         // read the header only
         const header = try std.json.parseFromSlice(

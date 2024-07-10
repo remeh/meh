@@ -13,6 +13,7 @@ const WidgetList = @import("widget_list.zig").WidgetList;
 const WidgetListEntry = @import("widget_list.zig").WidgetListEntry;
 const WidgetListEntryType = @import("widget_list.zig").WidgetListEntryType;
 const WidgetListFilterType = @import("widget_list.zig").WidgetListFilterType;
+const WidgetMessageBox = @import("widget_messagebox.zig").WidgetMessageBox;
 
 const ScreenSection = enum {
     TopLeft,
@@ -27,6 +28,7 @@ pub const WidgetAutocomplete = struct {
     no_results: bool,
     loading: bool,
     list: WidgetList,
+    mbox: WidgetMessageBox,
 
     // Constructors
     // ------------
@@ -38,11 +40,13 @@ pub const WidgetAutocomplete = struct {
             .no_results = false,
             .loading = true,
             .list = try WidgetList.init(allocator, WidgetListFilterType.Autocomplete),
+            .mbox = WidgetMessageBox.init(allocator),
         };
     }
 
     pub fn deinit(self: *WidgetAutocomplete) void {
         self.list.deinit();
+        self.mbox.deinit();
     }
 
     // Methods
@@ -69,6 +73,7 @@ pub const WidgetAutocomplete = struct {
             try self.list.entries.append(WidgetListEntry{
                 .label = try completion.label.copy(self.allocator),
                 .data = try completion.insert_text.copy(self.allocator),
+                .extra_info = try completion.detail.copy(self.allocator),
                 .data_pos = Vec2i{ .a = 0, .b = 0 }, // unused // TODO(remy): store Kind?
                 .data_range = completion.range,
                 .type = .Autocomplete,
@@ -137,6 +142,16 @@ pub const WidgetAutocomplete = struct {
                 Draw.text(font, scaler, text_start, 0, Colors.white, "No results.");
             }
             return;
+        }
+
+        if (self.list.filtered_entries.items.len > 0) {
+            const entry = self.list.filtered_entries.items[self.list.selected_entry_idx];
+            if (entry.extra_info) |extra_info| {
+                self.mbox.set(extra_info.bytes(), .LSPMessage, .WithoutOverlay) catch |err| {
+                    std.log.debug("can't set WidgetAutoComplete message box label: {any}", .{err});
+                };
+                self.mbox.render(sdl_renderer, font, scaler, window_scaled_size, one_char_size);
+            }
         }
 
         self.list.render(

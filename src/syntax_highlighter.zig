@@ -73,7 +73,7 @@ pub const SyntaxHighlighter = struct {
         try self.lines.insert(line_position, LineSyntaxHighlight.init(self.allocator, true));
     }
 
-    // TODO(remy): comment
+    // removeLine removes highlighting information on the given line.
     // TODO(remy): unit test
     pub fn removeLine(self: *SyntaxHighlighter, line_position: usize) void {
         var line = self.lines.orderedRemove(line_position);
@@ -122,7 +122,7 @@ pub const SyntaxHighlighter = struct {
         return has_changed;
     }
 
-    // refresh re-compute the syntax highlighting for the given line.
+    /// refresh re-compute the syntax highlighting for the given line.
     pub fn refresh(self: *SyntaxHighlighter, line_number: usize, line_content: *U8Slice) !bool {
         if (self.lines.items.len == 0) {
             return false;

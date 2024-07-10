@@ -92,6 +92,7 @@ pub const WidgetLookup = struct {
             .label = try U8Slice.initFromSlice(self.allocator, ".."),
             .data = try U8Slice.initFromSlice(self.allocator, ".."),
             .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
+            .extra_info = null,
             .type = .Directory,
         });
 
@@ -120,6 +121,7 @@ pub const WidgetLookup = struct {
                         .label = label,
                         .data = fullpath,
                         .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
+                        .extra_info = null,
                         .type = t,
                     });
                 },
@@ -143,6 +145,7 @@ pub const WidgetLookup = struct {
                 .label = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
                 .data = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
                 .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
+                .extra_info = null,
                 .type = .File,
             });
         }

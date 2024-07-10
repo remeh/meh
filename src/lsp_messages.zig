@@ -346,10 +346,15 @@ pub const completionItem = struct {
 
         var label = U8Slice.initEmpty(allocator);
         errdefer label.deinit();
+
         if (self.label) |l| {
             try label.appendConst(l);
         } else {
             return LSPError.IncompleteCompletionEntry;
+        }
+
+        if (self.kind == 2 or self.kind == 3 or self.kind == 4) {
+            try label.appendConst("()");
         }
 
         var sort_text = U8Slice.initEmpty(allocator);

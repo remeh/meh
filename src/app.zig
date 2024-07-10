@@ -208,9 +208,9 @@ pub const App = struct {
 
         // load the fonts
 
-        const font_lowdpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 18);
-        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 22);
-        const font_hidpi = try Font.init(allocator, sdl_renderer.?, "./res/UbuntuMono-Regular.ttf", 32);
+        const font_lowdpi = try Font.init(allocator, sdl_renderer.?, 18);
+        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, 22);
+        const font_hidpi = try Font.init(allocator, sdl_renderer.?, 32);
 
         // working directory
 
@@ -274,6 +274,9 @@ pub const App = struct {
         self.widget_lookup.deinit();
         self.widget_messagebox.deinit();
         self.widget_search_results.deinit();
+        if (self.font_custom) |*custom| {
+            custom.deinit();
+        }
         self.font_lowdpi.deinit();
         self.font_lowdpibigfont.deinit();
         self.font_hidpi.deinit();
@@ -654,19 +657,15 @@ pub const App = struct {
         self.focused_widget = .SearchResults;
     }
 
-    pub fn increaseFont(_: *App) void {
-        return;
-    }
-    pub fn increaseFont2(self: *App) void {
-        const font = Font.init(self.allocator, self.sdl_renderer, "./res/UbuntuMono-Regular.ttf", self.current_font.font_size + 2) catch |err| {
+    pub fn increaseFont(self: *App) void {
+        const font = Font.init(self.allocator, self.sdl_renderer, self.current_font.font_size + 2) catch |err| {
             std.log.err("App.increaseFont: can't load temporary font: {}", .{err});
             return;
         };
 
-        // FIXME(remy): we have to de-allocate the previous one
-        // if (self.font_custom) |custom| {
-        // custom.deinit();
-        // }
+        if (self.font_custom) |*custom| {
+            custom.deinit();
+        }
 
         self.font_custom = font;
         self.current_font = font;
@@ -934,7 +933,7 @@ pub const App = struct {
         var event: c.SDL_Event = undefined;
         self.is_running = true;
         var to_render = true;
-        c.SDL_StartTextInput(); // TODO(remy): confirm it's the good way of using this
+        c.SDL_StartTextInput();
 
         const frame_per_second = 60;
         const max_ms_skip = 1000 / frame_per_second;
