@@ -117,6 +117,7 @@ pub const LSPPosition = struct {
 
 pub const LSPCompletion = struct {
     detail: U8Slice,
+    documentation: U8Slice,
     insert_text: U8Slice,
     label: U8Slice,
     sort_text: U8Slice,
@@ -126,6 +127,7 @@ pub const LSPCompletion = struct {
         self.insert_text.deinit();
         self.label.deinit();
         self.sort_text.deinit();
+        self.documentation.deinit();
     }
 };
 

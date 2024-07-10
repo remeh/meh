@@ -70,10 +70,27 @@ pub const WidgetAutocomplete = struct {
     pub fn setCompletionItems(self: *WidgetAutocomplete, completions: std.ArrayList(LSPCompletion)) !void {
         self.list.reset();
         for (completions.items) |completion| {
+            var extra_info = std.ArrayList(U8Slice).init(self.allocator);
+            try extra_info.append(try completion.detail.copy(self.allocator));
+
+            if (completion.documentation.size() > 0) {
+                var it = std.mem.splitScalar(u8, completion.documentation.bytes(), '\n');
+                var line = it.first();
+                while (line.len > 0) {
+                    const slice = try U8Slice.initFromSlice(self.allocator, line);
+                    try extra_info.append(slice);
+                    if (it.next()) |data| {
+                        line = data;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
             try self.list.entries.append(WidgetListEntry{
                 .label = try completion.label.copy(self.allocator),
                 .data = try completion.insert_text.copy(self.allocator),
-                .extra_info = try completion.detail.copy(self.allocator),
+                .extra_info = extra_info,
                 .data_pos = Vec2i{ .a = 0, .b = 0 }, // unused // TODO(remy): store Kind?
                 .data_range = completion.range,
                 .type = .Autocomplete,
@@ -147,7 +164,7 @@ pub const WidgetAutocomplete = struct {
         if (self.list.filtered_entries.items.len > 0) {
             const entry = self.list.filtered_entries.items[self.list.selected_entry_idx];
             if (entry.extra_info) |extra_info| {
-                self.mbox.set(extra_info.bytes(), .LSPMessage, .WithoutOverlay) catch |err| {
+                self.mbox.setMultiple(extra_info, .LSPMessage, .WithoutOverlay) catch |err| {
                     std.log.debug("can't set WidgetAutoComplete message box label: {any}", .{err});
                 };
                 self.mbox.render(sdl_renderer, font, scaler, window_scaled_size, one_char_size);

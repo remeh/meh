@@ -332,17 +332,21 @@ pub const completionItem = struct {
     label: ?[]const u8 = null,
     kind: ?i64 = null,
     detail: ?[]const u8 = null,
-    //documentation: ?completionResultDoc = null,
+    documentation: ?completionResultDoc = null,
     sortText: ?[]const u8 = null,
     insertText: ?[]const u8 = null,
     textEdit: ?completionTextEdit = null,
 
     pub fn toLSPCompletion(self: completionItem, allocator: std.mem.Allocator) !LSPCompletion {
+        // detail
+
         var detail = U8Slice.initEmpty(allocator);
         errdefer detail.deinit();
         if (self.detail) |d| {
             try detail.appendConst(d);
         }
+
+        // label
 
         var label = U8Slice.initEmpty(allocator);
         errdefer label.deinit();
@@ -357,6 +361,8 @@ pub const completionItem = struct {
             try label.appendConst("()");
         }
 
+        // sort text
+
         var sort_text = U8Slice.initEmpty(allocator);
         errdefer sort_text.deinit();
         if (self.sortText) |i| {
@@ -367,22 +373,27 @@ pub const completionItem = struct {
             try sort_text.appendConst(label.bytes());
         }
 
-        var rv = LSPCompletion{
-            .detail = detail,
-            .label = label,
-            .insert_text = undefined,
-            .sort_text = sort_text,
-            .range = null,
-        };
+        // documentation
+
+        var documentation = U8Slice.initEmpty(allocator);
+        errdefer documentation.deinit();        if (self.documentation) |doc| {
+            if (doc.value) |v| {
+                try documentation.appendConst(v);
+            }
+        }
+
+        // insert text
 
         var insert_text = U8Slice.initEmpty(allocator);
+        var text_range: Vec4u = undefined;
         errdefer insert_text.deinit();
+
         if (self.textEdit) |text_edit| {
             // TODO(remy): implement support for replace
             if (text_edit.range) |r| {
-                rv.range = r.vec4u();
+                text_range = r.vec4u();
             } else if (text_edit.insert) |i| {
-                rv.range = i.vec4u();
+                text_range = i.vec4u();
             } else {
                 return LSPError.IncompleteCompletionEntry;
             }
@@ -394,9 +405,17 @@ pub const completionItem = struct {
                 return LSPError.IncompleteCompletionEntry;
             }
         }
-        rv.insert_text = insert_text;
 
-        return rv;
+        // create the object
+
+        return LSPCompletion{
+            .detail = detail,
+            .label = label,
+            .documentation = documentation,
+            .insert_text = insert_text,
+            .sort_text = sort_text,
+            .range = text_range,
+        };
     }
 };
 

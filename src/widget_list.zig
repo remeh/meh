@@ -34,13 +34,11 @@ pub const WidgetListFilterType = enum {
 };
 
 /// Entry is an entry in the WidgetList.
-/// `filename` and `fullpath` are owned by the WidgetListEntry, use `deinit()` to release
-/// their memory.
 pub const WidgetListEntry = struct {
     label: U8Slice,
     data: U8Slice,
     /// use this one if you need to display extra information in a message box
-    extra_info: ?U8Slice,
+    extra_info: ?std.ArrayList(U8Slice),
     data_pos: Vec2i,
     data_range: ?Vec4u = null,
 
@@ -49,9 +47,13 @@ pub const WidgetListEntry = struct {
     pub fn deinit(self: *WidgetListEntry) void {
         self.label.deinit();
         self.data.deinit();
+
         if (self.extra_info) |extra| {
+            for (extra.items) |item| {
+                item.deinit();
+            }
             extra.deinit();
-        }
+       }
     }
 };
 
