@@ -16,7 +16,7 @@ const Vec4u = @import("vec.zig").Vec4u;
 /// with the LSP server thread.
 const stdoutThreadContext = struct {
     allocator: std.mem.Allocator,
-    child: *std.ChildProcess,
+    child: *std.process.Child,
     is_running: std.atomic.Value(bool),
     queue: AtomicQueue(U8Slice),
 };
@@ -37,7 +37,7 @@ pub const LSPThread = struct {
         const slice = try cmd.toOwnedSlice();
         defer ctx.allocator.free(slice);
 
-        var child = std.ChildProcess.init(slice, ctx.allocator);
+        var child = std.process.Child.init(slice, ctx.allocator);
         child.stdin_behavior = .Pipe;
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Ignore;
