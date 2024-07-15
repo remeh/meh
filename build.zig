@@ -48,12 +48,6 @@ pub fn build(b: *std.Build) void {
 fn prepare(step: *std.Build.Step.Compile) void {
     // step.use_stage1 = true;
 
-    if (builtin.os.tag == .macos) {
-        // find "SDL2/SDL2.h"
-        step.addIncludePath(.{ .path = "/opt/homebrew/include" });
-        // find libSDL2.dylib
-        step.addLibraryPath(.{ .path = "/opt/homebrew/lib" });
-    }
     // linked libraries
     step.linkSystemLibrary("SDL2");
     step.linkSystemLibrary("SDL2_ttf");
