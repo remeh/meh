@@ -429,6 +429,30 @@ pub const completionTextEdit = struct {
 pub const completionResultDoc = struct {
     kind: ?[]const u8 = null,
     value: ?[]const u8 = null,
+
+    /// jsonParse implements the logic that depending on the LSP server
+    /// (despite sending them the proper initial "markupKind" values),
+    /// this field is sometimes a simple []const u8 while it is sometimes
+    /// an object.
+    pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !@This() {
+        if (std.json.innerParse([]const u8, allocator, source, options)) |value| {
+            return completionResultDoc{
+                .kind = "plaintext",
+                .value = value,
+            };
+        } else |_| {
+            const obj = try std.json.innerParse(completionResultDocObj, allocator, source, options);
+            return completionResultDoc{
+                .kind = obj.kind,
+                .value = obj.value,
+            };
+        }
+    }
+};
+
+pub const completionResultDocObj = struct {
+    kind: ?[]const u8 = null,
+    value: ?[]const u8 = null,
 };
 
 // Hover
