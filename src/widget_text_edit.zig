@@ -1926,3 +1926,54 @@ test "widget_text_edit deleteLine" {
     try std.testing.expectEqual(5, widget.cursor.pos.a);
     try std.testing.expectEqual(widget.editor.buffer.linesCount() - 1, widget.cursor.pos.b);
 }
+
+test "widget_text_edit onTab" {
+    const allocator = std.testing.allocator;
+    const buffer = try Buffer.initFromFile(allocator, "tests/sample_4");
+    var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
+    defer widget.deinit();
+
+    var line0 = try buffer.getLine(0);
+    var line1 = try buffer.getLine(1);
+    var line2 = try buffer.getLine(2);
+    try std.testing.expectEqualSlices(u8, "test", line0.data.items[0..4]);
+    try std.testing.expectEqualSlices(u8, "DjNb", line1.data.items[0..4]);
+    try std.testing.expectEqualSlices(u8, "PkhI", line2.data.items[0..4]);
+
+    widget.startSelection(Vec2u{.a = 0, .b = 0}, .KeyboardSelection);
+    widget.moveCursor(Vec2i{.a = 0, .b = 1}, false);
+    widget.moveCursor(Vec2i{.a = 0, .b = 1}, false);
+    widget.onTab(false);
+
+    try std.testing.expectEqualSlices(u8, "    test", line0.data.items[0..8]);
+    try std.testing.expectEqualSlices(u8, "    DjNb", line1.data.items[0..8]);
+    try std.testing.expectEqualSlices(u8, "    PkhI", line2.data.items[0..8]);
+
+    widget.moveCursor(Vec2i{.a = 0, .b = -1}, false);
+    widget.onTab(false);
+    try std.testing.expectEqualSlices(u8, "        test", line0.data.items[0..12]);
+    try std.testing.expectEqualSlices(u8, "        DjNb", line1.data.items[0..12]);
+    try std.testing.expectEqualSlices(u8, "    PkhI", line2.data.items[0..8]);
+
+    widget.moveCursor(Vec2i{.a = 0, .b = 1}, false);
+    widget.onTab(true);
+    try std.testing.expectEqualSlices(u8, "    test", line0.data.items[0..8]);
+    try std.testing.expectEqualSlices(u8, "    DjNb", line1.data.items[0..8]);
+    try std.testing.expectEqualSlices(u8, "PkhI", line2.data.items[0..4]);
+
+    widget.onTab(true);
+    try std.testing.expectEqualSlices(u8, "test", line0.data.items[0..4]);
+    try std.testing.expectEqualSlices(u8, "DjNb", line1.data.items[0..4]);
+    try std.testing.expectEqualSlices(u8, "PkhI", line2.data.items[0..4]);
+
+    widget.stopSelection(.Inactive);
+    widget.onTab(false);
+    try std.testing.expectEqualSlices(u8, "test", line0.data.items[0..4]);
+    try std.testing.expectEqualSlices(u8, "DjNb", line1.data.items[0..4]);
+    try std.testing.expectEqualSlices(u8, "    PkhI", line2.data.items[0..8]);
+
+    widget.onTab(true);
+    try std.testing.expectEqualSlices(u8, "test", line0.data.items[0..4]);
+    try std.testing.expectEqualSlices(u8, "DjNb", line1.data.items[0..4]);
+    try std.testing.expectEqualSlices(u8, "PkhI", line2.data.items[0..4]);
+}
