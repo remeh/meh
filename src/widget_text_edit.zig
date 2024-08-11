@@ -1056,7 +1056,6 @@ pub const WidgetTextEdit = struct {
     }
 
     /// onTab is called when the user has pressed the Tab key.
-    // TODO(remy): support un/tabbing selections
     pub fn onTab(self: *WidgetTextEdit, shift: bool) void {
         switch (self.input_mode) {
             .Insert => {
@@ -1070,27 +1069,38 @@ pub const WidgetTextEdit = struct {
                 self.moveCursor(Vec2i{ .a = 4, .b = 0 }, true);
             },
             else => {
-                var i: usize = 0;
-                const pos = Vec2u{ .a = 0, .b = self.cursor.pos.b };
-                if (shift) {
-                    if (self.editor.buffer.getLine(pos.b)) |line| {
-                        while (i < tab_spaces) : (i += 1) {
-                            if (line.size() > 0 and line.data.items[0] == char_space) {
-                                self.editor.deleteGlyph(pos, .Right, .Input) catch |err| {
-                                    std.log.err("WidgetTextEdit.onTab: can't remove spaces in command mode: {}", .{err});
-                                };
+                var line_idx: usize = switch (self.selection.state) {
+                    .Inactive => self.cursor.pos.b,
+                    else => self.selection.start.b,
+                };
+                const line_idx_end = switch (self.selection.state) {
+                    .Inactive => self.cursor.pos.b + 1,
+                    else => self.selection.stop.b + 1,
+                };
+                while (line_idx < line_idx_end) {
+                    var i: usize = 0;
+                    const pos = Vec2u{ .a = 0, .b = line_idx };
+                    if (shift) {
+                        if (self.editor.buffer.getLine(pos.b)) |line| {
+                            while (i < tab_spaces) : (i += 1) {
+                                if (line.size() > 0 and line.data.items[0] == char_space) {
+                                    self.editor.deleteGlyph(pos, .Right, .Input) catch |err| {
+                                        std.log.err("WidgetTextEdit.onTab: can't remove spaces in command mode: {}", .{err});
+                                    };
+                                }
                             }
+                        } else |err| {
+                            std.log.err("WidgetTextEdit.onTab: can't remove tabs in command mode: {}", .{err});
+                            return;
                         }
-                    } else |err| {
-                        std.log.err("WidgetTextEdit.onTab: can't remove tabs in command mode: {}", .{err});
-                        return;
+                    } else {
+                        while (i < tab_spaces) : (i += 1) {
+                            self.editor.insertUtf8Text(pos, string_space, .Input) catch |err| {
+                                std.log.err("WidgetTextEdit.onTab: can't insert spaces in command mode: {}", .{err});
+                            };
+                        }
                     }
-                } else {
-                    while (i < tab_spaces) : (i += 1) {
-                        self.editor.insertUtf8Text(pos, string_space, .Input) catch |err| {
-                            std.log.err("WidgetTextEdit.onTab: can't insert spaces in command mode: {}", .{err});
-                        };
-                    }
+                    line_idx += 1;
                 }
             },
         }

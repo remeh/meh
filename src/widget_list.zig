@@ -53,7 +53,7 @@ pub const WidgetListEntry = struct {
                 item.deinit();
             }
             extra.deinit();
-       }
+        }
     }
 };
 

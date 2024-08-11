@@ -376,7 +376,8 @@ pub const completionItem = struct {
         // documentation
 
         var documentation = U8Slice.initEmpty(allocator);
-        errdefer documentation.deinit();        if (self.documentation) |doc| {
+        errdefer documentation.deinit();
+        if (self.documentation) |doc| {
             if (doc.value) |v| {
                 try documentation.appendConst(v);
             }
