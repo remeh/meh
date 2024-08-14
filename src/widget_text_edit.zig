@@ -302,16 +302,18 @@ pub const WidgetTextEdit = struct {
     }
 
     /// renderHorizontalLimit is used to render the 80 and 120 chars limit.
-    fn renderHorizontalLimit(_: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, widget_size: Vec2u, draw_pos: Vec2u, one_char_size: Vec2u, left_offset: usize, chars_count: usize) void {
-        if (left_offset + (one_char_size.a * chars_count) > widget_size.a) {
+    fn renderHorizontalLimit(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, widget_size: Vec2u, draw_pos: Vec2u, one_char_size: Vec2u, left_offset: usize, chars_count: usize) void {
+        if (draw_pos.a + (one_char_size.a * chars_count) < self.viewport.columns.a*one_char_size.a) {
             return;
         }
+
+        const x = left_offset + draw_pos.a + (one_char_size.a * chars_count) - self.viewport.columns.a*one_char_size.a;
 
         Draw.line(
             sdl_renderer,
             scaler,
-            .{ .a = left_offset + draw_pos.a + (one_char_size.a * chars_count), .b = 0 },
-            .{ .a = left_offset + draw_pos.a + (one_char_size.a * chars_count), .b = widget_size.b },
+            .{ .a = x, .b = 0 },
+            .{ .a = x, .b = widget_size.b },
             Colors.dark_gray,
         );
     }
