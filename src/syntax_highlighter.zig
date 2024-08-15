@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Buffer = @import("buffer.zig").Buffer;
 const Colors = @import("colors.zig");
 const U8Slice = @import("u8slice.zig").U8Slice;
 const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
@@ -31,14 +32,12 @@ pub const LineSyntaxHighlight = struct {
     }
 };
 
-// TODO(remy): comment me
+/// SyntaxHighlighter is a token-based line syntax highlighter.
 pub const SyntaxHighlighter = struct {
     allocator: std.mem.Allocator,
     lines: std.ArrayList(LineSyntaxHighlight),
     word_under_cursor: ?[]const u8,
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
     pub fn init(allocator: std.mem.Allocator, line_count: usize) !SyntaxHighlighter {
         var lines = std.ArrayList(LineSyntaxHighlight).init(allocator);
 
@@ -61,27 +60,21 @@ pub const SyntaxHighlighter = struct {
         self.lines.deinit();
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
     pub fn getLine(self: SyntaxHighlighter, line_number: usize) LineSyntaxHighlight {
         return self.lines.items[line_number];
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
     pub fn insertNewLine(self: *SyntaxHighlighter, line_position: usize) !void {
         try self.lines.insert(line_position, LineSyntaxHighlight.init(self.allocator, true));
     }
 
     // removeLine removes highlighting information on the given line.
-    // TODO(remy): unit test
     pub fn removeLine(self: *SyntaxHighlighter, line_position: usize) void {
         var line = self.lines.orderedRemove(line_position);
         line.deinit();
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
+    /// setDirty sets a range of syntax lines to dirty.
     pub fn setDirty(self: *SyntaxHighlighter, line_range: Vec2u) void {
         var line_pos = line_range.a;
         while (line_pos <= line_range.b) : (line_pos += 1) {
@@ -92,14 +85,15 @@ pub const SyntaxHighlighter = struct {
         }
     }
 
+    /// setAllDirty sets all syntax lines to dirty.
     pub fn setAllDirty(self: *SyntaxHighlighter) void {
         for (self.lines.items) |*line| {
             line.dirty = true;
         }
     }
 
-    // TODO(remy): comment me
-    // TODO(remy): unit test
+    /// setHighlightWord sets what word to highlight with the syntax highlighter.
+    /// Returns whether or not the highlighting has change.
     pub fn setHighlightWord(self: *SyntaxHighlighter, word: ?[]const u8) bool {
         var has_changed: bool = false;
 
@@ -111,7 +105,7 @@ pub const SyntaxHighlighter = struct {
             has_changed = true;
         }
 
-        // neither we were not highlighting anything or we start
+        // eiither we were not highlighting anything or we start
         // not highlighting anything.
         if ((word == null and self.word_under_cursor != null) or (word != null and self.word_under_cursor == null)) {
             self.setAllDirty();
@@ -265,3 +259,76 @@ pub const SyntaxHighlighter = struct {
         }
     }
 };
+
+test "line_syntax_highlighter main test" {
+    const allocator = std.testing.allocator;
+
+    var buffer = try Buffer.initFromFile(allocator, "tests/sample_6.zig");
+    defer buffer.deinit();
+    try std.testing.expectEqual(buffer.lines.items.len, 5);
+
+    var sh = try SyntaxHighlighter.init(allocator, buffer.lines.items.len);
+    defer sh.deinit();
+
+    var i: usize = 0;
+    for (buffer.lines.items) |*line| {
+        _ = try sh.refresh(i, line);
+        i += 1;
+    }
+
+    try std.testing.expectEqual(sh.lines.items[0].dirty, false);
+    try std.testing.expectEqual(sh.lines.items[1].dirty, false);
+    try std.testing.expectEqual(sh.lines.items[2].dirty, false);
+    try std.testing.expectEqual(sh.lines.items[3].dirty, false);
+    try std.testing.expectEqual(sh.lines.items[4].dirty, false);
+
+    sh.setAllDirty();
+
+    try std.testing.expectEqual(sh.lines.items[0].dirty, true);
+    try std.testing.expectEqual(sh.lines.items[1].dirty, true);
+    try std.testing.expectEqual(sh.lines.items[2].dirty, true);
+    try std.testing.expectEqual(sh.lines.items[3].dirty, true);
+    try std.testing.expectEqual(sh.lines.items[4].dirty, true);
+
+    i = 0;
+    for (buffer.lines.items) |*line| {
+        _ = try sh.refresh(i, line);
+        i += 1;
+    }
+
+    try std.testing.expectEqual(true, sh.setHighlightWord("log"));
+    try std.testing.expectEqual(true, try sh.refresh(3, &buffer.lines.items[3]));
+
+    const line3 = sh.getLine(3);
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(0)); // space
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(1)); // space
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(2)); // space
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(3)); // space
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(4)); // s
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(5)); // t
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(6)); // d
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(7)); // .
+    try std.testing.expectEqual(Colors.blue, line3.getForColumn(8)); // l
+    try std.testing.expectEqual(Colors.blue, line3.getForColumn(9)); // o
+    try std.testing.expectEqual(Colors.blue, line3.getForColumn(10)); // g
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(11)); // .
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(12)); // d
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(13)); // e
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(14)); // b
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(15)); // u
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(16)); // g
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(17)); // (
+    try std.testing.expectEqual(Colors.gray, line3.getForColumn(18)); // "
+    try std.testing.expectEqual(Colors.gray, line3.getForColumn(19)); // h
+    try std.testing.expectEqual(Colors.gray, line3.getForColumn(20)); // e
+    try std.testing.expectEqual(Colors.gray, line3.getForColumn(21)); // l
+    try std.testing.expectEqual(Colors.gray, line3.getForColumn(22)); // l
+    try std.testing.expectEqual(Colors.gray, line3.getForColumn(23)); // o
+    try std.testing.expectEqual(Colors.gray, line3.getForColumn(24)); // "
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(25)); // ,
+
+    sh.removeLine(4);
+    try std.testing.expectEqual(sh.lines.items.len, 4);
+    sh.removeLine(1);
+    try std.testing.expectEqual(sh.lines.items.len, 3);
+}
