@@ -17,7 +17,7 @@ pub const LSPError = error{
     UnknownExtension,
 };
 
-// TODO(remy): comment
+/// LSPMessageType is the type of the message sent by the LSP server.
 pub const LSPMessageType = enum {
     ClearDiagnostics,
     Completion,
@@ -34,7 +34,7 @@ pub const LSPMessageType = enum {
     MehExit,
 };
 
-// TODO(remy): comment
+/// LSPRequest is used to send a request to the LSP server.
 pub const LSPRequest = struct {
     json: U8Slice,
     message_type: LSPMessageType,
@@ -304,8 +304,7 @@ pub const LSP = struct {
         try self.sendMessage(request);
     }
 
-    // TODO(remy): refactor with definition/completion/etc.
-    pub fn references(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
+    pub fn internal(self: *LSP, buffer: *Buffer, cursor: Vec2u, msg_type: LSPMessageType) !void {
         if (self.context.is_running.load(.acquire) == false) {
             return;
         }
@@ -316,77 +315,37 @@ pub const LSP = struct {
         defer uri.deinit();
 
         // write the request
-        const json = try LSPWriter.textDocumentReference(self.allocator, msg_id, uri.bytes(), cursor);
+        const json = switch (msg_type) {
+            .References => try LSPWriter.textDocumentReference(self.allocator, msg_id, uri.bytes(), cursor),
+            .Definition => try LSPWriter.textDocumentDefinition(self.allocator, msg_id, uri.bytes(), cursor),
+            .Completion => try LSPWriter.textDocumentCompletion(self.allocator, msg_id, uri.bytes(), cursor),
+            .Hover      => try LSPWriter.textDocumentHover(self.allocator, msg_id, uri.bytes(), cursor),
+            else        => unreachable, // unimplemented message type for a request
+        };
         const request = LSPRequest{
             .json = json,
-            .message_type = .References,
+            .message_type = msg_type,
             .request_id = msg_id,
         };
 
         // send the request
         try self.sendMessage(request);
+    }
+
+    pub fn references(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
+        return self.internal(buffer, cursor, .References);
     }
 
     pub fn definition(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
-        if (self.context.is_running.load(.acquire) == false) {
-            return;
-        }
-
-        // identify the message and prepare some values
-        const msg_id = self.id();
-        var uri = try toUri(self.allocator, buffer.fullpath.bytes());
-        defer uri.deinit();
-
-        // write the request
-        const json = try LSPWriter.textDocumentDefinition(self.allocator, msg_id, uri.bytes(), cursor);
-        const request = LSPRequest{
-            .json = json,
-            .message_type = .Definition,
-            .request_id = msg_id,
-        };
-
-        // send the request
-        try self.sendMessage(request);
+        return self.internal(buffer, cursor, .Definition);
     }
 
     pub fn completion(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
-        if (self.context.is_running.load(.acquire) == false) {
-            return;
-        }
-
-        const msg_id = self.id();
-        var uri = try toUri(self.allocator, buffer.fullpath.bytes());
-        defer uri.deinit();
-
-        const json = try LSPWriter.textDocumentCompletion(self.allocator, msg_id, uri.bytes(), cursor);
-        const request = LSPRequest{
-            .json = json,
-            .message_type = .Completion,
-            .request_id = msg_id,
-        };
-
-        // send the request
-        try self.sendMessage(request);
+        return self.internal(buffer, cursor, .Completion);
     }
 
     pub fn hover(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
-        if (self.context.is_running.load(.acquire) == false) {
-            return;
-        }
-
-        const msg_id = self.id();
-        var uri = try toUri(self.allocator, buffer.fullpath.bytes());
-        defer uri.deinit();
-
-        const json = try LSPWriter.textDocumentHover(self.allocator, msg_id, uri.bytes(), cursor);
-        const request = LSPRequest{
-            .json = json,
-            .message_type = .Hover,
-            .request_id = msg_id,
-        };
-
-        // send the request
-        try self.sendMessage(request);
+        return self.internal(buffer, cursor, .Hover);
     }
 
     pub fn didChangeComplete(self: *LSP, buffer: *Buffer) !void {

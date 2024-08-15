@@ -1,7 +1,8 @@
 const std = @import("std");
 const DoublyLinkedList = std.DoublyLinkedList;
 
-/// AtomicQueue is an extremely basic queue/channel thread-safe implementation.
+/// AtomicQueue is an extremely basic queue/channel thread-safe implementation,
+/// backed by a std.DoublyLinkedList.
 /// Nodes are NOT owned by the queue.
 pub fn AtomicQueue(comptime T: type) type {
     return struct {

@@ -252,7 +252,9 @@ pub const LSPThread = struct {
     }
 
     // TODO(remy): unit test
-    // TODO(remy): comment me
+    /// interpret reads and interprets the response sent by the LSP Server.
+    /// It uses the `requests` map to map to know about the messages sent to the
+    /// LSP server and to assume what are the response message types.
     fn interpret(allocator: std.mem.Allocator, requests: *std.AutoHashMap(i64, LSPMessageType), response: []const u8) !LSPResponse {
         // isolate the json
         const idx = std.mem.indexOf(u8, response, "{");
@@ -288,8 +290,8 @@ pub const LSPThread = struct {
         return LSPError.MissingRequestEntry;
     }
 
-    /// readNotification reads the LSP notification and returns an LSPResponse.
     // TODO(remy): unit test
+    /// readNotification reads the LSP notification and returns an LSPResponse.
     fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
         // read the header only
         const header = try std.json.parseFromSlice(
@@ -325,7 +327,6 @@ pub const LSPThread = struct {
     }
 
     fn interpretShowMessage(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
-        // TODO(remy): implement me
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
         const notification = try std.json.parseFromSlice(LSPMessages.showMessageNotification, allocator, response[json_start_idx..], json_params);
