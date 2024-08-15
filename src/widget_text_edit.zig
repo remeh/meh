@@ -1178,6 +1178,7 @@ pub const WidgetTextEdit = struct {
     /// Calling onEscape will:
     ///   * end current edit block
     ///   * remove selection if any
+    ///   * clean the line if it's only composed of whitespaces
     ///   * switch the input mode to `Command`
     pub fn onEscape(self: *WidgetTextEdit) void {
         // change the history block, we're switching to do something else
@@ -1192,11 +1193,14 @@ pub const WidgetTextEdit = struct {
         // check if we want to clear current line from whitespaces
         if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
             if (line.isOnlyWhitespace()) {
-                line.reset();
-                line.appendConst("\n") catch |err| {
-                    std.log.err("WidgetTextEdit.onEscape: can't properly reset line: {}", .{err});
-                };
-                self.setCursorPos(Vec2u{ .a = 0, .b = self.cursor.pos.b }, .Scroll);
+                // we want to clean the line from every white spaces
+                self.moveCursorSpecial(.EndOfLine, true);
+                while (self.cursor.pos.a > 0) {
+                    self.editor.deleteGlyph(self.cursor.pos, .Left, .Input) catch |err| {
+                        std.log.err("WidgetTextEdit.onEscape: can't clear the line: {}", .{err});
+                    };
+                    self.moveCursor(Vec2i{.a = -1, .b = 0}, false);
+                }
             }
         } else |err| {
             std.log.err("WidgetTextEdit.onEscape: can't get current line to reset whitespaces: {}", .{err});
