@@ -3,6 +3,7 @@ test "all_tests" {
     _ = @import("editor.zig");
     _ = @import("lsp.zig");
     _ = @import("ripgrep.zig");
+    _ = @import("syntax_highlighter.zig");
     _ = @import("u8slice.zig");
     _ = @import("widget_command.zig");
     _ = @import("widget_lookup.zig");
