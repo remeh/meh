@@ -1488,6 +1488,14 @@ pub const App = struct {
                     c.SDLK_LEFT => self.currentWidgetTextEdit().onArrowKey(.Left),
                     c.SDLK_RIGHT => self.currentWidgetTextEdit().onArrowKey(.Right),
                     else => {
+                        // us/ascii layouts special case to open
+                        // the command box.
+                        if (shift and event.key.keysym.sym == c.SDLK_SEMICOLON) {
+                            if (self.currentWidgetTextEdit().input_mode == .Command) {
+                                self.focused_widget = FocusedWidget.Command;
+                            }
+                        }
+
                         if (ctrl) {
                             // TODO(remy): move to a specific fn
                             switch (event.key.keysym.sym) {
