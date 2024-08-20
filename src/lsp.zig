@@ -304,7 +304,7 @@ pub const LSP = struct {
         try self.sendMessage(request);
     }
 
-    pub fn internal(self: *LSP, buffer: *Buffer, cursor: Vec2u, msg_type: LSPMessageType) !void {
+    fn internal(self: *LSP, buffer: *Buffer, cursor: Vec2u, msg_type: LSPMessageType) !void {
         if (self.context.is_running.load(.acquire) == false) {
             return;
         }

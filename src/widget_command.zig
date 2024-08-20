@@ -241,7 +241,7 @@ pub const WidgetCommand = struct {
         if (std.mem.eql(u8, command, ":i")) {
             if (app.lsp) |lsp| {
                 lsp.hover(&(app.currentWidgetTextEdit().editor.buffer), app.currentWidgetTextEdit().cursor.pos) catch |err| {
-                    std.log.err("WidgetCommand: can't exec ':def': {}", .{err});
+                    std.log.err("WidgetCommand: can't exec ':i': {}", .{err});
                     return;
                 };
             } else {
