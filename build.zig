@@ -53,10 +53,6 @@ fn prepare(step: *std.Build.Step.Compile) void {
     step.linkSystemLibrary("SDL2_ttf");
     switch (builtin.os.tag) {
         .linux => step.linkLibC(),
-        .macos => {
-            step.linkFramework("OpenGl");
-            step.linkFramework("CoreFoundation");
-        },
         else => {},
     }
 }
