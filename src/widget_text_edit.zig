@@ -303,11 +303,11 @@ pub const WidgetTextEdit = struct {
 
     /// renderHorizontalLimit is used to render the 80 and 120 chars limit.
     fn renderHorizontalLimit(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, widget_size: Vec2u, draw_pos: Vec2u, one_char_size: Vec2u, left_offset: usize, chars_count: usize) void {
-        if (draw_pos.a + (one_char_size.a * chars_count) < self.viewport.columns.a*one_char_size.a) {
+        if (draw_pos.a + (one_char_size.a * chars_count) < self.viewport.columns.a * one_char_size.a) {
             return;
         }
 
-        const x = left_offset + draw_pos.a + (one_char_size.a * chars_count) - self.viewport.columns.a*one_char_size.a;
+        const x = left_offset + draw_pos.a + (one_char_size.a * chars_count) - self.viewport.columns.a * one_char_size.a;
 
         Draw.line(
             sdl_renderer,
@@ -1199,7 +1199,7 @@ pub const WidgetTextEdit = struct {
                     self.editor.deleteGlyph(self.cursor.pos, .Left, .Input) catch |err| {
                         std.log.err("WidgetTextEdit.onEscape: can't clear the line: {}", .{err});
                     };
-                    self.moveCursor(Vec2i{.a = -1, .b = 0}, false);
+                    self.moveCursor(Vec2i{ .a = -1, .b = 0 }, false);
                 }
             }
         } else |err| {
@@ -1946,22 +1946,22 @@ test "widget_text_edit onTab" {
     try std.testing.expectEqualSlices(u8, "DjNb", line1.data.items[0..4]);
     try std.testing.expectEqualSlices(u8, "PkhI", line2.data.items[0..4]);
 
-    widget.startSelection(Vec2u{.a = 0, .b = 0}, .KeyboardSelection);
-    widget.moveCursor(Vec2i{.a = 0, .b = 1}, false);
-    widget.moveCursor(Vec2i{.a = 0, .b = 1}, false);
+    widget.startSelection(Vec2u{ .a = 0, .b = 0 }, .KeyboardSelection);
+    widget.moveCursor(Vec2i{ .a = 0, .b = 1 }, false);
+    widget.moveCursor(Vec2i{ .a = 0, .b = 1 }, false);
     widget.onTab(false);
 
     try std.testing.expectEqualSlices(u8, "    test", line0.data.items[0..8]);
     try std.testing.expectEqualSlices(u8, "    DjNb", line1.data.items[0..8]);
     try std.testing.expectEqualSlices(u8, "    PkhI", line2.data.items[0..8]);
 
-    widget.moveCursor(Vec2i{.a = 0, .b = -1}, false);
+    widget.moveCursor(Vec2i{ .a = 0, .b = -1 }, false);
     widget.onTab(false);
     try std.testing.expectEqualSlices(u8, "        test", line0.data.items[0..12]);
     try std.testing.expectEqualSlices(u8, "        DjNb", line1.data.items[0..12]);
     try std.testing.expectEqualSlices(u8, "    PkhI", line2.data.items[0..8]);
 
-    widget.moveCursor(Vec2i{.a = 0, .b = 1}, false);
+    widget.moveCursor(Vec2i{ .a = 0, .b = 1 }, false);
     widget.onTab(true);
     try std.testing.expectEqualSlices(u8, "    test", line0.data.items[0..8]);
     try std.testing.expectEqualSlices(u8, "    DjNb", line1.data.items[0..8]);

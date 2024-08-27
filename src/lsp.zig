@@ -319,8 +319,8 @@ pub const LSP = struct {
             .References => try LSPWriter.textDocumentReference(self.allocator, msg_id, uri.bytes(), cursor),
             .Definition => try LSPWriter.textDocumentDefinition(self.allocator, msg_id, uri.bytes(), cursor),
             .Completion => try LSPWriter.textDocumentCompletion(self.allocator, msg_id, uri.bytes(), cursor),
-            .Hover      => try LSPWriter.textDocumentHover(self.allocator, msg_id, uri.bytes(), cursor),
-            else        => unreachable, // unimplemented message type for a request
+            .Hover => try LSPWriter.textDocumentHover(self.allocator, msg_id, uri.bytes(), cursor),
+            else => unreachable, // unimplemented message type for a request
         };
         const request = LSPRequest{
             .json = json,

@@ -1532,17 +1532,7 @@ pub const App = struct {
                                     self.focused_widget = .Lookup;
                                 },
                                 c.SDLK_p => {
-                                    self.widget_lookup.reset();
-                                    // scan directory mode
-                                    self.widget_lookup.setFilepath(self.working_dir) catch |err| {
-                                        std.log.err("App.editorEvents: can't set WidgetLookup filepath: {}", .{err});
-                                        return;
-                                    };
-                                    self.widget_lookup.scanDir() catch |err| {
-                                        std.log.err("App.editorEvents: can't list file in WidgetLookup: {}", .{err});
-                                        return;
-                                    };
-                                    self.focused_widget = .Lookup;
+                                    self.openFileOpener();
                                 },
                                 c.SDLK_o => {
                                     if (shift) {
@@ -1605,6 +1595,20 @@ pub const App = struct {
             },
             else => {},
         }
+    }
+
+    pub fn openFileOpener(self: *App) void {
+        self.widget_lookup.reset();
+        // scan directory mode
+        self.widget_lookup.setFilepath(self.working_dir) catch |err| {
+            std.log.err("App.editorEvents: can't set WidgetLookup filepath: {}", .{err});
+            return;
+        };
+        self.widget_lookup.scanDir() catch |err| {
+            std.log.err("App.editorEvents: can't list file in WidgetLookup: {}", .{err});
+            return;
+        };
+        self.focused_widget = .Lookup;
     }
 
     // misc
