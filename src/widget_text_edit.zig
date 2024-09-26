@@ -944,6 +944,7 @@ pub const WidgetTextEdit = struct {
                     'F' => self.setInputMode(.F),
                     'r' => self.setInputMode(.r),
                     'R' => self.setInputMode(.Replace),
+                    'V' => self.duplicateLine(),
                     'b' => self.moveCursorSpecial(CursorMove.PreviousSpace, true),
                     'e' => self.moveCursorSpecial(CursorMove.NextSpace, true),
                     // start inserting
@@ -1270,6 +1271,27 @@ pub const WidgetTextEdit = struct {
         self.editor.historyEndBlock();
         self.validateCursorPos(.Scroll);
         self.stopSelection(.Inactive);
+    }
+
+    /// duplicateLine duplicates the line under the cursor.
+    // TODO(remy): unit test
+    pub fn duplicateLine(self: *WidgetTextEdit) void {
+        if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
+            self.moveCursorSpecial(.EndOfLine, false);
+            self.editor.newLine(self.cursor.pos, .Input) catch |err| {
+                std.log.err("WidgetTextEdit.duplicateLine: on newLine {}", .{err});
+                return;
+            };
+            self.moveCursorSpecial(.NextLine, false);
+            self.moveCursorSpecial(.StartOfLine, false);
+            self.editor.insertUtf8Text(self.cursor.pos, line.bytes()[0 .. line.bytes().len - 1], .Input) catch |err| {
+                std.log.err("WidgetTextEdit.duplicateLine: on insert text {}", .{err});
+                return;
+            };
+            self.moveCursorSpecial(.EndOfLine, true);
+        } else |err| {
+            std.log.err("WidgetTextEdit.duplicateLine: {}", .{err});
+        }
     }
 
     /// buildSelectedText uses the current selection in the WidgetTextEdit to return

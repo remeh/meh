@@ -29,7 +29,6 @@ pub const UTF8IteratorError = error{
 ///             break;
 ///         }
 ///     }
-// TODO(remy): the iterator pattern isn't correct, anyone would expect `while (it.next()) {}`
 pub const UTF8Iterator = struct {
     current_byte: usize,
     current_glyph: usize,
