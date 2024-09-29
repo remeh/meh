@@ -12,6 +12,7 @@ const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 
 pub const WidgetMessageBoxType = enum {
+    ExecOutput,
     LSPDiagnostic,
     LSPHover,
     LSPMessage,
@@ -108,7 +109,7 @@ pub const WidgetMessageBox = struct {
         const lines_to_draw = @min(10, self.lines.items.len);
 
         switch (self.message) {
-            .LSPDiagnostic, .LSPHover, .LSPMessage => {
+            .ExecOutput, .LSPDiagnostic, .LSPHover, .LSPMessage => {
                 var color = Colors.light_gray;
                 if (self.message == .LSPDiagnostic) {
                     color = Colors.red;

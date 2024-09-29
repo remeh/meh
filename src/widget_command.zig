@@ -258,10 +258,10 @@ pub const WidgetCommand = struct {
             const full_prompt = (try self.input.text()).bytes();
             if (Exec.run(self.allocator, full_prompt[2..full_prompt.len], app.working_dir.bytes())) |*result| {
                 if (result.stderr.len > 0) {
-                    app.showMessageBoxMultipleFromSlice(result.stderr, .LSPMessage, .WithOverlay);
+                    app.showMessageBoxMultipleFromSlice(result.stderr, .ExecOutput, .WithOverlay);
                 }
                 if (result.stdout.len > 0) {
-                    app.showMessageBoxMultipleFromSlice(result.stdout, .LSPMessage, .WithOverlay);
+                    app.showMessageBoxMultipleFromSlice(result.stdout, .ExecOutput, .WithOverlay);
                 }
 
                 result.deinit();
