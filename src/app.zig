@@ -903,6 +903,31 @@ pub const App = struct {
     }
 
     // TODO(remy): comment
+    pub fn showMessageBoxMultipleFromSlice(self: *App, lines: []const u8, box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
+        var list = std.ArrayList(U8Slice).init(self.allocator);
+        defer {
+            for (list.items) |line| {
+                line.deinit();
+            }
+            list.deinit();
+        }
+        var it = std.mem.splitScalar(u8, lines, '\n');
+        while (it.next()) |line| {
+            if (line.len == 0) {
+                continue;
+            }
+            const u8slice = U8Slice.initFromSlice(self.allocator, line) catch |err| {
+                std.log.err("err: {}", .{err});
+                return;
+            };
+            list.append(u8slice) catch |err| {
+                std.log.err("err: {}", .{err});
+            };
+        }
+        self.showMessageBoxMultiple(list, box_type, with_overlay);
+    }
+
+    // TODO(remy): comment
     // message content is copied in the messagebox, the caller is responsible of
     // the original message memory.
     pub fn showMessageBox(self: *App, message: U8Slice, box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
