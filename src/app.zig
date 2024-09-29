@@ -881,7 +881,7 @@ pub const App = struct {
         };
         defer self.allocator.free(message);
 
-        self.widget_messagebox.set(label, .Error, .WithOverlay) catch |err| {
+        self.widget_messagebox.set(message, .Error, .WithOverlay) catch |err| {
             std.log.err("App.showMessageBoxError: can't show messagebox error: {}", .{err});
             return;
         };

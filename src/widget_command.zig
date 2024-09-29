@@ -5,6 +5,7 @@ const expect = std.testing.expect;
 const App = @import("app.zig").App;
 const Direction = @import("app.zig").Direction;
 const Draw = @import("draw.zig").Draw;
+const Exec = @import("exec.zig").Exec;
 const Font = @import("font.zig").Font;
 const Ripgrep = @import("ripgrep.zig").Ripgrep;
 const Scaler = @import("scaler.zig").Scaler;
@@ -250,6 +251,28 @@ pub const WidgetCommand = struct {
             return;
         }
 
+        // exec
+        // ----
+
+        if (command[0] == ':' and command[1] == '!' and command.len > 2) {
+            const full_prompt = (try self.input.text()).bytes();
+            if (Exec.run(self.allocator, full_prompt[2..full_prompt.len], app.working_dir.bytes())) |*result| {
+                if (result.stderr.len > 0) {
+                    app.showMessageBoxError("stderr: {s}", .{result.stderr});
+                    // TODO(remy): use showMessageBoxMultiple
+                }
+                if (result.stdout.len > 0) {
+                    app.showMessageBoxError("stdout: {s}", .{result.stdout});
+                    // TODO(remy): use showMessageBoxMultiple
+                }
+
+                result.deinit();
+            } else |err| {
+                std.log.err("can't exec: {}", .{err});
+            }
+            return;
+        }
+
         // debug
         // -----
 
@@ -374,6 +397,7 @@ pub const WidgetCommand = struct {
 
     /// rest returns the rest of the input starting at the given parameter,
     /// useful to feed it to an external tool such as ripgrep or fd.
+    // TODO(remy): fixme, it's not doing what it's documented to do
     fn rest(self: WidgetCommand, idx: usize) ?[]const u8 {
         if (idx > self.countArgs()) {
             return null;
