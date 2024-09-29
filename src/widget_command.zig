@@ -254,7 +254,7 @@ pub const WidgetCommand = struct {
         // exec
         // ----
 
-        if (command[0] == ':' and command[1] == '!' and command.len > 2) {
+        if (command.len > 2 and command[0] == ':' and command[1] == '!') {
             const full_prompt = (try self.input.text()).bytes();
             if (Exec.run(self.allocator, full_prompt[2..full_prompt.len], app.working_dir.bytes())) |*result| {
                 if (result.stderr.len > 0) {
