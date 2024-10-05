@@ -246,8 +246,6 @@ pub const LSP = struct {
             return "zls";
         } else if (std.mem.eql(u8, extension, ".rs")) {
             return "rust-analyzer";
-        } else if (std.mem.eql(u8, extension, ".ts") or std.mem.eql(u8, extension, ".js")) {
-            return "typescript-language-server --stdio";
         } else if (std.mem.eql(u8, extension, ".cpp")) {
             return "clangd";
         } else if (std.mem.eql(u8, extension, ".rb")) {
