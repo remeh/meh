@@ -105,8 +105,14 @@ pub const LSPThread = struct {
             // ----------------------------------------------
 
             while (!ctx.send_queue.isEmpty()) {
+                if (!stdout_ctx.is_running.load(.acquire)) {
+                    running = false;
+                    break;
+                }
+
                 var node = ctx.send_queue.get().?;
                 // message to stop the lsp server
+
                 // -
                 if (std.mem.eql(u8, node.data.json.bytes(), "exit")) {
                     running = false;
@@ -139,7 +145,14 @@ pub const LSPThread = struct {
         ctx.is_running.store(false, .release);
 
         // kill the LSP server process
-        _ = try child.kill();
+
+        _ = child.kill() catch |err| {
+            if (err == error.FileNotFound) {
+                std.log.debug("LSP server binary not available on the system", .{});
+            } else {
+                std.log.debug("can't kill the lsp thread: {}", .{err});
+            }
+        };
 
         requests.deinit();
         drainQueues(ctx, &stdout_ctx);
