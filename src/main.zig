@@ -27,7 +27,10 @@ pub fn main() !void {
         // in this directory.
         const first_arg = std.os.argv[1];
         const first_arg_as_const = first_arg[0..std.mem.len(first_arg)];
-        const stat = try std.fs.cwd().statFile(first_arg_as_const);
+        const stat = std.fs.cwd().statFile(first_arg_as_const) catch |err| {
+            std.log.debug("Error while opening the file: {}. Closing.", .{err});
+            return;
+        };
         if (stat.kind == .directory) {
             const fullpath = try std.fs.realpathAlloc(allocator, first_arg_as_const);
             defer allocator.free(fullpath);
