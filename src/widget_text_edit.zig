@@ -1154,7 +1154,7 @@ pub const WidgetTextEdit = struct {
     }
 
     /// onReturn is called when the user has pressed Return.
-    pub fn onReturn(self: *WidgetTextEdit) void {
+    pub fn onReturn(self: *WidgetTextEdit, ctrl: bool) void {
         switch (self.input_mode) {
             .Insert => {
                 self.newLine();
@@ -1171,7 +1171,15 @@ pub const WidgetTextEdit = struct {
                     }
                 }
             },
-            else => self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true),
+            else => {
+                if (ctrl) {
+                    self.moveCursorSpecial(CursorMove.EndOfLine, true);
+                    self.newLine();
+                    self.setInputMode(.Insert);
+                } else {
+                    self.moveCursor(Vec2i{ .a = 0, .b = 1 }, true);
+                }
+            },
         }
     }
 

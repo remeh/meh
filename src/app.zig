@@ -1489,7 +1489,7 @@ pub const App = struct {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
                     c.SDLK_RETURN => {
-                        self.currentWidgetTextEdit().onReturn();
+                        self.currentWidgetTextEdit().onReturn(ctrl);
                     },
                     c.SDLK_ESCAPE => _ = self.currentWidgetTextEdit().onEscape(),
                     c.SDLK_COLON => {
