@@ -977,12 +977,25 @@ pub const WidgetTextEdit = struct {
                         self.newLine();
                         self.setInputMode(.Insert);
                     },
-                    // search next & previous
+                    // search
                     'n' => {
                         self.search(self.last_search, .After, false);
                     },
                     'N' => {
                         self.search(self.last_search, .Before, false);
+                    },
+                    '*' => {
+                        if (self.editor.wordAt(self.cursor.pos)) |word| {
+                            if (U8Slice.initFromSlice(self.allocator, word)) |slice| {
+                                _ = self.editor.syntax_highlighter.setHighlightWord(word);
+                                self.search(slice, .After, true);
+                                slice.deinit();
+                            } else |err| {
+                                std.log.debug("can't search word: {}", .{err});
+                            }
+                        } else |err| {
+                            std.log.err("can't read word under the cursor: {}", .{err});
+                        }
                     },
                     // copy & paste
                     'v' => {
@@ -1048,7 +1061,7 @@ pub const WidgetTextEdit = struct {
                             };
                         }
                     },
-                    // undo & redd
+                    // undo & redo
                     'u' => self.undo(),
                     'U' => self.redo(),
                     else => return false,
