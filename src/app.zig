@@ -209,8 +209,8 @@ pub const App = struct {
         // load the fonts
 
         const font_lowdpi = try Font.init(allocator, sdl_renderer.?, 18);
-        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, 22);
-        const font_hidpi = try Font.init(allocator, sdl_renderer.?, 32);
+        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, 20);
+        const font_hidpi = try Font.init(allocator, sdl_renderer.?, 30);
 
         // working directory
 

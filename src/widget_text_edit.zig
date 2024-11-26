@@ -986,13 +986,13 @@ pub const WidgetTextEdit = struct {
                     },
                     '*' => {
                         if (self.editor.wordAt(self.cursor.pos)) |word| {
-                            if (U8Slice.initFromSlice(self.allocator, word)) |slice| {
-                                _ = self.editor.syntax_highlighter.setHighlightWord(word);
-                                self.search(slice, .After, true);
-                                slice.deinit();
-                            } else |err| {
-                                std.log.debug("can't search word: {}", .{err});
-                            }
+                            _ = self.editor.syntax_highlighter.setHighlightWord(word);
+                            self.last_search.deinit();
+                            const data = U8Slice.initFromSlice(self.allocator, word) catch |err| {
+                                std.log.err("WidgetTextEdit.onTextInput: can't store last search: {}", .{err});
+                                return false;
+                            };
+                            self.last_search = data;
                         } else |err| {
                             std.log.err("can't read word under the cursor: {}", .{err});
                         }
