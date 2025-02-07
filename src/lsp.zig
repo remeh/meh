@@ -11,10 +11,14 @@ const Vec4u = @import("vec.zig").Vec4u;
 
 pub const LSPError = error{
     IncompleteCompletionEntry,
-    MalformedResponse,
     MalformedUri,
     MissingRequestEntry,
     UnknownExtension,
+    UnsupportedNotificationType,
+    NoJSON,
+    CompletionError,
+    ReferencesError,
+    HoverError,
 };
 
 /// LSPMessageType is the type of the message sent by the LSP server.

@@ -79,8 +79,15 @@ pub const LSPThread = struct {
             while (!stdout_ctx.queue.isEmpty()) {
                 var node = stdout_ctx.queue.get().?;
 
-                // interpret the JSON received from the LSP server
+                // FIXME(remy):
+                // * first bug: I use a 512kB buffer to read, an LSP server
+                // response might not fit 512kB and I will send several messages for
+                // interpretation while it's actually only one. I might want to
+                // want to reassemble them here
+                // * second bug: I think it is possible for a message to contains
+                // several valid JSONs to interpret
 
+                // interpret the JSON received from the LSP server
                 if (LSPThread.interpret(ctx.allocator, &requests, node.data.bytes())) |response| {
                     // send it back to the main thread, converted to an LSPResponse
                     if (ctx.allocator.create(AtomicQueue(LSPResponse).Node)) |new_node| {
@@ -91,7 +98,12 @@ pub const LSPThread = struct {
                         response.deinit();
                     }
                 } else |err| {
-                    std.log.err("LSPThread.run: can't interpret: {}", .{err});
+                    switch (err) {
+                        LSPError.UnsupportedNotificationType, LSPError.NoJSON => {},
+                        else => {
+                            std.log.err("LSPThread.run: can't interpret: {}", .{err});
+                        },
+                    }
                 }
 
                 // free the resources of the data sent by the stdoud thread
@@ -188,7 +200,7 @@ pub const LSPThread = struct {
         var slice = U8Slice.initEmpty(ctx.allocator);
         errdefer slice.deinit();
 
-        const block_size = 64 * 1024;
+        const block_size = 512 * 1024; // 512kB buffer
         var array: [block_size]u8 = undefined;
         var buff = &array;
         var read: usize = 0;
@@ -272,7 +284,8 @@ pub const LSPThread = struct {
         // isolate the json
         const idx = std.mem.indexOf(u8, response, "{");
         if (idx == null) {
-            return LSPError.MalformedResponse;
+            // no JSON in this response, not worth intrepreting.
+            return LSPError.NoJSON;
         }
 
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
@@ -286,10 +299,19 @@ pub const LSPThread = struct {
                 errdefer rv.deinit();
 
                 switch (message_type) {
-                    .Completion => try LSPThread.interpretCompletion(allocator, &rv, response, idx.?),
+                    .Completion => LSPThread.interpretCompletion(allocator, &rv, response, idx.?) catch |err| {
+                        std.log.debug("interpret: error during the completion interpret: {}", .{err});
+                        return LSPError.CompletionError;
+                    },
                     .Definition => LSPThread.interpretDefinition(allocator, &rv, response, idx.?),
-                    .References => try LSPThread.interpretReferences(allocator, &rv, response, idx.?),
-                    .Hover => try LSPThread.interpretHover(allocator, &rv, response, idx.?),
+                    .References => LSPThread.interpretReferences(allocator, &rv, response, idx.?) catch |err| {
+                        std.log.debug("interpret: error during the references interpret: {}", .{err});
+                        return LSPError.ReferencesError;
+                    },
+                    .Hover => LSPThread.interpretHover(allocator, &rv, response, idx.?) catch |err| {
+                        std.log.debug("interpret: error during the hover interpret: {}", .{err});
+                        return LSPError.HoverError;
+                    },
                     else => {},
                 }
 
@@ -307,22 +329,25 @@ pub const LSPThread = struct {
     /// readNotification reads the LSP notification and returns an LSPResponse.
     fn readNotification(allocator: std.mem.Allocator, response: []const u8, json_start_idx: usize) !LSPResponse {
         // read the header only
-        const header = try std.json.parseFromSlice(
+        const header = std.json.parseFromSlice(
             LSPMessages.headerNotificationResponse,
             allocator,
             response[json_start_idx..],
             .{ .ignore_unknown_fields = true },
-        );
+        ) catch |err| {
+            std.log.debug("readNotification: can't parse JSON: {}", .{err});
+            return err;
+        };
+
         defer header.deinit();
 
         // here we want to check what kind of notification we have to process
-        if (std.mem.eql(u8, header.value.method, "window/showMessage")) {
+        if (std.mem.eql(u8, header.value.method, "window/showMessage") or std.mem.eql(u8, header.value.method, "window/logMessage")) {
             var rv = LSPResponse.init(allocator, 0, .LogMessage);
             errdefer rv.deinit();
             LSPThread.interpretShowMessage(allocator, &rv, response, json_start_idx) catch |err| {
                 return err;
             };
-
             return rv;
         }
 
@@ -332,11 +357,11 @@ pub const LSPThread = struct {
             LSPThread.interpretPublishDiagnostics(allocator, &rv, response, json_start_idx) catch |err| {
                 return err;
             };
-
             return rv;
         }
 
-        return LSPError.MissingRequestEntry;
+        std.log.debug("readNotification: unsupported notification type: {s}", .{header.value.method});
+        return LSPError.UnsupportedNotificationType;
     }
 
     fn interpretShowMessage(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
