@@ -126,6 +126,7 @@ pub const WidgetCommand = struct {
             wt.editor.save() catch |err| {
                 std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ command, err });
             };
+            app.updateDiffStats();
             return;
         }
 

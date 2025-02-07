@@ -7,6 +7,7 @@ const BufferPosition = @import("buffer.zig").BufferPosition;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const Font = @import("font.zig").Font;
+const GitError = @import("git.zig").GitError;
 const LineStatus = @import("widget_text_edit.zig").LineStatus;
 const LSP = @import("lsp.zig").LSP;
 const LSPError = @import("lsp.zig").LSPError;
@@ -30,6 +31,7 @@ const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 const Vec2itou = @import("vec.zig").Vec2itou;
 const itou = @import("vec.zig").itou;
+const gitDiff = @import("git.zig").gitDiff;
 
 pub const AppError = error{
     CantOpenFile,
@@ -219,6 +221,13 @@ pub const App = struct {
         defer allocator.free(fullpath);
         try working_dir.appendConst(fullpath);
 
+        // libgit2 init
+        const libgit_init = c.git_libgit2_init();
+        if (libgit_init < 0) {
+            std.log.err("App.init: libgit2 can't init: {d}", .{libgit_init});
+            return AppError.CantInit;
+        }
+
         // return the created app
         return App{
             .allocator = allocator,
@@ -344,6 +353,8 @@ pub const App = struct {
         }
 
         try self.textedits.append(text_edit);
+
+        self.updateDiffStats();
 
         // switch to this buffer
         self.setCurrentFocusedWidgetTextEditIndex(self.textedits.items.len - 1);
@@ -641,6 +652,55 @@ pub const App = struct {
         }
 
         return rv;
+    }
+
+    pub fn updateDiffStats(self: *App) void {
+        for (self.textedits.items) |*textedit| {
+            textedit.clearLineStatus(&.{.GitAdded, .GitRemoved});
+        }
+
+        var git_changes_per_file = gitDiff(self.allocator) catch |err| {
+            if (err != GitError.RepoError) {
+                std.log.err("updateDiffStats: can't compute diff: {}", .{err});
+            }
+            return;
+        };
+
+        var key_it = git_changes_per_file.keyIterator();
+        while (key_it.next()) |file| {
+            const changes = git_changes_per_file.get(file.*).?;
+            for (self.textedits.items) |*textedit| {
+                if (std.mem.endsWith(u8, textedit.editor.buffer.fullpath.bytes(), file.*)) {
+                    for (changes.items) |change| {
+                        const line_status = LineStatus{
+                            .type = change.status,
+                            .message = null,
+                        };
+
+                        var wont_override_diag = true;
+
+                        if (textedit.lines_status.get(change.line)) |status| {
+                            if (status.type == .Diagnostic) {
+                                wont_override_diag = false;
+                            }
+                        }
+
+                        if (wont_override_diag) {
+                            textedit.lines_status.put(change.line, line_status) catch |err| {
+                                std.log.err("WidgetCommand.interpret: can't add git line status: {any}", .{err});
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        // clean-up
+        var it = git_changes_per_file.iterator();
+        while (it.next()) |v| {
+            v.value_ptr.*.deinit();
+        }
+        git_changes_per_file.deinit();
     }
 
     /// openRipgrepResults opens the WidgetSearchResults with the given results if there are any.
@@ -1020,12 +1080,6 @@ pub const App = struct {
                         self.messageBoxEvents(event);
                     },
                 }
-
-                // the focus widget changed, trigger an immedate repaint
-                //                if (self.focused_widget != focused_widget) {
-                //                    self.render();
-                //                    focused_widget = self.focused_widget;
-                //                }
             }
 
             // LSP messages handling
@@ -1138,7 +1192,7 @@ pub const App = struct {
                     // TODO(remy): implements App.getWidgetTextEditByFilepath()
                     for (self.textedits.items) |*textedit| {
                         if (std.mem.eql(u8, textedit.editor.buffer.fullpath.bytes(), diagnostic.filepath.bytes())) {
-                            textedit.clearDiagnostics();
+                            textedit.clearLineStatus(&.{.Diagnostic});
                         }
                     }
                 }
@@ -1157,7 +1211,7 @@ pub const App = struct {
                             // when starting to process diagnostics, first thing we want to do
                             // is to clear the map.
                             if (first) {
-                                textedit.clearDiagnostics();
+                                textedit.clearLineStatus(&.{.Diagnostic});
                                 first = false;
                             }
                             const message = diagnostic.message.copy(self.allocator) catch |err| {
@@ -1499,6 +1553,9 @@ pub const App = struct {
                     },
                     c.SDLK_BACKSPACE => {
                         self.currentWidgetTextEdit().onBackspace();
+                    },
+                    c.SDLK_SPACE => {
+                        self.currentWidgetTextEdit().onSpace(shift);
                     },
                     c.SDLK_EQUALS => {
                         if ((ctrl or cmd) and shift) {

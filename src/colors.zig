@@ -35,6 +35,13 @@ pub const green = Vec4u{
     .d = 255,
 };
 
+pub const orange = Vec4u{
+    .a = 244,
+    .b = 190,
+    .c = 99,
+    .d = 255,
+};
+
 pub const red = Vec4u{
     .a = 224,
     .b = 90,

@@ -11,7 +11,6 @@ const Draw = @import("draw.zig").Draw;
 const Editor = @import("editor.zig").Editor;
 const EditorError = @import("editor.zig").EditorError;
 const Font = @import("font.zig").Font;
-const ImVec2 = @import("vec.zig").ImVec2;
 const Scaler = @import("scaler.zig").Scaler;
 const SearchDirection = @import("editor.zig").SearchDirection;
 const U8Slice = @import("u8slice.zig").U8Slice;
@@ -76,6 +75,8 @@ pub const SelectionState = enum {
 
 pub const LineStatusType = enum {
     Diagnostic,
+    GitAdded,
+    GitRemoved,
 };
 
 pub const LineStatus = struct {
@@ -278,8 +279,10 @@ pub const WidgetTextEdit = struct {
             }
 
             if (self.lines_status.get(i)) |status| {
-                if (status.type == .Diagnostic) {
-                    text_color = Colors.red;
+                switch (status.type) {
+                    .Diagnostic => text_color = Colors.red,
+                    .GitAdded => text_color = Colors.green,
+                    .GitRemoved => text_color = Colors.orange,
                 }
             }
 
@@ -591,13 +594,18 @@ pub const WidgetTextEdit = struct {
         return false;
     }
 
-    /// clearDiagnostics empties the diagnostics map.
-    pub fn clearDiagnostics(self: *WidgetTextEdit) void {
-        var it = self.lines_status.valueIterator();
-        while (it.next()) |line_status| {
-            line_status.deinit();
+    /// clearLineStatus empties the diagnostics map.
+    pub fn clearLineStatus(self: *WidgetTextEdit, kinds: []const LineStatusType) void {
+        var it = self.lines_status.keyIterator();
+        while (it.next()) |key| {
+            const line_status = self.lines_status.get(key.*).?;
+            for (kinds) |kind| {
+                if (line_status.type == kind) {
+                    _ = self.lines_status.remove(key.*);
+                    line_status.deinit();
+                }
+            }
         }
-        self.lines_status.clearAndFree();
     }
 
     /// computeViewport is dependant on visible_cols_and_lines, which is computed every
@@ -1244,6 +1252,38 @@ pub const WidgetTextEdit = struct {
             },
             .Command, .Replace => {
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+            },
+            else => {},
+        }
+    }
+
+    pub fn onSpace(self: *WidgetTextEdit, shift: bool) void {
+        switch (self.input_mode) {
+            .Command => {
+                // jump to next diagnostic
+                var it = self.lines_status.keyIterator();
+                var keys = std.ArrayList(usize).init(self.allocator);
+                defer keys.deinit();
+
+                while (it.next()) |key| {
+                    keys.append(key.*) catch |err| {
+                        std.log.err("can't find next diagnostic: {}", .{err});
+                        return;
+                    };
+                }
+
+                if (shift) {
+                    std.sort.insertion(usize, keys.items, {}, std.sort.desc(usize));
+                } else {
+                    std.sort.insertion(usize, keys.items, {}, std.sort.asc(usize));
+                }
+
+                for (keys.items) |line| {
+                    if ((!shift and line > self.cursor.pos.b) or (shift and line < self.cursor.pos.b)) {
+                        self.goToLine(line, .Center);
+                        break;
+                    }
+                }
             },
             else => {},
         }
