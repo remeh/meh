@@ -6,6 +6,7 @@ const App = @import("app.zig").App;
 const Direction = @import("app.zig").Direction;
 const Draw = @import("draw.zig").Draw;
 const Exec = @import("exec.zig").Exec;
+const Fd = @import("fd.zig").Fd;
 const Font = @import("font.zig").Font;
 const Ripgrep = @import("ripgrep.zig").Ripgrep;
 const Scaler = @import("scaler.zig").Scaler;
@@ -209,6 +210,23 @@ pub const WidgetCommand = struct {
                 };
                 app.openRipgrepResults(results);
                 return;
+            }
+            return;
+        }
+
+        // fd
+        // ------------
+
+        if (std.mem.eql(u8, command, ":fd")) {
+            if (self.rest(1)) |parameters| {
+                const results = Fd.search(app.allocator, parameters, app.working_dir.bytes()) catch |err| {
+                    std.log.err("WidgetCommand: can't exec 'fd {s}': {}", .{ parameters, err });
+                    return;
+                };
+                app.openFdResults(results);
+                return;
+            } else {
+                app.showMessageBoxError("fd: provide a pattern to search", .{});
             }
             return;
         }

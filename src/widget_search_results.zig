@@ -4,6 +4,7 @@ const c = @import("clib.zig").c;
 const App = @import("app.zig").App;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
+const FdResults = @import("fd.zig").FdResults;
 const Font = @import("font.zig").Font;
 const LSPPosition = @import("lsp.zig").LSPPosition;
 const RipgrepResults = @import("ripgrep.zig").RipgrepResults;
@@ -89,7 +90,31 @@ pub const WidgetSearchResults = struct {
         }
 
         try self.list.label.appendConst("Found:");
+        try self.list.filter();
+    }
 
+    /// setFdResults creates all entries in the widget_list. The given `results` is now
+    /// owned by the WidgetSearchResults, no needs to free its resources as we copy the
+    /// values in the WidgetListEntries.
+    pub fn setFdResults(self: *WidgetSearchResults, results: FdResults) !void {
+        self.list.reset();
+
+        var it = results.iterator(self.allocator);
+        defer results.deinit();
+
+        while (it.next()) |result| {
+            // no need to free the data in result as it will be managed
+            // by the WidgetListEntry.
+            try self.list.entries.append(WidgetListEntry{
+                .label = result.filepath,
+                .data = try result.filepath.copy(self.allocator),
+                .data_pos = Vec2i{.a = 0, .b = 0},
+                .extra_info = null,
+                .type = .File,
+            });
+        }
+
+        try self.list.label.appendConst("Found:");
         try self.list.filter();
     }
 

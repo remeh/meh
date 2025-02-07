@@ -6,6 +6,7 @@ const Buffer = @import("buffer.zig").Buffer;
 const BufferPosition = @import("buffer.zig").BufferPosition;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
+const FdResults = @import("fd.zig").FdResults;
 const Font = @import("font.zig").Font;
 const GitError = @import("git.zig").GitError;
 const LineStatus = @import("widget_text_edit.zig").LineStatus;
@@ -712,6 +713,20 @@ pub const App = struct {
 
         self.widget_search_results.setRipgrepResults(results) catch |err| {
             std.log.err("App.openRipgrepResults: {}", .{err});
+        };
+
+        self.focused_widget = .SearchResults;
+    }
+
+    /// openFdResults opens the WidgetSearchResults with the given results if there are any.
+    pub fn openFdResults(self: *App, results: FdResults) void {
+        if (results.stdout.len == 0) {
+            self.showMessageBoxError("No results.", .{});
+            return;
+        }
+
+        self.widget_search_results.setFdResults(results) catch |err| {
+            std.log.err("App.openFdResults: {}", .{err});
         };
 
         self.focused_widget = .SearchResults;

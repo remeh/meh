@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const c = @import("clib.zig").c;
 
 const App = @import("app.zig").App;
+const Fd = @import("fd.zig").Fd;
 
 pub fn main() !void {
     // TODO(remy): configure the allocator properly
@@ -13,14 +14,16 @@ pub fn main() !void {
     defer _ = gpa.detectLeaks();
 
     // app
-
     var app = try App.init(allocator);
     defer app.deinit();
 
     // open the files passed as argument
     if (std.os.argv.len <= 1) {
-        // directly open the file opener
-        app.openFileOpener();
+        const results = Fd.search(app.allocator, ".", app.working_dir.bytes()) catch |err| {
+            std.log.err("main: can't exec 'fd {s}': {}", .{ ".", err });
+            return;
+        };
+        app.openFdResults(results);
     } else {
         // stat the first parameter, if it is a directory, we want
         // to use it as the working dir and open the file opener
