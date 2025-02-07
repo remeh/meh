@@ -805,9 +805,7 @@ pub const WidgetTextEdit = struct {
                 self.moveCursor(Vec2i{ .a = 0, .b = -move }, true);
             },
             'v' => {
-                self.paste() catch |err| {
-                    std.log.err("WidgetTextEdit.onCtrlKeyDown: can't paste: {}", .{err});
-                };
+                self.duplicateLine();
                 return true;
             },
             else => {},
@@ -1336,6 +1334,7 @@ pub const WidgetTextEdit = struct {
 
     /// duplicateLine duplicates the line under the cursor.
     // TODO(remy): unit test
+    // FIXME(remy): seems to crash the app? sometimes?
     pub fn duplicateLine(self: *WidgetTextEdit) void {
         if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
             self.moveCursorSpecial(.EndOfLine, false);
