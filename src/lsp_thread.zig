@@ -9,6 +9,7 @@ const LSPMessages = @import("lsp_messages.zig");
 const LSPMessageType = @import("lsp.zig").LSPMessageType;
 const LSPPosition = @import("lsp.zig").LSPPosition;
 const LSPResponse = @import("lsp.zig").LSPResponse;
+const MessageAssembler = @import("lsp_message_assembler.zig").MessageAssembler;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec4u = @import("vec.zig").Vec4u;
 
@@ -58,6 +59,8 @@ pub const LSPThread = struct {
         );
         stdout_thread.detach();
 
+        var message_assembler = MessageAssembler.init(ctx.allocator);
+
         // lsp thread mainloop
         // -------------------
 
@@ -79,35 +82,31 @@ pub const LSPThread = struct {
             while (!stdout_ctx.queue.isEmpty()) {
                 var node = stdout_ctx.queue.get().?;
 
-                // FIXME(remy):
-                // * first bug: I use a 512kB buffer to read, an LSP server
-                // response might not fit 512kB and I will send several messages for
-                // interpretation while it's actually only one. I might want to
-                // want to reassemble them here
-                // * second bug: I think it is possible for a message to contains
-                // several valid JSONs to interpret
-
-                // interpret the JSON received from the LSP server
-                if (LSPThread.interpret(ctx.allocator, &requests, node.data.bytes())) |response| {
-                    // send it back to the main thread, converted to an LSPResponse
-                    if (ctx.allocator.create(AtomicQueue(LSPResponse).Node)) |new_node| {
-                        new_node.data = response;
-                        ctx.response_queue.put(new_node);
+                var messages = message_assembler.next(node.data.bytes());
+                for (messages.items) |message| {
+                    // interpret the JSON received from the LSP server
+                    if (LSPThread.interpret(ctx.allocator, &requests, message.bytes())) |response| {
+                        // send it back to the main thread, converted to an LSPResponse
+                        if (ctx.allocator.create(AtomicQueue(LSPResponse).Node)) |new_node| {
+                            new_node.data = response;
+                            ctx.response_queue.put(new_node);
+                        } else |err| {
+                            std.log.err("LSPThread.run: can't send a response to the main thread: {}", .{err});
+                            response.deinit();
+                        }
                     } else |err| {
-                        std.log.err("LSPThread.run: can't send a response to the main thread: {}", .{err});
-                        response.deinit();
+                        switch (err) {
+                            LSPError.UnsupportedNotificationType, LSPError.NoJSON => {},
+                            else => {
+                                std.log.err("LSPThread.run: can't interpret: {}", .{err});
+                            },
+                        }
                     }
-                } else |err| {
-                    switch (err) {
-                        LSPError.UnsupportedNotificationType, LSPError.NoJSON => {},
-                        else => {
-                            std.log.err("LSPThread.run: can't interpret: {}", .{err});
-                        },
-                    }
+                    message.deinit();
                 }
 
                 // free the resources of the data sent by the stdoud thread
-
+                messages.deinit();
                 node.data.deinit(); // U8Slice.deinit()
                 stdout_ctx.allocator.destroy(node);
             }
@@ -124,8 +123,6 @@ pub const LSPThread = struct {
 
                 var node = ctx.send_queue.get().?;
                 // message to stop the lsp server
-
-                // -
                 if (std.mem.eql(u8, node.data.json.bytes(), "exit")) {
                     running = false;
                 } else {
@@ -153,6 +150,8 @@ pub const LSPThread = struct {
 
             std.posix.nanosleep(0, 100_000_000); // TODO(remy): replace with epoll/kqueue?
         }
+
+        message_assembler.deinit();
 
         ctx.is_running.store(false, .release);
 
@@ -336,6 +335,7 @@ pub const LSPThread = struct {
             .{ .ignore_unknown_fields = true },
         ) catch |err| {
             std.log.debug("readNotification: can't parse JSON: {}", .{err});
+            std.log.debug("\n{s}\n", .{response});
             return err;
         };
 

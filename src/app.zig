@@ -657,7 +657,7 @@ pub const App = struct {
 
     pub fn updateDiffStats(self: *App) void {
         for (self.textedits.items) |*textedit| {
-            textedit.clearLineStatus(&.{.GitAdded, .GitRemoved});
+            textedit.clearLineStatus(&.{ .GitAdded, .GitRemoved });
         }
 
         var git_changes_per_file = gitDiff(self.allocator) catch |err| {
@@ -688,7 +688,7 @@ pub const App = struct {
 
                         if (wont_override_diag) {
                             textedit.lines_status.put(change.line, line_status) catch |err| {
-                                std.log.err("WidgetCommand.interpret: can't add git line status: {any}", .{err});
+                                std.log.err("App.updateDiffStats: can't add git line status: {any}", .{err});
                             };
                         }
                     }

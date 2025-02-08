@@ -2,6 +2,7 @@ test "all_tests" {
     _ = @import("buffer.zig");
     _ = @import("editor.zig");
     _ = @import("lsp.zig");
+    _ = @import("lsp_message_assembler.zig");
     _ = @import("ripgrep.zig");
     _ = @import("syntax_highlighter.zig");
     _ = @import("u8slice.zig");

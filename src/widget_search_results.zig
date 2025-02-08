@@ -108,7 +108,7 @@ pub const WidgetSearchResults = struct {
             try self.list.entries.append(WidgetListEntry{
                 .label = result.filepath,
                 .data = try result.filepath.copy(self.allocator),
-                .data_pos = Vec2i{.a = 0, .b = 0},
+                .data_pos = Vec2i{ .a = 0, .b = 0 },
                 .extra_info = null,
                 .type = .File,
             });

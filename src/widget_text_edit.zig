@@ -950,7 +950,12 @@ pub const WidgetTextEdit = struct {
                     'F' => self.setInputMode(.F),
                     'r' => self.setInputMode(.r),
                     'R' => self.setInputMode(.Replace),
-                    'V' => self.duplicateLine(),
+                    'V' => {
+                        self.moveCursorSpecial(.StartOfLine, false);
+                        self.startSelection(self.cursor.pos, .KeyboardSelection);
+                        self.moveCursorSpecial(.EndOfLine, true);
+                        self.updateSelection(self.cursor.pos);
+                    },
                     'b' => self.moveCursorSpecial(CursorMove.PreviousSpace, true),
                     'e' => self.moveCursorSpecial(CursorMove.NextSpace, true),
                     // start inserting
