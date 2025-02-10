@@ -50,16 +50,16 @@ pub const WidgetMessageBox = struct {
         self.resetLines();
     }
 
+    // Methods
+    // -------
+
     /// resetLines frees memory of all managed lines and empties the lines list.
-    fn resetLines(self: *WidgetMessageBox) void {
+    pub fn resetLines(self: *WidgetMessageBox) void {
         for (self.lines.items) |item| {
             item.deinit();
         }
         self.lines.shrinkAndFree(0);
     }
-
-    // Methods
-    // -------
 
     /// set prepares the messagebox to display a single line.
     pub fn set(self: *WidgetMessageBox, line: []const u8, message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {

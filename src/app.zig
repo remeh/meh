@@ -115,8 +115,10 @@ pub const App = struct {
     /// surface and the window size.
     window_scaling: f32,
 
-    // lsp
+    /// lsp server
     lsp: ?*LSP,
+    /// lsp_messages contains the information messages sent by the LSP server.
+    lsp_messages: std.ArrayList(U8Slice),
 
     // TODO(remy): comment
     // TODO(remy): tests
@@ -159,6 +161,12 @@ pub const App = struct {
     /// focused_widget is the widget which currently has the focus and receives
     /// the events from the keyboard and mouse.
     focused_widget: FocusedWidget,
+
+    /// sticky_message_box means that the editor message box has to be
+    /// displayed at the bottom of the editor while the user is typing.
+    /// It is mainly used to contain information on attributes/functions
+    /// after auto-completion or LSP information request.
+    sticky_message_box: bool,
 
     // Constructors
     // ------------
@@ -247,6 +255,7 @@ pub const App = struct {
             .previous_positions = std.ArrayList(BufferPosition).init(allocator),
             .next_positions = std.ArrayList(BufferPosition).init(allocator),
             .lsp = null,
+            .lsp_messages = std.ArrayList(U8Slice).init(allocator),
             .sdl_window = sdl_window.?,
             .font_custom = undefined,
             .font_lowdpi = font_lowdpi,
@@ -256,6 +265,7 @@ pub const App = struct {
             .font_mode = FontMode.LowDPI,
             .focused_editor = FocusedEditor.Left,
             .focused_widget = FocusedWidget.Editor,
+            .sticky_message_box = false,
             .window_pixel_size = window_size,
             .window_scaled_size = window_size,
             .window_scaling = 1.0,
@@ -294,6 +304,11 @@ pub const App = struct {
         if (self.lsp) |lsp| {
             lsp.deinit();
         }
+
+        for (self.lsp_messages.items) |message| {
+            message.deinit();
+        }
+        self.lsp_messages.deinit();
 
         self.working_dir.deinit();
 
@@ -774,7 +789,14 @@ pub const App = struct {
 
             var widget_text_edit = &self.textedits.items[self.current_widget_text_edit];
 
+            // File fullpath
+
             Draw.text(self.current_font, scaler, Vec2u{ .a = 2, .b = 2 }, widget_size.a, Colors.white, widget_text_edit.editor.buffer.fullpath.bytes());
+
+            // LSP message buffer
+            if (self.lsp_messages.items.len > 0) {
+                Draw.text(self.current_font, scaler, Vec2u{ .a = widget_size.a - 10, .b = 2 }, one_char_size.a, Colors.white, "L");
+            }
 
             widget_text_edit.render(
                 self.sdl_renderer,
@@ -867,6 +889,18 @@ pub const App = struct {
                 one_char_size,
             ),
             else => {}, // nothing more to render then
+        }
+
+        // if set to sticky, the message box must be rendered at the bottom
+        // of the editor.
+        if (self.focused_widget != .MessageBox and self.sticky_message_box) {
+            self.widget_messagebox.render(
+                self.sdl_renderer,
+                self.current_font,
+                scaler,
+                self.window_scaled_size, // used for the overlay
+                one_char_size,
+            );
         }
 
         // rendering
@@ -1172,7 +1206,9 @@ pub const App = struct {
                 }
 
                 if (response.hover) |hover| {
-                    self.showMessageBoxMultiple(hover, .LSPHover, .WithoutOverlay);
+                    self.showMessageBoxMultiple(hover, .LSPHover, .WithOverlay);
+                    // we want this one to be sticky
+                    self.sticky_message_box = true;
                 }
 
                 return true;
@@ -1183,7 +1219,14 @@ pub const App = struct {
                 }
 
                 if (response.log_message) |log_message| {
-                    self.showMessageBox(log_message, .LSPMessage, .WithOverlay);
+                    // buffer in the log messages list for later reading
+                    const copy = log_message.copy(self.allocator) catch |err| {
+                        std.log.debug("LSP: can't create copy to buffer LSP log message: {}", .{err});
+                        return true;
+                    };
+                    self.lsp_messages.append(copy) catch |err| {
+                        std.log.err("LSP: can't buffer LSP log message: {}", .{err});
+                    };
                 }
             },
             .References => {
@@ -1308,6 +1351,22 @@ pub const App = struct {
                         } else |err| {
                             self.showMessageBoxError("LSP: can't insert value: {}", .{err});
                         }
+
+                        // that is unfortunate, but we have to copy the lines of the
+                        // messagebox managed by the autocomplete into the main editor one.
+                        // copy them and show the messagebox as sticky
+                        self.widget_messagebox.resetLines();
+                        for (self.widget_autocomplete.mbox.lines.items) |line| {
+                            self.widget_messagebox.append(line.bytes()) catch |err| {
+                                std.log.debug("LSP: can't copy message box lines: {}", .{err});
+                            };
+                        }
+                        self.widget_messagebox.message = .LSPHover;
+                        self.widget_messagebox.overlay = .WithoutOverlay;
+                        self.sticky_message_box = true;
+
+                        // but still switch to the Editor being the focused widget
+
                         self.focused_widget = FocusedWidget.Editor;
                         self.widget_autocomplete.reset();
                     },
@@ -1388,6 +1447,7 @@ pub const App = struct {
                     },
                     c.SDLK_ESCAPE => {
                         self.focused_widget = .Editor;
+                        self.widget_messagebox.overlay = .WithoutOverlay;
                     },
                     c.SDLK_j, c.SDLK_DOWN => {
                         self.widget_messagebox.y_offset += 1;
@@ -1560,7 +1620,11 @@ pub const App = struct {
                     c.SDLK_RETURN => {
                         self.currentWidgetTextEdit().onReturn(ctrl);
                     },
-                    c.SDLK_ESCAPE => _ = self.currentWidgetTextEdit().onEscape(),
+                    c.SDLK_ESCAPE => {
+                        _ = self.currentWidgetTextEdit().onEscape();
+                        // hide the sticky message box
+                        self.sticky_message_box = false;
+                    },
                     c.SDLK_COLON => {
                         if (self.currentWidgetTextEdit().input_mode == .Command) {
                             self.focused_widget = FocusedWidget.Command;

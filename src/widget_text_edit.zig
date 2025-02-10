@@ -212,7 +212,6 @@ pub const WidgetTextEdit = struct {
         }
 
         // horizontal limit lines
-
         if (self.render_horizontal_limits) {
             self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 80);
             self.renderHorizontalLimit(sdl_renderer, scaler, widget_size, draw_pos, one_char_size, left_offset, 120);
