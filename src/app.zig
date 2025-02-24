@@ -7,6 +7,7 @@ const BufferPosition = @import("buffer.zig").BufferPosition;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const FdResults = @import("fd.zig").FdResults;
+const Fd = @import("fd.zig").Fd;
 const Font = @import("font.zig").Font;
 const GitError = @import("git.zig").GitError;
 const LineStatus = @import("widget_text_edit.zig").LineStatus;
@@ -1709,6 +1710,13 @@ pub const App = struct {
                                 c.SDLK_r => {
                                     // re-open search results, but do not reset the widget
                                     self.focused_widget = .SearchResults;
+                                },
+                                c.SDLK_f => {
+                                    const results = Fd.search(self.allocator, ".", self.working_dir.bytes()) catch |err| {
+                                        std.log.err("main: can't exec 'fd {s}': {}", .{ ".", err });
+                                        return;
+                                    };
+                                    self.openFdResults(results);
                                 },
                                 else => _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),
                             }
