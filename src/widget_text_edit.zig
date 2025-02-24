@@ -952,7 +952,8 @@ pub const WidgetTextEdit = struct {
                     'V' => {
                         self.moveCursorSpecial(.StartOfLine, false);
                         self.startSelection(self.cursor.pos, .KeyboardSelection);
-                        self.moveCursorSpecial(.EndOfLine, true);
+                        self.moveCursorSpecial(.NextLine, true);
+                        self.moveCursorSpecial(.StartOfLine, true);
                         self.updateSelection(self.cursor.pos);
                     },
                     'b' => self.moveCursorSpecial(CursorMove.PreviousSpace, true),
