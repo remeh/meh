@@ -16,7 +16,7 @@ pub const RipgrepResults = struct {
     pub fn iterator(self: RipgrepResults, allocator: std.mem.Allocator) RipgrepResultsIterator {
         return RipgrepResultsIterator{
             .allocator = allocator,
-            .it = std.mem.tokenize(u8, self.stdout, "\n"),
+            .it = std.mem.tokenizeScalar(u8, self.stdout, '\n'),
         };
     }
 
@@ -40,7 +40,7 @@ pub const RipgrepResult = struct {
 
 pub const RipgrepResultsIterator = struct {
     allocator: std.mem.Allocator,
-    it: TokenIterator(u8, .any),
+    it: TokenIterator(u8, .scalar),
 
     pub fn next(self: *RipgrepResultsIterator) ?RipgrepResult {
         if (self.it.next()) |line| {

@@ -41,7 +41,7 @@ pub const Change = struct {
     /// vector could be used (for instance for a line action).
     pos: Vec2u,
 
-    pub fn deinit(self: *Change) void {
+    pub fn deinit(self: Change) void {
         self.data.deinit();
     }
 

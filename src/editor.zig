@@ -46,7 +46,7 @@ pub const Editor = struct {
     history_redo: std.ArrayList(Change),
     history_enabled: bool,
     history_current_block_id: i64,
-    prng: std.rand.DefaultPrng,
+    prng: std.Random.DefaultPrng,
     syntax_highlighter: SyntaxHighlighter,
 
     // Constructors
@@ -62,7 +62,7 @@ pub const Editor = struct {
             .history_enabled = true,
             .history_current_block_id = 0,
             .lsp = null,
-            .prng = std.rand.DefaultPrng.init(1234),
+            .prng = std.Random.DefaultPrng.init(1234),
             .syntax_highlighter = try SyntaxHighlighter.init(allocator, buffer.linesCount()),
         };
     }
@@ -99,9 +99,7 @@ pub const Editor = struct {
         // on input, we want to clear the redo list because
         // it doesn't make any sense anymore.
         if (triggerer == .Input) {
-            var i: usize = 0;
-            while (i < self.history_redo.items.len) : (i += 1) {
-                var change = self.history_redo.pop();
+            while (self.history_redo.pop()) |change| {
                 change.deinit();
             }
         }
@@ -132,14 +130,14 @@ pub const Editor = struct {
             return EditorError.NothingToUndo;
         }
 
-        var change = self.history.pop();
-        const t = change.block_id;
+        var change = self.history.pop().?;
+        const block_id = change.block_id;
         try change.undo(self);
         try self.history_redo.append(change);
         var pos = change.pos;
 
-        while (self.history.items.len > 0 and self.history.items[self.history.items.len - 1].block_id == t) {
-            change = self.history.pop();
+        while (self.history.items.len > 0 and self.history.items[self.history.items.len - 1].block_id == block_id) {
+            change = self.history.pop().?;
             try change.undo(self);
             try self.history_redo.append(change);
             pos = change.pos;
@@ -159,14 +157,14 @@ pub const Editor = struct {
             return EditorError.NothingToUndo;
         }
 
-        var change = self.history_redo.pop();
-        const t = change.block_id;
+        var change = self.history_redo.pop().?;
+        const block_id = change.block_id;
         try change.redo(self);
         var pos = change.pos;
         change.deinit();
 
-        while (self.history_redo.items.len > 0 and self.history_redo.items[self.history_redo.items.len - 1].block_id == t) {
-            change = self.history_redo.pop();
+        while (self.history_redo.items.len > 0 and self.history_redo.items[self.history_redo.items.len - 1].block_id == block_id) {
+            change = self.history_redo.pop().?;
             try change.redo(self);
             pos = change.pos;
             change.deinit();

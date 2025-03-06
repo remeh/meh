@@ -221,8 +221,8 @@ pub const App = struct {
         // load the fonts
 
         const font_lowdpi = try Font.init(allocator, sdl_renderer.?, 18);
-        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, 20);
-        const font_hidpi = try Font.init(allocator, sdl_renderer.?, 30);
+        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, 18);
+        const font_hidpi = try Font.init(allocator, sdl_renderer.?, 28);
 
         // working directory
 
@@ -551,8 +551,8 @@ pub const App = struct {
                 };
 
                 // since we're adding a new position, all the ones in next_positions have to disappear
-                while (self.next_positions.items.len > 0) {
-                    self.next_positions.pop().deinit();
+                while (self.next_positions.pop()) |pos| {
+                    pos.deinit();
                 }
             },
             .PreviousNoDelete => {
@@ -577,12 +577,11 @@ pub const App = struct {
             return;
         }
 
-        const buff_pos = self.previous_positions.pop();
-        defer buff_pos.deinit();
-
-        self.storeBufferPosition(.Next);
-
-        return try self.jumpToBufferPosition(buff_pos);
+        if (self.previous_positions.pop()) |buff_pos| {
+            defer buff_pos.deinit();
+            self.storeBufferPosition(.Next);
+            return try self.jumpToBufferPosition(buff_pos);
+        }
     }
 
     /// jumpToNext jumps back to the next position in `next_positions`.
@@ -592,12 +591,11 @@ pub const App = struct {
             return;
         }
 
-        const buff_pos = self.next_positions.pop();
-        defer buff_pos.deinit();
-
-        self.storeBufferPosition(.PreviousNoDelete);
-
-        return try self.jumpToBufferPosition(buff_pos);
+        if (self.next_positions.pop()) |buff_pos| {
+            defer buff_pos.deinit();
+            self.storeBufferPosition(.PreviousNoDelete);
+            return try self.jumpToBufferPosition(buff_pos);
+        }
     }
 
     /// jumpToBufferPosition jumps to the given buffer position, trying to open the file

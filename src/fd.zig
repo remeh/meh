@@ -15,7 +15,7 @@ pub const FdResults = struct {
     pub fn iterator(self: FdResults, allocator: std.mem.Allocator) FdResultsIterator {
         return FdResultsIterator{
             .allocator = allocator,
-            .it = std.mem.tokenize(u8, self.stdout, "\n"),
+            .it = std.mem.tokenizeScalar(u8, self.stdout, '\n'),
         };
     }
 
@@ -32,7 +32,7 @@ pub const FdResult = struct {
 
 pub const FdResultsIterator = struct {
     allocator: std.mem.Allocator,
-    it: TokenIterator(u8, .any),
+    it: TokenIterator(u8, .scalar),
 
     pub fn next(self: *FdResultsIterator) ?FdResult {
         if (self.it.next()) |line| {

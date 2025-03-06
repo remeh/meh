@@ -31,7 +31,7 @@ pub const LSPThread = struct {
 
         var cmd = std.ArrayList([]const u8).init(ctx.allocator);
         defer cmd.deinit();
-        var it = std.mem.tokenize(u8, ctx.server_exec, " ");
+        var it = std.mem.tokenizeScalar(u8, ctx.server_exec, ' ');
         while (it.next()) |arg| {
             try cmd.append(arg);
         }

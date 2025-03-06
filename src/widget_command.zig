@@ -316,12 +316,8 @@ pub const WidgetCommand = struct {
             std.log.debug("History entries:\n{}", .{widget_text_edit.editor.history});
             std.log.debug("Cursor position: {}", .{widget_text_edit.cursor.pos});
             if (widget_text_edit.editor.buffer.getLine(widget_text_edit.cursor.pos.b)) |line| {
-                if (line != undefined) {
-                    std.log.debug("Line size: {d}, utf8 size: {any}", .{ line.size(), line.utf8size() });
-                    std.log.debug("Line content:\n{s}", .{line.bytes()});
-                } else {
-                    std.log.debug("Line: undefined", .{});
-                }
+                std.log.debug("Line size: {d}, utf8 size: {any}", .{ line.size(), line.utf8size() });
+                std.log.debug("Line content:\n{s}", .{line.bytes()});
             } else |err| {
                 std.log.debug("Line errored while using getLine: {}", .{err});
             }

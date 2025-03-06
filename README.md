@@ -7,7 +7,7 @@ Developed in Zig.
 Uses SDL2 for accelerated rendering and SDL2_ttf to load TTF files.
 Executes `ripgrep` to search through files.
 
-Use `zig 0.13.0` to compile.
+Use `zig 0.14.0` to compile.
 
 ## Demo Video
 
