@@ -514,15 +514,9 @@ pub const LSPThread = struct {
             if (result.contents) |content| {
                 if (content.value) |value| {
                     var it = std.mem.splitScalar(u8, value, '\n');
-                    var line = it.first();
-                    while (line.len > 0) {
+                    while (it.next()) |line| {
                         const slice = try U8Slice.initFromSlice(allocator, line);
                         try rv.*.hover.?.append(slice);
-                        if (it.next()) |data| {
-                            line = data;
-                        } else {
-                            break;
-                        }
                     }
                 }
             }
