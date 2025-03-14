@@ -33,7 +33,7 @@ const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 const Vec2itou = @import("vec.zig").Vec2itou;
 const itou = @import("vec.zig").itou;
-const gitDiff = @import("git.zig").gitDiff;
+const cmdGitDiff = @import("git.zig").cmdGitDiff;
 
 pub const AppError = error{
     CantOpenFile,
@@ -231,13 +231,6 @@ pub const App = struct {
         defer allocator.free(fullpath);
         try working_dir.appendConst(fullpath);
 
-        // libgit2 init
-        const libgit_init = c.git_libgit2_init();
-        if (libgit_init < 0) {
-            std.log.err("App.init: libgit2 can't init: {d}", .{libgit_init});
-            return AppError.CantInit;
-        }
-
         // return the created app
         return App{
             .allocator = allocator,
@@ -371,7 +364,7 @@ pub const App = struct {
 
         try self.textedits.append(text_edit);
 
-        self.updateDiffStats();
+        self.updateDiffStats(path);
 
         // switch to this buffer
         self.setCurrentFocusedWidgetTextEditIndex(self.textedits.items.len - 1);
@@ -669,12 +662,12 @@ pub const App = struct {
         return rv;
     }
 
-    pub fn updateDiffStats(self: *App) void {
+    pub fn updateDiffStats(self: *App, filepath: []const u8) void {
         for (self.textedits.items) |*textedit| {
             textedit.clearLineStatus(&.{ .GitAdded, .GitRemoved });
         }
 
-        var git_changes_per_file = gitDiff(self.allocator) catch |err| {
+        var git_changes_per_file = cmdGitDiff(self.allocator, filepath, self.working_dir.bytes()) catch |err| {
             if (err != GitError.RepoError) {
                 std.log.err("updateDiffStats: can't compute diff: {}", .{err});
             }
@@ -712,8 +705,9 @@ pub const App = struct {
 
         // clean-up
         var it = git_changes_per_file.iterator();
-        while (it.next()) |v| {
-            v.value_ptr.*.deinit();
+        while (it.next()) |kv| {
+            self.allocator.free(kv.key_ptr.*);
+            kv.value_ptr.*.deinit();
         }
         git_changes_per_file.deinit();
     }

@@ -5,7 +5,9 @@ meh is remeh's personal code editor.
 Developed in Zig.
 
 Uses SDL2 for accelerated rendering and SDL2_ttf to load TTF files.
-Executes `ripgrep` to search through files.
+
+Executes `ripgrep` to search through files, `fd` to find files and
+`git` for file changes display.
 
 Use `zig 0.14.0` to compile.
 
@@ -19,7 +21,8 @@ Use `zig 0.14.0` to compile.
 * HiDPI support, smooth font rendering. SDL2 accelerated rendering.
 * UTF8.
 * LSP support: go to definition, references, completion, info/doc.
-* Ripgrep integration.
+* Ripgrep & Fd integration.
+* File status (added, modified)
 * Hard-coded fast syntax highlighter. No tree-sitter integration.
 * Highlight a word using the mouse.
 * Open files navigating through directories. No fuzzy search.

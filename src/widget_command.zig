@@ -127,7 +127,7 @@ pub const WidgetCommand = struct {
             wt.editor.save() catch |err| {
                 std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ command, err });
             };
-            app.updateDiffStats();
+            app.updateDiffStats(app.currentWidgetTextEdit().editor.buffer.fullpath.bytes());
             return;
         }
 

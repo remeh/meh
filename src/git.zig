@@ -17,41 +17,34 @@ pub const GitError = error{
     ToBufError,
 };
 
-pub fn gitDiff(allocator: std.mem.Allocator) !std.StringHashMap(std.ArrayList(GitChange)) {
-    var repo: ?*c.git_repository = null;
-    if (c.git_repository_open(&repo, ".") < 0) {
-        // most likely no repo here
-        return GitError.RepoError;
-    }
-    defer c.git_repository_free(repo);
+pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []const u8) !std.StringHashMap(std.ArrayList(GitChange)) {
+    var args = std.ArrayList([]const u8).init(allocator);
+    defer args.deinit();
 
-    var index: ?*c.git_index = null;
-    if (c.git_repository_index(&index, repo) < 0) {
-        std.log.err("gitDiff: can't get index: {s}", .{c.giterr_last().*.message});
-        return GitError.IndexError;
-    }
-    defer c.git_index_free(index);
+    try args.append("git");
+    try args.append("diff");
+    try args.append(filepath);
 
-    var diff: ?*c.git_diff = null;
-    if (c.git_diff_index_to_workdir(&diff, repo, index, null) < 0) {
-        std.log.err("gitDiff: can't compute diff: {s}", .{c.giterr_last().*.message});
-        return GitError.DiffError;
-    }
-    defer c.git_diff_free(diff);
-
-    var buf = c.git_buf{};
-    if (c.git_diff_to_buf(&buf, diff, c.GIT_DIFF_FORMAT_PATCH) < 0) {
-        return GitError.ToBufError;
+    const result = try std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = args.items,
+        .cwd = cwd,
+        .max_output_bytes = 25 * 1024 * 1024,
+    });
+    defer {
+        allocator.free(result.stderr);
+        allocator.free(result.stdout);
     }
 
     var rv = std.StringHashMap(std.ArrayList(GitChange)).init(allocator);
-    var line_it = std.mem.splitScalar(u8, buf.ptr[0..buf.size], '\n');
+    var line_it = std.mem.splitScalar(u8, result.stdout.ptr[0..result.stdout.len], '\n');
     while (line_it.next()) |line| {
         if (std.mem.startsWith(u8, line, "+++ b/")) {
             // starting for a new file
-            const filepath = line["+++ b/".len..line.len];
+            const git_file: []u8 = try allocator.alloc(u8, (line.len - "+++ b/".len));
+            std.mem.copyForwards(u8, git_file, line["+++ b/".len..line.len]);
             const changes = try parseForFile(allocator, &line_it);
-            try rv.put(filepath, changes);
+            try rv.put(git_file, changes);
         }
     }
     return rv;
