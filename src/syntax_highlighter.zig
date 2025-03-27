@@ -10,18 +10,23 @@ const Vec4u = @import("vec.zig").Vec4u;
 pub const LineSyntaxHighlight = struct {
     allocator: std.mem.Allocator,
     columns: std.ArrayList(Vec4u),
+    // highlight_rects is the glyph position (start, end) to highlight
+    // using a rect.
+    highlight_rects: std.ArrayList(Vec2u),
     dirty: bool,
 
     pub fn init(allocator: std.mem.Allocator, dirty: bool) LineSyntaxHighlight {
         return LineSyntaxHighlight{
             .allocator = allocator,
             .columns = std.ArrayList(Vec4u).init(allocator),
+            .highlight_rects = std.ArrayList(Vec2u).init(allocator),
             .dirty = dirty,
         };
     }
 
     pub fn deinit(self: *LineSyntaxHighlight) void {
         self.columns.deinit();
+        self.highlight_rects.deinit();
     }
 
     pub fn getForColumn(self: LineSyntaxHighlight, column: usize) Vec4u {
@@ -150,12 +155,15 @@ pub const SyntaxHighlighter = struct {
     ) !LineSyntaxHighlight {
         var columns = std.ArrayList(Vec4u).init(allocator);
         errdefer columns.deinit();
+        var highlight_rects = std.ArrayList(Vec2u).init(allocator);
+        errdefer highlight_rects.deinit();
 
         if (line_content.size() == 0) {
             return LineSyntaxHighlight{
                 .allocator = allocator,
                 .columns = columns,
                 .dirty = false,
+                .highlight_rects = highlight_rects,
             };
         }
 
@@ -219,7 +227,11 @@ pub const SyntaxHighlighter = struct {
                 if (word_under_cursor != null and
                     std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], word_under_cursor.?))
                 {
-                    color_with(&columns, word_start, current_pos, Colors.blue);
+                    // create a rect for this word
+                    try highlight_rects.append(Vec2u{
+                        .a = word_start,
+                        .b = current_pos,
+                    });
                 }
 
                 char_before_word = ch;
@@ -240,6 +252,7 @@ pub const SyntaxHighlighter = struct {
             .allocator = allocator,
             .columns = columns,
             .dirty = false,
+            .highlight_rects = highlight_rects,
         };
     }
 

@@ -385,6 +385,22 @@ pub const WidgetTextEdit = struct {
                 var bytes = line.bytes();
                 var line_syntax_highlight = self.editor.syntax_highlighter.getLine(i);
 
+                for (line_syntax_highlight.highlight_rects.items) |rect| {
+                    Draw.rect(
+                        font.sdl_renderer,
+                        scaler,
+                        Vec2u{
+                            .a = draw_pos.a + (rect.a*one_char_size.a) + left_blank_offset - 1,
+                            .b = draw_pos.b + y_offset,
+                        },
+                        Vec2u{
+                            .a = (rect.b - rect.a) * one_char_size.a + 2,
+                            .b = one_char_size.b + 1,
+                        },
+                        Colors.blue,
+                    );
+                }
+
                 while (move_done < self.viewport.columns.b) {
                     if (it.glyph()[0] == char_tab and tab_idx == 0) {
                         tab_idx = tab_spaces;
