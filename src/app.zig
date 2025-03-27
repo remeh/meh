@@ -1614,9 +1614,11 @@ pub const App = struct {
                         self.currentWidgetTextEdit().onReturn(ctrl);
                     },
                     c.SDLK_ESCAPE => {
-                        _ = self.currentWidgetTextEdit().onEscape();
+                        _ = self.currentWidgetTextEdit().onEscape(shift);
                         // hide the sticky message box
-                        self.sticky_message_box = false;
+                        if (shift) {
+                            self.sticky_message_box = false;
+                        }
                     },
                     c.SDLK_COLON => {
                         if (self.currentWidgetTextEdit().input_mode == .Command) {
