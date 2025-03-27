@@ -989,6 +989,8 @@ pub const App = struct {
         };
 
         self.focused_widget = .MessageBox;
+        // by default, messages are not sticky
+        self.sticky_message_box = false;
         self.render();
     }
 
@@ -1000,6 +1002,8 @@ pub const App = struct {
             return;
         };
 
+        // by default, messages are not sticky
+        self.sticky_message_box = false;
         self.focused_widget = .MessageBox;
         self.render();
     }
@@ -1045,6 +1049,8 @@ pub const App = struct {
             };
         }
 
+        // by default, messages are not sticky
+        self.sticky_message_box = false;
         self.focused_widget = .MessageBox;
         self.render();
     }

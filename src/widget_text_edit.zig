@@ -1230,16 +1230,18 @@ pub const WidgetTextEdit = struct {
     ///   * clean the line if it's only composed of whitespaces
     ///   * switch the input mode to `Command`
     pub fn onEscape(self: *WidgetTextEdit, shift: bool) void {
+        // shift-escape is about closing the sticky message
+        // box and removing the word highlighting
+        if (shift) {
+            _ = self.editor.syntax_highlighter.setHighlightWord(null);
+            return;
+        }
+
         // change the history block, we're switching to do something else
         self.editor.historyEndBlock();
 
         // stop selection mode
         self.stopSelection(.Inactive);
-
-        // do not highlight anything anymore
-        if (shift) {
-            _ = self.editor.syntax_highlighter.setHighlightWord(null);
-        }
 
         // check if we want to clear current line from whitespaces
         if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
