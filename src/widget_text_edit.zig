@@ -386,19 +386,28 @@ pub const WidgetTextEdit = struct {
                 var line_syntax_highlight = self.editor.syntax_highlighter.getLine(i);
 
                 for (line_syntax_highlight.highlight_rects.items) |rect| {
-                    Draw.rect(
-                        font.sdl_renderer,
-                        scaler,
-                        Vec2u{
-                            .a = draw_pos.a + (rect.a*one_char_size.a) + left_blank_offset - 1,
-                            .b = draw_pos.b + y_offset,
-                        },
-                        Vec2u{
-                            .a = (rect.b - rect.a) * one_char_size.a + 2,
-                            .b = one_char_size.b + 1,
-                        },
-                        Colors.blue,
-                    );
+                    if (rect.b >= self.viewport.columns.a) {
+                        const draw_rect = Vec2u{
+                            .a = @max(self.viewport.columns.a, rect.a),
+                            .b = rect.b,
+                        };
+                        if (draw_rect.a == draw_rect.b) {
+                            continue;
+                        }
+                        Draw.rect(
+                            font.sdl_renderer,
+                            scaler,
+                            Vec2u{
+                                .a = draw_pos.a + (draw_rect.a*one_char_size.a) + left_blank_offset - 1 - (self.viewport.columns.a*one_char_size.a),
+                                .b = draw_pos.b + y_offset,
+                            },
+                            Vec2u{
+                                .a = (draw_rect.b - draw_rect.a) * one_char_size.a + 2,
+                                .b = one_char_size.b + 1,
+                            },
+                            Colors.blue,
+                        );
+                    }
                 }
 
                 while (move_done < self.viewport.columns.b) {
@@ -529,7 +538,7 @@ pub const WidgetTextEdit = struct {
         }
 
         // special case where there is a diagnostic displayed after the last line
-        // of the text eidt
+        // of the text edit
         if (i < self.viewport.lines.b and i == self.editor.buffer.linesCount()) {
             if (self.lines_status.get(i)) |line_status| {
                 if (line_status.message) |message| {
@@ -1150,6 +1159,7 @@ pub const WidgetTextEdit = struct {
 
         // make sure the cursor is on a viable position.
         self.validateCursorPos(.Scroll);
+        self.refreshSyntaxHighlighting();
     }
 
     /// onMouseWheel is called when the user is using the wheel of the mouse.

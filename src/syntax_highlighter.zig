@@ -174,6 +174,7 @@ pub const SyntaxHighlighter = struct {
         var previous_char: usize = 0;
         var quote_start: usize = 0;
         var word_start: usize = 0;
+        var tabs_encountered: usize = 0; // how many tabs we've been through already
 
         var it = try UTF8Iterator.init(line_content.bytes(), 0);
         while (true) {
@@ -184,6 +185,10 @@ pub const SyntaxHighlighter = struct {
                 try columns.append(Colors.gray);
             } else {
                 try columns.append(Colors.light_gray);
+            }
+
+            if (ch == '\t') {
+                tabs_encountered += 1;
             }
 
             if (is_in_quote == 0 and previous_char != '\\' and
@@ -227,10 +232,12 @@ pub const SyntaxHighlighter = struct {
                 if (word_under_cursor != null and
                     std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], word_under_cursor.?))
                 {
+                    // *3 since since we already move of 1 because of the \t itself
+                    const tabs_offset: usize = tabs_encountered*3;
                     // create a rect for this word
                     try highlight_rects.append(Vec2u{
-                        .a = word_start,
-                        .b = current_pos,
+                        .a = word_start + tabs_offset,
+                        .b = current_pos + tabs_offset,
                     });
                 }
 
