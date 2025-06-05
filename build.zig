@@ -21,8 +21,26 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
     prepare(meh);
+
+    // default build output
     b.installArtifact(meh);
+
+    // macOS application artifact
+    if (builtin.os.tag == .macos) {
+        // copy the macOS app def
+        const install_dir = b.addInstallDirectory(.{
+            .source_dir = b.path("src/macos"), // source of the files to copy
+            .install_dir = .prefix,            // install to zig-out/
+            .install_subdir = "macos",         // subdirectory in the install path
+        });
+        b.getInstallStep().dependOn(&install_dir.step);
+        const install_macos_release = b.addInstallArtifact(meh, .{
+            .dest_dir = .{ .override = .{ .custom = "macos/meh.app/contents/MacOS/" } },
+        });
+        b.getInstallStep().dependOn(&install_macos_release.step);
+    }
 
     const run_cmd = b.addRunArtifact(meh);
     run_cmd.step.dependOn(b.getInstallStep());
