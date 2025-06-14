@@ -67,10 +67,12 @@ fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8
                 }
             }
         } else if (std.mem.startsWith(u8, line, "-")) {
-            try rv.append(GitChange{
-                .line = line_pos - 1,
-                .status = .GitRemoved,
-            });
+            if (line_pos > 0) {
+                try rv.append(GitChange{
+                    .line = line_pos - 1,
+                    .status = .GitRemoved,
+                });
+            }
             continue;
         } else if (std.mem.startsWith(u8, line, "+")) {
             try rv.append(GitChange{
