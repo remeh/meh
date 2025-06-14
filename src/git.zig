@@ -72,13 +72,29 @@ fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8
                     .line = line_pos - 1,
                     .status = .GitRemoved,
                 });
+            } else {
+                // special case: the very first line is a new line, or at least
+                // something happened
+                try rv.append(GitChange{
+                    .line = 0,
+                    .status = .GitAdded,
+                });
             }
             continue;
         } else if (std.mem.startsWith(u8, line, "+")) {
-            try rv.append(GitChange{
-                .line = line_pos - 1,
-                .status = .GitAdded,
-            });
+            if (line_pos > 0) {
+                try rv.append(GitChange{
+                    .line = line_pos - 1,
+                    .status = .GitAdded,
+                });
+            } else {
+                // special case: the very first line is a new line, or at least
+                // something happened
+                try rv.append(GitChange{
+                    .line = 0,
+                    .status = .GitAdded,
+                });
+            }
             line_pos += 1;
         } else {
             line_pos += 1;
