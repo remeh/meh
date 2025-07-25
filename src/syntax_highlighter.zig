@@ -7,6 +7,8 @@ const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 
+const keywords = "pub,const,true,false,if,defer,return,errdefer,struct,function,func,break,else,fn,try,while,for,std,var,let";
+
 pub const LineSyntaxHighlight = struct {
     allocator: std.mem.Allocator,
     columns: std.ArrayList(Vec4u),
@@ -216,15 +218,26 @@ pub const SyntaxHighlighter = struct {
             // end of a word
             if (!std.ascii.isAlphanumeric(@as(u8, @intCast(ch))) and ch != '_') {
                 if (is_in_quote == 0) {
-                    if (std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "TODO") or
-                        std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "XXX") or
-                        std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "FIXME"))
+                    const str = line_content.bytes()[word_start..it.current_byte];
+
+                    if (std.mem.eql(u8, str, "TODO") or
+                        std.mem.eql(u8, str, "XXX") or
+                        std.mem.eql(u8, str, "FIXME"))
                     {
                         color_with(&columns, word_start, current_pos, Colors.red);
-                    } else if (std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], "DONE")) {
+                    } else if (std.mem.eql(u8, str, "DONE")) {
                         color_with(&columns, word_start, current_pos, Colors.green);
                     } else if (is_in_comment == false and (ch == '(' or ch == '{' or ch == '[' or char_before_word == '.')) {
                         color_with(&columns, word_start, current_pos, Colors.white);
+                    }
+
+                    // FIXME(remy): this has false positive because of the simple use
+                    // use of containsAtLeast.
+                    // we will want to make sure that the left and right part of the match
+                    // is a comma
+                    // or we will want to use an array instead
+                    if (!is_in_comment and str.len > 0 and std.mem.containsAtLeast(u8, keywords, 1, str)) {
+                        color_with(&columns, word_start, current_pos, Colors.gray_blue);
                     }
                 }
 
@@ -233,7 +246,7 @@ pub const SyntaxHighlighter = struct {
                     std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], word_under_cursor.?))
                 {
                     // *3 since since we already move of 1 because of the \t itself
-                    const tabs_offset: usize = tabs_encountered*3;
+                    const tabs_offset: usize = tabs_encountered * 3;
                     // create a rect for this word
                     try highlight_rects.append(Vec2u{
                         .a = word_start + tabs_offset,

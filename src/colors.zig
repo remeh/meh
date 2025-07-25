@@ -14,10 +14,17 @@ pub const light_gray = Vec4u{
     .d = 255,
 };
 
+pub const gray_blue = Vec4u{
+    .a = 130,
+    .b = 130,
+    .c = 145,
+    .d = 255,
+};
+
 pub const gray = Vec4u{
     .a = 120,
     .b = 120,
-    .c = 120,
+    .c = 125,
     .d = 255,
 };
 
