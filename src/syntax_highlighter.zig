@@ -7,7 +7,38 @@ const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 
-const keywords = "pub,const,true,false,if,defer,return,errdefer,struct,function,func,break,else,fn,try,while,for,std,var,let";
+const keywords = [_][]const u8{
+    "type",
+    "interface",
+    "struct",
+    "const",
+
+    "defer",
+    "errdefer",
+
+    "function",
+    "func",
+    "fn",
+
+    "break",
+    "else",
+    "try",
+    "while",
+    "for",
+    "return",
+    "if",
+    "catch",
+
+    "var",
+    "let",
+    "pub",
+    "std",
+
+    "true",
+    "false",
+    "zig",
+    "import",
+};
 
 pub const LineSyntaxHighlight = struct {
     allocator: std.mem.Allocator,
@@ -43,6 +74,7 @@ pub const LineSyntaxHighlight = struct {
 pub const SyntaxHighlighter = struct {
     allocator: std.mem.Allocator,
     lines: std.ArrayList(LineSyntaxHighlight),
+    keyword_matcher: std.StringHashMap(void),
     word_under_cursor: ?[]const u8,
 
     pub fn init(allocator: std.mem.Allocator, line_count: usize) !SyntaxHighlighter {
@@ -53,10 +85,16 @@ pub const SyntaxHighlighter = struct {
             try lines.append(LineSyntaxHighlight.init(allocator, true));
         }
 
+        var keyword_matcher = std.StringHashMap(void).init(allocator);
+        for (keywords) |keyword| {
+            try keyword_matcher.put(keyword, {});
+        }
+
         return SyntaxHighlighter{
             .allocator = allocator,
             .lines = lines,
             .word_under_cursor = null,
+            .keyword_matcher = keyword_matcher,
         };
     }
 
@@ -65,6 +103,7 @@ pub const SyntaxHighlighter = struct {
             line.deinit();
         }
         self.lines.deinit();
+        self.keyword_matcher.deinit();
     }
 
     pub fn getLine(self: SyntaxHighlighter, line_number: usize) LineSyntaxHighlight {
@@ -138,7 +177,7 @@ pub const SyntaxHighlighter = struct {
         // refresh this line syntax highlighting
         existing.deinit();
 
-        const line_syntax_highlight = try SyntaxHighlighter.compute(self.allocator, line_content, self.word_under_cursor);
+        const line_syntax_highlight = try SyntaxHighlighter.compute(self.allocator, line_content, self.word_under_cursor, self.keyword_matcher);
         self.lines.items[line_number] = line_syntax_highlight;
         return true;
     }
@@ -154,6 +193,7 @@ pub const SyntaxHighlighter = struct {
         allocator: std.mem.Allocator,
         line_content: *U8Slice,
         word_under_cursor: ?[]const u8,
+        keyword_matcher: std.StringHashMap(void),
     ) !LineSyntaxHighlight {
         var columns = std.ArrayList(Vec4u).init(allocator);
         errdefer columns.deinit();
@@ -231,12 +271,7 @@ pub const SyntaxHighlighter = struct {
                         color_with(&columns, word_start, current_pos, Colors.white);
                     }
 
-                    // FIXME(remy): this has false positive because of the simple use
-                    // use of containsAtLeast.
-                    // we will want to make sure that the left and right part of the match
-                    // is a comma
-                    // or we will want to use an array instead
-                    if (!is_in_comment and str.len > 0 and std.mem.containsAtLeast(u8, keywords, 1, str)) {
+                    if (!is_in_comment and str.len > 0 and keyword_matcher.contains(str)) {
                         color_with(&columns, word_start, current_pos, Colors.gray_blue);
                     }
                 }
