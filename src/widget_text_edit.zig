@@ -812,7 +812,7 @@ pub const WidgetTextEdit = struct {
     // --------------
 
     /// onCtrlKeyDown is called when a key has been pressed while a ctrl key is held down.
-    pub fn onCtrlKeyDown(self: *WidgetTextEdit, keycode: i32, ctrl: bool, cmd: bool) bool {
+    pub fn onCtrlKeyDown(self: *WidgetTextEdit, keycode: i32, ctrl: bool, cmd: bool) void {
         _ = ctrl;
         _ = cmd;
 
@@ -830,11 +830,9 @@ pub const WidgetTextEdit = struct {
             },
             'v' => {
                 self.duplicateLine();
-                return true;
             },
             else => {},
         }
-        return true;
     }
 
     /// onArrow is called when an arrow key is pressed to move the cursor.
@@ -1372,18 +1370,27 @@ pub const WidgetTextEdit = struct {
     // FIXME(remy): seems to crash the app? sometimes?
     pub fn duplicateLine(self: *WidgetTextEdit) void {
         if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
-            self.moveCursorSpecial(.EndOfLine, false);
-            self.editor.newLine(self.cursor.pos, .Input) catch |err| {
-                std.log.err("WidgetTextEdit.duplicateLine: on newLine {}", .{err});
+            // copy the line
+            const copy = line.copy(self.allocator) catch |err| {
+                std.log.err("WidgetTextEdit.duplicateLine: on copy {}", .{err});
                 return;
             };
-            self.moveCursorSpecial(.NextLine, false);
-            self.moveCursorSpecial(.StartOfLine, false);
-            self.editor.insertUtf8Text(self.cursor.pos, line.bytes()[0 .. line.bytes().len - 1], .Input) catch |err| {
-                std.log.err("WidgetTextEdit.duplicateLine: on insert text {}", .{err});
+
+            self.editor.buffer.lines.insert(self.cursor.pos.b, copy) catch |err| {
+                std.log.err("WidgetTextEdit.duplicateLine: on insert {}", .{err});
                 return;
             };
-            self.moveCursorSpecial(.EndOfLine, true);
+
+            // copy the syntax highlighting information
+            const syntax_copy = self.editor.syntax_highlighter.lines.items[self.cursor.pos.b].copy(self.allocator) catch |err| {
+                std.log.err("WidgetTextEdit.duplicateLine: on copy syntax {}", .{err});
+                return;
+            };
+
+            self.editor.syntax_highlighter.lines.insert(self.cursor.pos.b, syntax_copy) catch |err| {
+                std.log.err("WidgetTextEdit.duplicateLine: on insert syntax {}", .{err});
+                return;
+            };
         } else |err| {
             std.log.err("WidgetTextEdit.duplicateLine: {}", .{err});
         }

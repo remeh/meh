@@ -68,6 +68,19 @@ pub const LineSyntaxHighlight = struct {
         }
         return self.columns.items[column];
     }
+
+    pub fn copy(self: *LineSyntaxHighlight, allocator: std.mem.Allocator) !LineSyntaxHighlight {
+        var columns = std.ArrayList(Vec4u).init(allocator);
+        try columns.appendSlice(self.columns.items);
+        var rects = std.ArrayList(Vec2u).init(allocator);
+        try rects.appendSlice(self.highlight_rects.items);
+        return LineSyntaxHighlight{
+            .allocator = allocator,
+            .columns = columns,
+            .highlight_rects = rects,
+            .dirty = false,
+        };
+    }
 };
 
 /// SyntaxHighlighter is a token-based line syntax highlighter.

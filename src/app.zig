@@ -1718,7 +1718,7 @@ pub const App = struct {
                                     };
                                     self.openFdResults(results);
                                 },
-                                else => _ = self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),
+                                else => self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),
                             }
                         }
                     },
