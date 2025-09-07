@@ -29,7 +29,7 @@ pub const Buffer = struct {
     /// fullpath is the fullpath to the file backing this buffer storage.
     fullpath: U8Slice,
     /// lines is the content of this Buffer.
-    lines: std.ArrayList(U8Slice),
+    lines: std.ArrayListUnmanaged(U8Slice),
 
     // Constructors
     // ------------
@@ -42,9 +42,9 @@ pub const Buffer = struct {
             .allocator = allocator,
             .in_ram_only = true,
             .fullpath = U8Slice.initEmpty(allocator),
-            .lines = std.ArrayList(U8Slice).init(allocator),
+            .lines = std.ArrayListUnmanaged(U8Slice).empty,
         };
-        try buff.lines.append(empty_line);
+        try buff.lines.append(allocator, empty_line);
         return buff;
     }
 
@@ -63,7 +63,7 @@ pub const Buffer = struct {
             .allocator = allocator,
             .in_ram_only = false,
             .fullpath = fullpath,
-            .lines = std.ArrayList(U8Slice).init(allocator),
+            .lines = std.ArrayListUnmanaged(U8Slice).empty,
         };
 
         rv.in_ram_only = false;
@@ -82,7 +82,6 @@ pub const Buffer = struct {
         var buff = &slice;
         var read: usize = block_size;
 
-        var buf_reader = std.io.bufferedReader(file.reader());
         var u8slice = U8Slice.initEmpty(allocator);
         var i: usize = 0;
         var last_append: usize = 0;
@@ -93,14 +92,14 @@ pub const Buffer = struct {
             i = 0;
             last_append = 0;
 
-            read = try buf_reader.reader().read(buff);
+            read = try file.read(buff);
 
             while (i < read) : (i += 1) {
                 if (buff[i] == '\n') {
                     // append the data left until the \n with the \n included
                     try u8slice.appendConst(buff[last_append .. i + 1]); // allocate the data in an u8slice
                     // append the line in the lines list of the buffer
-                    try rv.lines.append(u8slice);
+                    try rv.lines.append(rv.allocator, u8slice);
                     // move the cursor in this buffer
                     last_append = i + 1;
                     // recreate a new u8slice to work with for next lines
@@ -114,7 +113,7 @@ pub const Buffer = struct {
         // we completely read the file, if the buffer isn't empty, it means we have
         // dangling data, append it to the buffer.
         if (!u8slice.isEmpty()) {
-            try rv.lines.append(u8slice);
+            try rv.lines.append(rv.allocator, u8slice);
         }
 
         var size: usize = 0;
@@ -137,27 +136,24 @@ pub const Buffer = struct {
         }
 
         // check if the file exists, if not, try creating it
+        // TODO(remy): use a tmp file and mv at the end instead
         var file = try (std.fs.cwd().createFile(self.fullpath.bytes(), .{ .truncate = true }));
-
         // at this point, the file is opened, defer closing it.
         defer file.close();
 
-        var buf_writer = std.io.bufferedWriter(file.writer());
         var bytes_written: usize = 0;
-
         for (self.lines.items) |line| {
-            bytes_written += try buf_writer.writer().write(line.bytes());
+            bytes_written += try file.write(line.bytes());
         }
-
-        try buf_writer.flush();
+        try file.sync();
         self.in_ram_only = false;
     }
 
     pub fn deinit(self: *Buffer) void {
-        for (self.lines.items) |line| {
+        for (self.lines.items) |*line| {
             line.deinit();
         }
-        self.lines.deinit();
+        self.lines.deinit(self.allocator);
         self.fullpath.deinit();
     }
 
@@ -179,7 +175,7 @@ pub const Buffer = struct {
         if (line_number + 1 > self.lines.items.len) {
             return BufferError.OutOfBuffer;
         }
-        return self.lines.orderedRemove(@as(usize, @intCast(line_number)));
+        return self.lines.orderedRemove(self.allocator, @as(usize, @intCast(line_number)));
     }
 
     /// longestLine returns the size of the longest line in the lines visible

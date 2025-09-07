@@ -16,12 +16,12 @@ pub const ExecResult = struct {
 // TODO(remy): unit test
 pub const Exec = struct {
     pub fn run(allocator: std.mem.Allocator, command: []const u8, cwd: []const u8) !ExecResult {
-        var args = std.ArrayList([]const u8).init(allocator);
-        defer args.deinit();
+        var args = std.ArrayListUnmanaged([]const u8).empty;
+        defer args.deinit(allocator);
 
         var it = std.mem.splitScalar(u8, command, ' ');
         while (it.next()) |arg| {
-            try args.append(arg);
+            try args.append(allocator, arg);
         }
 
         // FIXME(remy): this has a bug in the stdlib, if within the `exec` call

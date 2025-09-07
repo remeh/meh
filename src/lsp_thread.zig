@@ -29,19 +29,19 @@ pub const LSPThread = struct {
 
         // spawn the LSP server process
 
-        var cmd = std.ArrayList([]const u8).init(ctx.allocator);
-        defer cmd.deinit();
+        var cmd = std.ArrayListUnmanaged([]const u8).empty;
+        defer cmd.deinit(ctx.allocator);
         var it = std.mem.tokenizeScalar(u8, ctx.server_exec, ' ');
         while (it.next()) |arg| {
-            try cmd.append(arg);
+            try cmd.append(ctx.allocator, arg);
         }
-        const slice = try cmd.toOwnedSlice();
+        const slice = try cmd.toOwnedSlice(ctx.allocator);
         defer ctx.allocator.free(slice);
 
         var child = std.process.Child.init(slice, ctx.allocator);
         child.stdin_behavior = .Pipe;
         child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Ignore;
+        child.stderr_behavior = .Inherit; // display the error directly in the editor tty
         try child.spawn();
 
         // start a thread reading the subprocess stdout
@@ -83,7 +83,7 @@ pub const LSPThread = struct {
                 var node = stdout_ctx.queue.get().?;
 
                 var messages = message_assembler.next(node.data.bytes());
-                for (messages.items) |message| {
+                for (messages.items) |*message| {
                     // interpret the JSON received from the LSP server
                     if (LSPThread.interpret(ctx.allocator, &requests, message.bytes())) |response| {
                         // send it back to the main thread, converted to an LSPResponse
@@ -106,7 +106,7 @@ pub const LSPThread = struct {
                 }
 
                 // free the resources of the data sent by the stdoud thread
-                messages.deinit();
+                messages.deinit(ctx.allocator);
                 node.data.deinit(); // U8Slice.deinit()
                 stdout_ctx.allocator.destroy(node);
             }
@@ -127,15 +127,19 @@ pub const LSPThread = struct {
                     running = false;
                 } else {
                     // another kind of message, write it on the lsp server stdin
-                    if (child.stdin != null) {
-                        // format and write the data on stdin
-                        const header = try std.fmt.allocPrint(ctx.allocator, "Content-Length: {d}\r\n\r\n", .{node.data.json.bytes().len});
-                        // std.log.debug("request dump: {s}{s}", .{ header, node.data.json.bytes() });
-                        _ = try child.stdin.?.write(header);
-                        ctx.allocator.free(header);
-                        _ = child.stdin.?.write(node.data.json.bytes()) catch |err| {
+                    if (child.stdin) |stdin| {
+                        var buff: [1024*1024]u8 = undefined;
+                        var writer = stdin.writerStreaming(&buff);
+                        
+                        const payload = try std.fmt.allocPrint(ctx.allocator, "Content-Length: {d}\r\n\r\n{s}", .{
+                            node.data.json.size(),
+                            node.data.json.bytes(),
+                        });
+                        _ = writer.interface.write(payload) catch |err| {
                             std.log.err("lspThread: can't send to the server: {}", .{err});
                         };
+                        ctx.allocator.free(payload);
+                        try writer.interface.flush();
 
                         // store the request infos needed for later interpretation of the response
                         requests.put(node.data.request_id, node.data.message_type) catch |err| {
@@ -189,9 +193,6 @@ pub const LSPThread = struct {
     /// Has to be executed in its own thread, this one will stop on its own since it will
     /// see the stdout handle being unavailable when we tear down the LSP server.
     fn readFromStdout(ctx: *stdoutThreadContext) !void {
-        var rv = std.ArrayList(LSPResponse).init(ctx.allocator);
-        errdefer rv.deinit();
-
         if (ctx.child.stdout == null) {
             return;
         }
@@ -298,16 +299,16 @@ pub const LSPThread = struct {
                 errdefer rv.deinit();
 
                 switch (message_type) {
-                    .Completion => LSPThread.interpretCompletion(allocator, &rv, response, idx.?) catch |err| {
+                    .Completion => LSPThread.interpretCompletion(&rv, response, idx.?) catch |err| {
                         std.log.debug("interpret: error during the completion interpret: {}", .{err});
                         return LSPError.CompletionError;
                     },
-                    .Definition => LSPThread.interpretDefinition(allocator, &rv, response, idx.?),
-                    .References => LSPThread.interpretReferences(allocator, &rv, response, idx.?) catch |err| {
+                    .Definition => LSPThread.interpretDefinition(&rv, response, idx.?),
+                    .References => LSPThread.interpretReferences(&rv, response, idx.?) catch |err| {
                         std.log.debug("interpret: error during the references interpret: {}", .{err});
                         return LSPError.ReferencesError;
                     },
-                    .Hover => LSPThread.interpretHover(allocator, &rv, response, idx.?) catch |err| {
+                    .Hover => LSPThread.interpretHover(&rv, response, idx.?) catch |err| {
                         std.log.debug("interpret: error during the hover interpret: {}", .{err});
                         return LSPError.HoverError;
                     },
@@ -354,7 +355,7 @@ pub const LSPThread = struct {
         if (std.mem.eql(u8, header.value.method, "textDocument/publishDiagnostics")) {
             var rv = LSPResponse.init(allocator, 0, .Diagnostic);
             errdefer rv.deinit();
-            LSPThread.interpretPublishDiagnostics(allocator, &rv, response, json_start_idx) catch |err| {
+            LSPThread.interpretPublishDiagnostics(&rv, response, json_start_idx) catch |err| {
                 return err;
             };
             return rv;
@@ -375,11 +376,12 @@ pub const LSPThread = struct {
         }
     }
 
-    fn interpretPublishDiagnostics(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+    fn interpretPublishDiagnostics(rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+        const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
-        rv.*.diagnostics = std.ArrayList(LSPDiagnostic).init(allocator);
-        errdefer rv.*.diagnostics.?.deinit();
+        rv.*.diagnostics = std.ArrayListUnmanaged(LSPDiagnostic).empty;
+        errdefer rv.*.diagnostics.?.deinit(allocator);
 
         const notification = try std.json.parseFromSlice(LSPMessages.publishDiagnosticsNotification, allocator, response[json_start_idx..], json_params);
         defer notification.deinit();
@@ -398,14 +400,14 @@ pub const LSPThread = struct {
             // for the given file.
             if (params.diagnostics.len == 0) {
                 rv.*.message_type = .ClearDiagnostics; // change the message type
-                try rv.*.diagnostics.?.append(LSPDiagnostic{
+                try rv.*.diagnostics.?.append(allocator, LSPDiagnostic{
                     .filepath = try filepath.copy(allocator),
                     .message = U8Slice.initEmpty(allocator),
                     .range = Vec4u{ .a = 0, .b = 0, .c = 0, .d = 0 },
                 });
             } else {
                 for (params.diagnostics) |diagnostic| {
-                    try rv.*.diagnostics.?.append(LSPDiagnostic{
+                    try rv.*.diagnostics.?.append(allocator, LSPDiagnostic{
                         .filepath = try filepath.copy(allocator),
                         .message = try U8Slice.initFromSlice(allocator, diagnostic.message),
                         .range = diagnostic.range.vec4u(),
@@ -414,19 +416,20 @@ pub const LSPThread = struct {
             }
         }
 
-        if (rv.*.diagnostics) |diags| {
+        if (rv.*.diagnostics) |*diags| {
             if (diags.items.len == 0) {
-                diags.deinit();
+                diags.deinit(allocator);
                 rv.*.diagnostics = null;
             }
         }
     }
 
-    fn interpretCompletion(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+    fn interpretCompletion(rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+        const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
-        rv.*.completions = std.ArrayList(LSPCompletion).init(allocator);
-        errdefer rv.*.completions.?.deinit();
+        rv.*.completions = std.ArrayListUnmanaged(LSPCompletion).empty;
+        errdefer rv.*.completions.?.deinit(allocator);
         const completions = try std.json.parseFromSlice(LSPMessages.completionsResponse, allocator, response[json_start_idx..], json_params);
         defer completions.deinit();
 
@@ -434,7 +437,7 @@ pub const LSPThread = struct {
             if (result.items) |items| {
                 for (items) |item| {
                     if (item.toLSPCompletion(allocator)) |completion| {
-                        rv.completions.?.append(completion) catch |err| {
+                        rv.completions.?.append(allocator, completion) catch |err| {
                             std.log.err("LSPThread.interpret: can't append completion: {}", .{err});
                         };
                     } else |err| {
@@ -446,30 +449,31 @@ pub const LSPThread = struct {
 
         if (rv.*.completions) |comps| {
             if (comps.items.len == 0) {
-                comps.deinit();
+                allocator.free(comps.allocatedSlice());
                 rv.*.completions = null;
             }
         }
     }
 
-    fn interpretDefinition(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) void {
+    fn interpretDefinition(rv: *LSPResponse, response: []const u8, json_start_idx: usize) void {
+        const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
         // Some LSP servers return only one result (an object), some returns
         // an array, through trial and error we have to test both.
 
-        rv.*.definitions = std.ArrayList(LSPPosition).init(allocator);
+        rv.*.definitions = std.ArrayListUnmanaged(LSPPosition).empty;
 
         // single value JSON
         if (std.json.parseFromSlice(LSPMessages.definitionResponse, allocator, response[json_start_idx..], json_params)) |definition| {
             defer definition.deinit();
             if (definition.value.result) |result| {
                 if (result.toLSPPosition(allocator)) |position| {
-                    rv.*.definitions.?.append(position) catch |err| {
-                        std.log.err("LSPThread.interpret: can't append position: {}", .{err});
+                    rv.*.definitions.?.append(allocator, position) catch |err| {
+                        std.log.err("LSPThread.interpretDefinition: can't append position: {}", .{err});
                     };
                 } else |err| {
-                    std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
+                    std.log.err("LSPThread.interpretDefinition: can't convert to LSPPosition: {}", .{err});
                 }
             }
         } else |_| {
@@ -480,11 +484,11 @@ pub const LSPThread = struct {
                 if (definitions.value.result) |results| {
                     for (results) |result| {
                         if (result.toLSPPosition(allocator)) |position| {
-                            rv.*.definitions.?.append(position) catch |err| {
-                                std.log.err("LSPThread.interpret: can't append position: {}", .{err});
+                            rv.*.definitions.?.append(allocator, position) catch |err| {
+                                std.log.err("LSPThread.interpretDefinition: can't append position: {}", .{err});
                             };
                         } else |err| {
-                            std.log.err("LSPThread.interpret: can't convert to LSPPosition: {}", .{err});
+                            std.log.err("LSPThread.interpretDefinition: can't convert to LSPPosition: {}", .{err});
                         }
                     }
                 }
@@ -495,17 +499,18 @@ pub const LSPThread = struct {
 
         if (rv.*.definitions) |defs| {
             if (defs.items.len == 0) {
-                defs.deinit();
+                allocator.free(defs.allocatedSlice());
                 rv.*.definitions = null;
             }
         }
     }
 
-    fn interpretHover(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+    fn interpretHover(rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+        const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
-        rv.*.hover = std.ArrayList(U8Slice).init(allocator);
-        errdefer rv.*.hover.?.deinit();
+        rv.*.hover = std.ArrayListUnmanaged(U8Slice).empty;
+        errdefer rv.*.hover.?.deinit(allocator);
 
         const hoverResp = try std.json.parseFromSlice(LSPMessages.hoverResponse, allocator, response[json_start_idx..], json_params);
         defer hoverResp.deinit();
@@ -516,26 +521,27 @@ pub const LSPThread = struct {
                     var it = std.mem.splitScalar(u8, value, '\n');
                     while (it.next()) |line| {
                         const slice = try U8Slice.initFromSlice(allocator, line);
-                        try rv.*.hover.?.append(slice);
+                        try rv.*.hover.?.append(allocator, slice);
                     }
                 }
             }
         }
 
-        if (rv.*.hover) |hover| {
+        if (rv.*.hover) |*hover| {
             if (hover.items.len == 0) {
-                for (hover.items) |item| {
+                for (hover.items) |*item| {
                     item.deinit();
                 }
-                hover.deinit();
+                hover.deinit(allocator);
                 rv.*.hover = null;
             }
         }
     }
 
-    fn interpretReferences(allocator: std.mem.Allocator, rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+    fn interpretReferences(rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
+        const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
-        rv.references = std.ArrayList(LSPPosition).init(allocator);
+        rv.references = std.ArrayListUnmanaged(LSPPosition).empty;
 
         const references = try std.json.parseFromSlice(LSPMessages.referencesResponse, allocator, response[json_start_idx..], json_params);
         defer references.deinit();
@@ -543,7 +549,7 @@ pub const LSPThread = struct {
         if (references.value.result) |refs| {
             for (refs) |result| {
                 if (result.toLSPPosition(allocator)) |position| {
-                    rv.references.?.append(position) catch |err| {
+                    rv.references.?.append(allocator, position) catch |err| {
                         std.log.err("LSPThread.interpret: can't append position: {}", .{err});
                     };
                 } else |err| {
@@ -553,7 +559,7 @@ pub const LSPThread = struct {
         }
 
         if (rv.references.?.items.len == 0) {
-            rv.references.?.deinit();
+            rv.references.?.deinit(allocator);
             rv.references = null;
         }
     }

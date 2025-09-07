@@ -88,15 +88,16 @@ pub const WidgetLookup = struct {
     pub fn scanDir(self: *WidgetLookup) !void {
         self.list.reset();
 
-        try self.list.entries.append(WidgetListEntry{
+        try self.list.entries.append(self.list.allocator, WidgetListEntry{
             .label = try U8Slice.initFromSlice(self.allocator, ".."),
             .data = try U8Slice.initFromSlice(self.allocator, ".."),
             .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
+            .extra_info_allocator = null,
             .extra_info = null,
             .type = .Directory,
         });
 
-        var dir = try std.fs.cwd().openDir(self.current_path.bytes(), std.fs.Dir.OpenDirOptions{ .access_sub_paths = false, .iterate = true });
+        var dir = try std.fs.cwd().openDir(self.current_path.bytes(), std.fs.Dir.OpenOptions{ .access_sub_paths = false, .iterate = true });
         defer dir.close();
         var it = dir.iterate();
         while (try it.next()) |entry| {
@@ -117,11 +118,12 @@ pub const WidgetLookup = struct {
                         try label.appendConst("/");
                     }
 
-                    try self.list.entries.append(WidgetListEntry{
+                    try self.list.entries.append(self.list.allocator, WidgetListEntry{
                         .label = label,
                         .data = fullpath,
                         .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
                         .extra_info = null,
+                        .extra_info_allocator = null,
                         .type = t,
                     });
                 },
@@ -137,15 +139,16 @@ pub const WidgetLookup = struct {
     }
 
     /// setTextEdits sets the opened WidgetTextEdit for the WidgetLookup to list opened buffers.
-    pub fn setTextEdits(self: *WidgetLookup, textedits: std.ArrayList(WidgetTextEdit)) !void {
+    pub fn setTextEdits(self: *WidgetLookup, textedits: std.ArrayListUnmanaged(WidgetTextEdit)) !void {
         self.list.reset();
 
         for (textedits.items) |textedit| {
-            try self.list.entries.append(WidgetListEntry{
+            try self.list.entries.append(self.list.allocator, WidgetListEntry{
                 .label = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
                 .data = try U8Slice.initFromSlice(self.allocator, textedit.editor.buffer.fullpath.bytes()),
                 .data_pos = Vec2i{ .a = -1, .b = -1 }, // unused
                 .extra_info = null,
+                .extra_info_allocator = null,
                 .type = .File,
             });
         }

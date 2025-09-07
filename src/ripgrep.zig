@@ -138,12 +138,12 @@ pub const RipgrepResultsIterator = struct {
 
 pub const Ripgrep = struct {
     pub fn search(allocator: std.mem.Allocator, parameters: []const u8, cwd: []const u8) !RipgrepResults {
-        var args = std.ArrayList([]const u8).init(allocator);
-        defer args.deinit();
+        var args = std.ArrayListUnmanaged([]const u8).empty;
+        defer args.deinit(allocator);
 
-        try args.append("rg");
-        try args.append("--vimgrep");
-        try args.append(parameters);
+        try args.append(allocator, "rg");
+        try args.append(allocator, "--vimgrep");
+        try args.append(allocator, parameters);
 
         // FIXME(remy): this has a bug in the stdlib, if within the `exec` call
         // the spawn call succeed, but collecting the output doesn't, it doesn't

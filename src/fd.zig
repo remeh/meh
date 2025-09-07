@@ -51,13 +51,13 @@ pub const FdResultsIterator = struct {
 
 pub const Fd = struct {
     pub fn search(allocator: std.mem.Allocator, parameters: []const u8, cwd: []const u8) !FdResults {
-        var args = std.ArrayList([]const u8).init(allocator);
-        defer args.deinit();
+        var args = std.ArrayListUnmanaged([]const u8).empty;
+        defer args.deinit(allocator);
 
-        try args.append("fd");
-        try args.append("--type");
-        try args.append("file");
-        try args.append(parameters);
+        try args.append(allocator, "fd");
+        try args.append(allocator, "--type");
+        try args.append(allocator, "file");
+        try args.append(allocator, parameters);
 
         // FIXME(remy): this has a bug in the stdlib, if within the `exec` call
         // the spawn call succeed, but collecting the output doesn't, it doesn't

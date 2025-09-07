@@ -42,8 +42,8 @@ pub const Editor = struct {
     buffer: Buffer,
     lsp: ?*LSP,
     has_changes_compared_to_disk: bool,
-    history: std.ArrayList(Change),
-    history_redo: std.ArrayList(Change),
+    history: std.ArrayListUnmanaged(Change),
+    history_redo: std.ArrayListUnmanaged(Change),
     history_enabled: bool,
     history_current_block_id: i64,
     prng: std.Random.DefaultPrng,
@@ -57,8 +57,8 @@ pub const Editor = struct {
             .allocator = allocator,
             .buffer = buffer,
             .has_changes_compared_to_disk = false,
-            .history = std.ArrayList(Change).init(allocator),
-            .history_redo = std.ArrayList(Change).init(allocator),
+            .history = std.ArrayListUnmanaged(Change).empty,
+            .history_redo = std.ArrayListUnmanaged(Change).empty,
             .history_enabled = true,
             .history_current_block_id = 0,
             .lsp = null,
@@ -69,14 +69,14 @@ pub const Editor = struct {
 
     pub fn deinit(self: *Editor) void {
         self.syntax_highlighter.deinit();
-        for (self.history.items) |change| {
+        for (self.history.items) |*change| {
             change.data.deinit();
         }
-        for (self.history_redo.items) |change| {
+        for (self.history_redo.items) |*change| {
             change.data.deinit();
         }
-        self.history.deinit();
-        self.history_redo.deinit();
+        self.history.deinit(self.allocator);
+        self.history_redo.deinit(self.allocator);
         self.buffer.deinit();
     }
 
@@ -104,7 +104,7 @@ pub const Editor = struct {
             }
         }
 
-        self.history.append(Change{
+        self.history.append(self.allocator, Change{
             .block_id = self.history_current_block_id,
             .data = data,
             .pos = pos,
@@ -133,13 +133,13 @@ pub const Editor = struct {
         var change = self.history.pop().?;
         const block_id = change.block_id;
         try change.undo(self);
-        try self.history_redo.append(change);
+        try self.history_redo.append(self.allocator, change);
         var pos = change.pos;
 
         while (self.history.items.len > 0 and self.history.items[self.history.items.len - 1].block_id == block_id) {
             change = self.history.pop().?;
             try change.undo(self);
-            try self.history_redo.append(change);
+            try self.history_redo.append(self.allocator, change);
             pos = change.pos;
         }
 
@@ -357,9 +357,9 @@ pub const Editor = struct {
         var line = try self.buffer.getLine(pos.b);
         const rest = line.data.items[try line.utf8pos(pos.a)..line.size()];
         const new_line = try U8Slice.initFromSlice(self.allocator, rest);
-        line.data.shrinkAndFree(try line.utf8pos(pos.a));
-        try line.data.append('\n');
-        try self.buffer.lines.insert(pos.b + 1, new_line);
+        line.data.shrinkAndFree(line.allocator, try line.utf8pos(pos.a));
+        try line.append('\n');
+        try self.buffer.lines.insert(self.buffer.allocator, pos.b + 1, new_line);
 
         // history
         self.historyAppend(ChangeType.InsertNewLine, U8Slice.initEmpty(self.allocator), pos, triggerer);
@@ -398,7 +398,7 @@ pub const Editor = struct {
                 break;
             }
             start = false;
-            try to_append.data.append(ch);
+            try to_append.data.append(to_append.allocator, ch);
         }
 
         try self.insertUtf8Text(Vec2u{ .a = end_of_current_line - 1, .b = pos.b }, to_append.bytes(), .Input);
@@ -409,7 +409,7 @@ pub const Editor = struct {
     pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8, triggerer: Triggerer) !void {
         if (self.buffer.lines.items.len == 0) {
             const new_line = U8Slice.initEmpty(self.allocator);
-            try self.buffer.lines.append(new_line);
+            try self.buffer.lines.append(self.buffer.allocator, new_line);
             try self.syntax_highlighter.insertNewLine(0);
         }
 
@@ -420,7 +420,7 @@ pub const Editor = struct {
         const insert_pos = try line.utf8pos(pos.a);
 
         // insert the new text
-        try line.data.insertSlice(insert_pos, txt);
+        try line.data.insertSlice(line.allocator, insert_pos, txt);
 
         // history
         self.historyAppend(ChangeType.InsertUtf8Text, try U8Slice.initFromSlice(self.allocator, txt), pos, triggerer);
@@ -462,7 +462,7 @@ pub const Editor = struct {
             var removed = U8Slice.initEmpty(self.allocator);
             while (to_remove > 0) : (to_remove -= 1) {
                 const ch = line.data.orderedRemove(remove_pos);
-                try removed.data.append(ch);
+                try removed.append(ch);
             }
 
             const utf8_pos = Vec2u{ .a = remove_pos, .b = pos.b };

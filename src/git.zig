@@ -17,13 +17,13 @@ pub const GitError = error{
     ToBufError,
 };
 
-pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []const u8) !std.StringHashMap(std.ArrayList(GitChange)) {
-    var args = std.ArrayList([]const u8).init(allocator);
-    defer args.deinit();
+pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []const u8) !std.StringHashMap([]GitChange) {
+    var args = std.ArrayListUnmanaged([]const u8).empty;
+    defer args.deinit(allocator);
 
-    try args.append("git");
-    try args.append("diff");
-    try args.append(filepath);
+    try args.append(allocator, "git");
+    try args.append(allocator, "diff");
+    try args.append(allocator, filepath);
 
     const result = try std.process.Child.run(.{
         .allocator = allocator,
@@ -36,7 +36,7 @@ pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []con
         allocator.free(result.stdout);
     }
 
-    var rv = std.StringHashMap(std.ArrayList(GitChange)).init(allocator);
+    var rv = std.StringHashMap([]GitChange).init(allocator);
     var line_it = std.mem.splitScalar(u8, result.stdout.ptr[0..result.stdout.len], '\n');
     while (line_it.next()) |line| {
         if (std.mem.startsWith(u8, line, "+++ b/")) {
@@ -50,8 +50,8 @@ pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []con
     return rv;
 }
 
-fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8, .scalar)) !std.ArrayList(GitChange) {
-    var rv = std.ArrayList(GitChange).init(allocator);
+fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8, .scalar)) ![]GitChange {
+    var rv = std.ArrayListUnmanaged(GitChange).empty;
     var line_pos: u32 = 0;
     while (line_it.*.next()) |line| {
         if (std.mem.startsWith(u8, line, "diff --git a/")) {
@@ -68,14 +68,14 @@ fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8
             }
         } else if (std.mem.startsWith(u8, line, "-")) {
             if (line_pos > 0) {
-                try rv.append(GitChange{
+                try rv.append(allocator, GitChange{
                     .line = line_pos - 1,
                     .status = .GitRemoved,
                 });
             } else {
                 // special case: the very first line is a new line, or at least
                 // something happened
-                try rv.append(GitChange{
+                try rv.append(allocator, GitChange{
                     .line = 0,
                     .status = .GitAdded,
                 });
@@ -83,14 +83,14 @@ fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8
             continue;
         } else if (std.mem.startsWith(u8, line, "+")) {
             if (line_pos > 0) {
-                try rv.append(GitChange{
+                try rv.append(allocator, GitChange{
                     .line = line_pos - 1,
                     .status = .GitAdded,
                 });
             } else {
                 // special case: the very first line is a new line, or at least
                 // something happened
-                try rv.append(GitChange{
+                try rv.append(allocator, GitChange{
                     .line = 0,
                     .status = .GitAdded,
                 });
@@ -100,5 +100,5 @@ fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8
             line_pos += 1;
         }
     }
-    return rv;
+    return rv.allocatedSlice();
 }

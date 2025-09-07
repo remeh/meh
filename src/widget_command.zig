@@ -276,7 +276,7 @@ pub const WidgetCommand = struct {
                 for (app.lsp_messages.items) |message| {
                     message.deinit();
                 }
-                app.lsp_messages.clearAndFree();
+                app.lsp_messages.clearAndFree(app.allocator);
             } else {
                 app.showMessageBoxError("No messages to show.", .{});
             }

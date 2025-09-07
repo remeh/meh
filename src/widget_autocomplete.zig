@@ -67,18 +67,18 @@ pub const WidgetAutocomplete = struct {
         return null;
     }
 
-    pub fn setCompletionItems(self: *WidgetAutocomplete, completions: std.ArrayList(LSPCompletion)) !void {
+    pub fn setCompletionItems(self: *WidgetAutocomplete, completions: std.ArrayListUnmanaged(LSPCompletion)) !void {
         self.list.reset();
         for (completions.items) |completion| {
-            var extra_info = std.ArrayList(U8Slice).init(self.allocator);
-            try extra_info.append(try completion.detail.copy(self.allocator));
+            var extra_info = std.ArrayListUnmanaged(U8Slice).empty;
+            try extra_info.append(self.allocator, try completion.detail.copy(self.allocator));
 
             if (completion.documentation.size() > 0) {
                 var it = std.mem.splitScalar(u8, completion.documentation.bytes(), '\n');
                 var line = it.first();
                 while (line.len > 0) {
                     const slice = try U8Slice.initFromSlice(self.allocator, line);
-                    try extra_info.append(slice);
+                    try extra_info.append(self.allocator, slice);
                     if (it.next()) |data| {
                         line = data;
                     } else {
@@ -87,10 +87,11 @@ pub const WidgetAutocomplete = struct {
                 }
             }
 
-            try self.list.entries.append(WidgetListEntry{
+            try self.list.entries.append(self.list.allocator, WidgetListEntry{
                 .label = try completion.label.copy(self.allocator),
                 .data = try completion.insert_text.copy(self.allocator),
                 .extra_info = extra_info,
+                .extra_info_allocator = self.allocator,
                 .data_pos = Vec2i{ .a = 0, .b = 0 }, // unused // TODO(remy): store Kind?
                 .data_range = completion.range,
                 .type = .Autocomplete,

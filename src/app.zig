@@ -94,7 +94,7 @@ pub const App = struct {
     widget_lookup: WidgetLookup,
     widget_messagebox: WidgetMessageBox,
     widget_search_results: WidgetSearchResults,
-    textedits: std.ArrayList(WidgetTextEdit),
+    textedits: std.ArrayListUnmanaged(WidgetTextEdit),
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
 
@@ -119,7 +119,7 @@ pub const App = struct {
     /// lsp server
     lsp: ?*LSP,
     /// lsp_messages contains the information messages sent by the LSP server.
-    lsp_messages: std.ArrayList(U8Slice),
+    lsp_messages: std.ArrayListUnmanaged(U8Slice),
 
     // TODO(remy): comment
     // TODO(remy): tests
@@ -138,11 +138,11 @@ pub const App = struct {
 
     /// previous_positions is used to be able to get back to a previous positions
     /// when jumping around in source code. See `previous_positions`.
-    previous_positions: std.ArrayList(BufferPosition),
+    previous_positions: std.ArrayListUnmanaged(BufferPosition),
 
     /// next_positions is used to get back to a more recent positions (after having
     /// moved to a previous one with `previous_positions`.
-    next_positions: std.ArrayList(BufferPosition),
+    next_positions: std.ArrayListUnmanaged(BufferPosition),
 
     /// current_widget_text_edit is the currently selected widget text in the
     /// opened WidgetTextEdits/editors/buffers.
@@ -235,7 +235,7 @@ pub const App = struct {
         return App{
             .allocator = allocator,
             .widget_text_edit_pos = Vec2u{ .a = 0, .b = 8 * 4 },
-            .textedits = std.ArrayList(WidgetTextEdit).init(allocator),
+            .textedits = std.ArrayListUnmanaged(WidgetTextEdit).empty,
             .widget_autocomplete = try WidgetAutocomplete.init(allocator),
             .widget_command = try WidgetCommand.init(allocator),
             .widget_lookup = try WidgetLookup.init(allocator),
@@ -246,10 +246,10 @@ pub const App = struct {
             .has_split_view = false,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
-            .previous_positions = std.ArrayList(BufferPosition).init(allocator),
-            .next_positions = std.ArrayList(BufferPosition).init(allocator),
+            .previous_positions = std.ArrayListUnmanaged(BufferPosition).empty,
+            .next_positions = std.ArrayListUnmanaged(BufferPosition).empty,
             .lsp = null,
-            .lsp_messages = std.ArrayList(U8Slice).init(allocator),
+            .lsp_messages = std.ArrayListUnmanaged(U8Slice).empty,
             .sdl_window = sdl_window.?,
             .font_custom = undefined,
             .font_lowdpi = font_lowdpi,
@@ -271,17 +271,17 @@ pub const App = struct {
         for (self.textedits.items) |*textedit| {
             textedit.deinit();
         }
-        self.textedits.deinit();
+        self.textedits.deinit(self.allocator);
 
         for (self.previous_positions.items) |pos| {
             pos.deinit();
         }
-        self.previous_positions.deinit();
+        self.previous_positions.deinit(self.allocator);
 
         for (self.next_positions.items) |pos| {
             pos.deinit();
         }
-        self.next_positions.deinit();
+        self.next_positions.deinit(self.allocator);
 
         self.widget_autocomplete.deinit();
         self.widget_command.deinit();
@@ -302,7 +302,7 @@ pub const App = struct {
         for (self.lsp_messages.items) |message| {
             message.deinit();
         }
-        self.lsp_messages.deinit();
+        self.lsp_messages.deinit(self.allocator);
 
         self.working_dir.deinit();
 
@@ -362,7 +362,7 @@ pub const App = struct {
             text_edit.editor.lsp = lsp;
         }
 
-        try self.textedits.append(text_edit);
+        try self.textedits.append(self.allocator, text_edit);
 
         self.updateDiffStats(path);
 
@@ -493,7 +493,7 @@ pub const App = struct {
         const file = std.fs.path.basename(wte.editor.buffer.fullpath.data.items);
         try title.appendConst(file);
 
-        try title.data.append(0); // turn it into a C string
+        try title.append(0); // turn it into a C string
         c.SDL_SetWindowTitle(self.sdl_window, @as([*:0]const u8, @ptrCast(title.data.items)));
     }
 
@@ -539,7 +539,7 @@ pub const App = struct {
 
         switch (direction) {
             .Previous => {
-                self.previous_positions.append(buffer_pos) catch |err| {
+                self.previous_positions.append(self.allocator, buffer_pos) catch |err| {
                     std.log.err("App.storeBufferPosition: can't store previous buffer position: {}", .{err});
                 };
 
@@ -549,12 +549,12 @@ pub const App = struct {
                 }
             },
             .PreviousNoDelete => {
-                self.previous_positions.append(buffer_pos) catch |err| {
+                self.previous_positions.append(self.allocator, buffer_pos) catch |err| {
                     std.log.err("App.storeBufferPosition: can't store previous buffer position: {}", .{err});
                 };
             },
             .Next => {
-                self.next_positions.append(buffer_pos) catch |err| {
+                self.next_positions.append(self.allocator, buffer_pos) catch |err| {
                     std.log.err("App.storeBufferPosition: can't store next buffer position: {}", .{err});
                 };
             },
@@ -624,11 +624,11 @@ pub const App = struct {
         defer file.close();
 
         const block_size = 4096;
-        var slice: [block_size]u8 = undefined;
-        var buff = &slice;
+        var reader_slice: [block_size]u8 = undefined;
+        var read_slice: [block_size]u8 = undefined;
+        var read_buff = &read_slice;
         var read: usize = block_size;
 
-        var buf_reader = std.io.bufferedReader(file.reader());
         var rv = U8Slice.initEmpty(self.allocator);
         errdefer rv.deinit();
 
@@ -636,16 +636,18 @@ pub const App = struct {
         var current_line: usize = 0;
         var line_offset: usize = 0;
 
+        var reader = file.reader(&reader_slice);
+
         while (read == block_size) {
             i = 0;
             line_offset = 0;
-            read = try buf_reader.reader().read(buff);
+            read = try reader.interface.readSliceShort(read_buff);
 
             while (i < read) : (i += 1) {
-                if (buff[i] == '\n') {
+                if (read_buff[i] == '\n') {
                     if (current_line == line) {
                         // append the data left until the \n with the \n included
-                        try rv.appendConst(buff[line_offset .. i + 1]); // allocate the data in an u8slice
+                        try rv.appendConst(read_buff[line_offset .. i + 1]); // allocate the data in an u8slice
                     }
                     // move the cursor in this buffer
                     line_offset = i + 1;
@@ -655,7 +657,7 @@ pub const App = struct {
 
             // append the rest of the read buffer if part of peeked line.
             if (current_line == line) {
-                try rv.appendConst(buff[line_offset..read]);
+                try rv.appendConst(read_buff[line_offset..read]);
             }
         }
 
@@ -679,7 +681,7 @@ pub const App = struct {
             const changes = git_changes_per_file.get(file.*).?;
             for (self.textedits.items) |*textedit| {
                 if (std.mem.endsWith(u8, textedit.editor.buffer.fullpath.bytes(), file.*)) {
-                    for (changes.items) |change| {
+                    for (changes) |change| {
                         const line_status = LineStatus{
                             .type = change.status,
                             .message = null,
@@ -707,7 +709,7 @@ pub const App = struct {
         var it = git_changes_per_file.iterator();
         while (it.next()) |kv| {
             self.allocator.free(kv.key_ptr.*);
-            kv.value_ptr.*.deinit();
+            self.allocator.free(kv.value_ptr.*);
         }
         git_changes_per_file.deinit();
     }
@@ -996,7 +998,7 @@ pub const App = struct {
 
     // TODO(remy): comment
     // labels are copied in the messagebox, the caller is responsible of original labels memory.
-    pub fn showMessageBoxMultiple(self: *App, lines: std.ArrayList(U8Slice), box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
+    pub fn showMessageBoxMultiple(self: *App, lines: std.ArrayListUnmanaged(U8Slice), box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
         self.widget_messagebox.setMultiple(lines, box_type, with_overlay) catch |err| {
             std.log.err("App.showMessageBoxMultiple: can't open messagebox: {}", .{err});
             return;
@@ -1010,12 +1012,12 @@ pub const App = struct {
 
     // TODO(remy): comment
     pub fn showMessageBoxMultipleFromSlice(self: *App, lines: []const u8, box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
-        var list = std.ArrayList(U8Slice).init(self.allocator);
+        var list = std.ArrayListUnmanaged(U8Slice).empty;
         defer {
             for (list.items) |line| {
                 line.deinit();
             }
-            list.deinit();
+            list.deinit(self.allocator);
         }
         var it = std.mem.splitScalar(u8, lines, '\n');
         while (it.next()) |line| {
@@ -1026,7 +1028,7 @@ pub const App = struct {
                 std.log.err("err: {}", .{err});
                 return;
             };
-            list.append(u8slice) catch |err| {
+            list.append(self.allocator, u8slice) catch |err| {
                 std.log.err("err: {}", .{err});
             };
         }
@@ -1156,7 +1158,7 @@ pub const App = struct {
             if (max_sleep_ms < 0) {
                 max_sleep_ms = 0;
             }
-            std.time.sleep(itou(max_sleep_ms * std.time.ns_per_ms));
+            std.Thread.sleep(itou(max_sleep_ms * std.time.ns_per_ms));
         }
 
         c.SDL_StopTextInput();
@@ -1223,7 +1225,7 @@ pub const App = struct {
                         std.log.debug("LSP: can't create copy to buffer LSP log message: {}", .{err});
                         return true;
                     };
-                    self.lsp_messages.append(copy) catch |err| {
+                    self.lsp_messages.append(self.allocator, copy) catch |err| {
                         std.log.err("LSP: can't buffer LSP log message: {}", .{err});
                     };
                 }

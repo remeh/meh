@@ -26,7 +26,7 @@ pub const WidgetMessageBoxOverlay = enum {
 
 pub const WidgetMessageBox = struct {
     allocator: std.mem.Allocator,
-    lines: std.ArrayList(U8Slice),
+    lines: std.ArrayListUnmanaged(U8Slice),
     message: WidgetMessageBoxType,
     overlay: WidgetMessageBoxOverlay,
     x_offset: usize,
@@ -38,7 +38,7 @@ pub const WidgetMessageBox = struct {
     pub fn init(allocator: std.mem.Allocator) WidgetMessageBox {
         return WidgetMessageBox{
             .allocator = allocator,
-            .lines = std.ArrayList(U8Slice).init(allocator),
+            .lines = std.ArrayListUnmanaged(U8Slice).empty,
             .message = undefined,
             .overlay = .WithOverlay,
             .x_offset = 0,
@@ -55,17 +55,17 @@ pub const WidgetMessageBox = struct {
 
     /// resetLines frees memory of all managed lines and empties the lines list.
     pub fn resetLines(self: *WidgetMessageBox) void {
-        for (self.lines.items) |item| {
+        for (self.lines.items) |*item| {
             item.deinit();
         }
-        self.lines.shrinkAndFree(0);
+        self.lines.shrinkAndFree(self.allocator, 0);
     }
 
     /// set prepares the messagebox to display a single line.
     pub fn set(self: *WidgetMessageBox, line: []const u8, message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
         self.resetLines();
         const slice = try U8Slice.initFromSlice(self.allocator, line);
-        try self.lines.append(slice);
+        try self.lines.append(self.allocator, slice);
         self.message = message;
         self.overlay = overlay;
         self.x_offset = 0;
@@ -75,15 +75,15 @@ pub const WidgetMessageBox = struct {
     /// append inserts a new line at the end.
     pub fn append(self: *WidgetMessageBox, line: []const u8) !void {
         const slice = try U8Slice.initFromSlice(self.allocator, line);
-        try self.lines.append(slice);
+        try self.lines.append(self.allocator, slice);
     }
 
     /// setMultiple prepares the messagebox to display multiple lines.
-    pub fn setMultiple(self: *WidgetMessageBox, lines: std.ArrayList(U8Slice), message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
+    pub fn setMultiple(self: *WidgetMessageBox, lines: std.ArrayListUnmanaged(U8Slice), message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
         self.resetLines();
         for (lines.items) |line| {
             const copy = try line.copy(self.allocator);
-            try self.lines.append(copy);
+            try self.lines.append(self.allocator, copy);
         }
         self.message = message;
         self.overlay = overlay;
@@ -198,9 +198,9 @@ test "widget_message_box main tests" {
     try std.testing.expectEqual(1, msgbox.lines.items.len);
     try std.testing.expectEqualStrings("an lsp diagnostic", msgbox.lines.items[0].bytes());
 
-    var lines = std.ArrayList(U8Slice).init(allocator);
-    try lines.append(try U8Slice.initFromSlice(allocator, "hello"));
-    try lines.append(try U8Slice.initFromSlice(allocator, "world"));
+    var lines = std.ArrayListUnmanaged(U8Slice).empty;
+    try lines.append(allocator, try U8Slice.initFromSlice(allocator, "hello"));
+    try lines.append(allocator, try U8Slice.initFromSlice(allocator, "world"));
     try msgbox.setMultiple(lines, .LSPDiagnostic, .WithOverlay);
     try std.testing.expectEqual(2, msgbox.lines.items.len);
     try std.testing.expectEqualStrings("hello", msgbox.lines.items[0].bytes());
@@ -209,5 +209,5 @@ test "widget_message_box main tests" {
     for (lines.items) |line| {
         line.deinit();
     }
-    lines.deinit();
+    lines.deinit(allocator);
 }

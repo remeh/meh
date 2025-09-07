@@ -80,11 +80,12 @@ pub const WidgetSearchResults = struct {
         while (it.next()) |result| {
             // no need to free the data in result as it will be managed
             // by the WidgetListEntry.
-            try self.list.entries.append(WidgetListEntry{
+            try self.list.entries.append(self.list.allocator, WidgetListEntry{
                 .label = result.content,
                 .data = result.filename,
                 .data_pos = Vec2i{ .a = utoi(result.column) - 1, .b = utoi(result.line_number) - 1 },
                 .extra_info = null,
+                .extra_info_allocator = null,
                 .type = .SearchResult,
             });
         }
@@ -105,11 +106,12 @@ pub const WidgetSearchResults = struct {
         while (it.next()) |result| {
             // no need to free the data in result as it will be managed
             // by the WidgetListEntry.
-            try self.list.entries.append(WidgetListEntry{
+            try self.list.entries.append(self.list.allocator, WidgetListEntry{
                 .label = result.filepath,
                 .data = try result.filepath.copy(self.allocator),
                 .data_pos = Vec2i{ .a = 0, .b = 0 },
                 .extra_info = null,
+                .extra_info_allocator = null,
                 .type = .File,
             });
         }
@@ -120,17 +122,18 @@ pub const WidgetSearchResults = struct {
 
     /// setLspReferences creates all entries in the widget list using LSPPositions data.
     /// The given `references` are _NOT_ owned by the WidgetSearchResults (copies are created).
-    pub fn setLspReferences(self: *WidgetSearchResults, app: *App, references: std.ArrayList(LSPPosition)) !void {
+    pub fn setLspReferences(self: *WidgetSearchResults, app: *App, references: std.ArrayListUnmanaged(LSPPosition)) !void {
         self.list.reset();
 
         for (references.items) |reference| {
             const line = try app.peekLine(reference.filepath.bytes(), reference.start.b);
             const pos = Vec2i{ .a = utoi(reference.start.a), .b = utoi(reference.start.b) };
-            try self.list.entries.append(WidgetListEntry{
+            try self.list.entries.append(self.list.allocator, WidgetListEntry{
                 .label = line,
                 .data = try U8Slice.initFromSlice(self.allocator, reference.filepath.bytes()),
                 .data_pos = pos,
                 .extra_info = null,
+                .extra_info_allocator = null,
                 .type = .SearchResult,
             });
         }

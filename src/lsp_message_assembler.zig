@@ -33,8 +33,8 @@ pub const MessageAssembler = struct {
         self.buffer_planned_length = 0;
     }
 
-    pub fn next(self: *MessageAssembler, response: []const u8) std.ArrayList(U8Slice) {
-        var rv = std.ArrayList(U8Slice).init(self.allocator);
+    pub fn next(self: *MessageAssembler, response: []const u8) std.ArrayListUnmanaged(U8Slice) {
+        var rv = std.ArrayListUnmanaged(U8Slice).empty;
         var done = false;
         var offset: u64 = 0;
 
@@ -79,7 +79,7 @@ pub const MessageAssembler = struct {
                             return rv;
                         };
 
-                        rv.append(message) catch |err| {
+                        rv.append(self.allocator, message) catch |err| {
                             std.log.err("MessageAssembler.append: can't append the message: {}", .{err});
                             return rv;
                         };
@@ -127,7 +127,7 @@ pub const MessageAssembler = struct {
                         return rv;
                     };
 
-                    rv.append(copy) catch |err| {
+                    rv.append(self.allocator, copy) catch |err| {
                         std.log.err("MessageAssembler.append: can't append the message: {}", .{err});
                         return rv;
                     };
@@ -167,7 +167,7 @@ test "LSP message assembler" {
         try std.testing.expectEqualStrings("{\"a\":\"b\"}", message.bytes());
         message.deinit();
     }
-    messages.deinit();
+    messages.deinit(allocator);
 
     // several in one message
     // ----------------------
@@ -183,7 +183,7 @@ test "LSP message assembler" {
         message.deinit();
         i += 1;
     }
-    messages.deinit();
+    messages.deinit(allocator);
 
     // one among two messages
     // --------------------------
@@ -193,13 +193,13 @@ test "LSP message assembler" {
         // no message should be returned
         try std.testing.expect(false);
     }
-    messages.deinit();
+    messages.deinit(allocator);
     messages = message_assembler.next("\"b\"}");
     for (messages.items) |message| {
         try std.testing.expectEqualStrings("{\"a\":\"b\"}", message.bytes());
         message.deinit();
     }
-    messages.deinit();
+    messages.deinit(allocator);
 
     // one among two messages with a trailing one
     // -----------------------------------------------
@@ -209,7 +209,7 @@ test "LSP message assembler" {
         // no message should be returned
         try std.testing.expect(false);
     }
-    messages.deinit();
+    messages.deinit(allocator);
     messages = message_assembler.next("\"b\"}Content-Length: 5\r\n\r\nhello");
     i = 0;
     for (messages.items) |message| {
@@ -221,7 +221,7 @@ test "LSP message assembler" {
         message.deinit();
         i += 1;
     }
-    messages.deinit();
+    messages.deinit(allocator);
 
     // one among several messages with a trailing one
     // followed by a trailing one
@@ -232,14 +232,14 @@ test "LSP message assembler" {
         // no message should be returned
         try std.testing.expect(false);
     }
-    messages.deinit();
+    messages.deinit(allocator);
 
     messages = message_assembler.next("\"b\"");
     for (messages.items) |_| {
         // no message should be returned
         try std.testing.expect(false);
     }
-    messages.deinit();
+    messages.deinit(allocator);
     messages = message_assembler.next("}Content-Length: 5\r\n\r\nhello");
     i = 0;
     for (messages.items) |message| {
@@ -251,5 +251,5 @@ test "LSP message assembler" {
         message.deinit();
         i += 1;
     }
-    messages.deinit();
+    messages.deinit(allocator);
 }

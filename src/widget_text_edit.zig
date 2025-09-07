@@ -1293,11 +1293,11 @@ pub const WidgetTextEdit = struct {
             .Command => {
                 // jump to next diagnostic
                 var it = self.lines_status.keyIterator();
-                var keys = std.ArrayList(usize).init(self.allocator);
-                defer keys.deinit();
+                var keys = std.ArrayListUnmanaged(usize).empty;
+                defer keys.deinit(self.allocator);
 
                 while (it.next()) |key| {
-                    keys.append(key.*) catch |err| {
+                    keys.append(self.allocator, key.*) catch |err| {
                         std.log.err("can't find next diagnostic: {}", .{err});
                         return;
                     };
@@ -1371,12 +1371,12 @@ pub const WidgetTextEdit = struct {
     pub fn duplicateLine(self: *WidgetTextEdit) void {
         if (self.editor.buffer.getLine(self.cursor.pos.b)) |line| {
             // copy the line
-            const copy = line.copy(self.allocator) catch |err| {
+            const copy = line.copy(self.editor.buffer.allocator) catch |err| {
                 std.log.err("WidgetTextEdit.duplicateLine: on copy {}", .{err});
                 return;
             };
 
-            self.editor.buffer.lines.insert(self.cursor.pos.b, copy) catch |err| {
+            self.editor.buffer.lines.insert(self.editor.buffer.allocator, self.cursor.pos.b, copy) catch |err| {
                 std.log.err("WidgetTextEdit.duplicateLine: on insert {}", .{err});
                 return;
             };
@@ -1387,7 +1387,7 @@ pub const WidgetTextEdit = struct {
                 return;
             };
 
-            self.editor.syntax_highlighter.lines.insert(self.cursor.pos.b, syntax_copy) catch |err| {
+            self.editor.syntax_highlighter.lines.insert(self.editor.buffer.allocator, self.cursor.pos.b, syntax_copy) catch |err| {
                 std.log.err("WidgetTextEdit.duplicateLine: on insert syntax {}", .{err});
                 return;
             };
@@ -1427,8 +1427,7 @@ pub const WidgetTextEdit = struct {
             }
         }
 
-        try rv.data.append(0);
-
+        try rv.append(0);
         return rv;
     }
 

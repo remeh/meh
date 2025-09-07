@@ -127,10 +127,10 @@ pub const UTF8Iterator = struct {
 };
 
 /// U8Slice is a type helper to move []const u8 around in
-/// an `std.ArrayList(u8)` instance.
+/// an `std.ArrayListUnmanaged(u8)` instance.
 pub const U8Slice = struct {
     allocator: std.mem.Allocator,
-    data: std.ArrayList(u8),
+    data: std.ArrayListUnmanaged(u8),
 
     // Constructors
     // ------------
@@ -139,21 +139,21 @@ pub const U8Slice = struct {
     pub fn initEmpty(allocator: std.mem.Allocator) U8Slice {
         return U8Slice{
             .allocator = allocator,
-            .data = std.ArrayList(u8).init(allocator),
+            .data = std.ArrayListUnmanaged(u8).empty,
         };
     }
 
     // initFromChar creates an U8Slice with only the given cahr as content.
     pub fn initFromChar(allocator: std.mem.Allocator, ch: u8) !U8Slice {
         var rv = initEmpty(allocator);
-        try rv.data.append(ch);
+        try rv.data.append(allocator, ch);
         return rv;
     }
 
     /// initFromSlice creates an U8Slice with the given bytes in a slice of const u8.
     pub fn initFromSlice(allocator: std.mem.Allocator, str: []const u8) !U8Slice {
         var rv = initEmpty(allocator);
-        try rv.data.appendSlice(str);
+        try rv.data.appendSlice(allocator, str);
         return rv;
     }
 
@@ -165,7 +165,7 @@ pub const U8Slice = struct {
             if (str[i] == 0) {
                 break;
             }
-            try rv.data.append(str[i]);
+            try rv.append(str[i]);
         }
         return rv;
     }
@@ -205,7 +205,7 @@ pub const U8Slice = struct {
     /// appendConst appends the given string to the u8slice.
     /// This method allocates memory to store the data.
     pub fn appendConst(self: *U8Slice, str: []const u8) !void {
-        try self.data.ensureTotalCapacityPrecise(self.data.items.len + str.len);
+        try self.data.ensureTotalCapacityPrecise(self.allocator, self.data.items.len + str.len);
         self.data.appendSliceAssumeCapacity(str);
     }
 
@@ -213,6 +213,12 @@ pub const U8Slice = struct {
     /// This method allocates memory to store the data.
     pub fn appendSlice(self: *U8Slice, slice: U8Slice) !void {
         try self.appendConst(slice.bytes());
+    }
+
+    /// append appends on u8 into this u8slice.
+    /// TODO(remy): unit test
+    pub fn append(self: *U8Slice, c: u8) !void {
+        try self.data.append(self.allocator, c);
     }
 
     /// bytes returns the data as a const u8 string.
@@ -251,13 +257,14 @@ pub const U8Slice = struct {
 
     /// reset resets the content of the U8Slice to not contain anything.
     pub fn reset(self: *U8Slice) void {
-        self.data.deinit();
-        self.data = std.ArrayList(u8).init(self.allocator);
+        self.data.deinit(self.allocator);
+        self.data = std.ArrayListUnmanaged(u8).empty;
     }
 
     /// deinit releases memory used by the U8Slice.
+    /// Do not use the U8Slice after a call to deinit.
     pub fn deinit(self: U8Slice) void {
-        self.data.deinit();
+        self.allocator.free(self.data.allocatedSlice());
     }
 };
 

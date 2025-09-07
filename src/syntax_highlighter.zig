@@ -28,6 +28,7 @@ const keywords = [_][]const u8{
     "return",
     "if",
     "catch",
+    "range",
 
     "var",
     "let",
@@ -42,24 +43,24 @@ const keywords = [_][]const u8{
 
 pub const LineSyntaxHighlight = struct {
     allocator: std.mem.Allocator,
-    columns: std.ArrayList(Vec4u),
+    columns: std.ArrayListUnmanaged(Vec4u),
     // highlight_rects is the glyph position (start, end) to highlight
     // using a rect.
-    highlight_rects: std.ArrayList(Vec2u),
+    highlight_rects: std.ArrayListUnmanaged(Vec2u),
     dirty: bool,
 
     pub fn init(allocator: std.mem.Allocator, dirty: bool) LineSyntaxHighlight {
         return LineSyntaxHighlight{
             .allocator = allocator,
-            .columns = std.ArrayList(Vec4u).init(allocator),
-            .highlight_rects = std.ArrayList(Vec2u).init(allocator),
+            .columns = std.ArrayListUnmanaged(Vec4u).empty,
+            .highlight_rects = std.ArrayListUnmanaged(Vec2u).empty,
             .dirty = dirty,
         };
     }
 
     pub fn deinit(self: *LineSyntaxHighlight) void {
-        self.columns.deinit();
-        self.highlight_rects.deinit();
+        self.columns.deinit(self.allocator);
+        self.highlight_rects.deinit(self.allocator);
     }
 
     pub fn getForColumn(self: LineSyntaxHighlight, column: usize) Vec4u {
@@ -70,10 +71,10 @@ pub const LineSyntaxHighlight = struct {
     }
 
     pub fn copy(self: *LineSyntaxHighlight, allocator: std.mem.Allocator) !LineSyntaxHighlight {
-        var columns = std.ArrayList(Vec4u).init(allocator);
-        try columns.appendSlice(self.columns.items);
-        var rects = std.ArrayList(Vec2u).init(allocator);
-        try rects.appendSlice(self.highlight_rects.items);
+        var columns = std.ArrayListUnmanaged(Vec4u).empty;
+        try columns.appendSlice(self.allocator, self.columns.items);
+        var rects = std.ArrayListUnmanaged(Vec2u).empty;
+        try rects.appendSlice(self.allocator, self.highlight_rects.items);
         return LineSyntaxHighlight{
             .allocator = allocator,
             .columns = columns,
@@ -86,16 +87,16 @@ pub const LineSyntaxHighlight = struct {
 /// SyntaxHighlighter is a token-based line syntax highlighter.
 pub const SyntaxHighlighter = struct {
     allocator: std.mem.Allocator,
-    lines: std.ArrayList(LineSyntaxHighlight),
+    lines: std.ArrayListUnmanaged(LineSyntaxHighlight),
     keyword_matcher: std.StringHashMap(void),
     word_under_cursor: ?[]const u8,
 
     pub fn init(allocator: std.mem.Allocator, line_count: usize) !SyntaxHighlighter {
-        var lines = std.ArrayList(LineSyntaxHighlight).init(allocator);
+        var lines = std.ArrayListUnmanaged(LineSyntaxHighlight).empty;
 
         var i: usize = 0;
         while (i < line_count) : (i += 1) {
-            try lines.append(LineSyntaxHighlight.init(allocator, true));
+            try lines.append(allocator, LineSyntaxHighlight.init(allocator, true));
         }
 
         var keyword_matcher = std.StringHashMap(void).init(allocator);
@@ -115,7 +116,7 @@ pub const SyntaxHighlighter = struct {
         for (self.lines.items) |*line| {
             line.deinit();
         }
-        self.lines.deinit();
+        self.lines.deinit(self.allocator);
         self.keyword_matcher.deinit();
     }
 
@@ -124,7 +125,7 @@ pub const SyntaxHighlighter = struct {
     }
 
     pub fn insertNewLine(self: *SyntaxHighlighter, line_position: usize) !void {
-        try self.lines.insert(line_position, LineSyntaxHighlight.init(self.allocator, true));
+        try self.lines.insert(self.allocator, line_position, LineSyntaxHighlight.init(self.allocator, true));
     }
 
     // removeLine removes highlighting information on the given line.
@@ -208,10 +209,10 @@ pub const SyntaxHighlighter = struct {
         word_under_cursor: ?[]const u8,
         keyword_matcher: std.StringHashMap(void),
     ) !LineSyntaxHighlight {
-        var columns = std.ArrayList(Vec4u).init(allocator);
-        errdefer columns.deinit();
-        var highlight_rects = std.ArrayList(Vec2u).init(allocator);
-        errdefer highlight_rects.deinit();
+        var columns = std.ArrayListUnmanaged(Vec4u).empty;
+        errdefer columns.deinit(allocator);
+        var highlight_rects = std.ArrayListUnmanaged(Vec2u).empty;
+        errdefer highlight_rects.deinit(allocator);
 
         if (line_content.size() == 0) {
             return LineSyntaxHighlight{
@@ -237,9 +238,9 @@ pub const SyntaxHighlighter = struct {
 
             // immediately set this glyph color to the default color
             if (is_in_comment) {
-                try columns.append(Colors.gray);
+                try columns.append(allocator, Colors.gray);
             } else {
-                try columns.append(Colors.light_gray);
+                try columns.append(allocator, Colors.light_gray);
             }
 
             if (ch == '\t') {
@@ -296,7 +297,7 @@ pub const SyntaxHighlighter = struct {
                     // *3 since since we already move of 1 because of the \t itself
                     const tabs_offset: usize = tabs_encountered * 3;
                     // create a rect for this word
-                    try highlight_rects.append(Vec2u{
+                    try highlight_rects.append(allocator, Vec2u{
                         .a = word_start + tabs_offset,
                         .b = current_pos + tabs_offset,
                     });
@@ -324,19 +325,10 @@ pub const SyntaxHighlighter = struct {
         };
     }
 
-    fn color_with(columns: *std.ArrayList(Vec4u), start: usize, end: usize, color: Vec4u) void {
+    fn color_with(columns: *std.ArrayListUnmanaged(Vec4u), start: usize, end: usize, color: Vec4u) void {
         var idx = start;
         while (idx < end) : (idx += 1) {
             columns.items[idx] = color;
-        }
-    }
-
-    fn finish_coloring_with(columns: *std.ArrayList(Vec4u), it: *UTF8Iterator, color: Vec4u) !void {
-        while (true) {
-            try columns.append(color);
-            if (!it.next()) {
-                break;
-            }
         }
     }
 };
@@ -385,13 +377,13 @@ test "line_syntax_highlighter main test" {
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(1)); // space
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(2)); // space
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(3)); // space
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(4)); // s
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(5)); // t
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(6)); // d
+    try std.testing.expectEqual(Colors.gray_blue, line3.getForColumn(4)); // s
+    try std.testing.expectEqual(Colors.gray_blue, line3.getForColumn(5)); // t
+    try std.testing.expectEqual(Colors.gray_blue, line3.getForColumn(6)); // d
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(7)); // .
-    try std.testing.expectEqual(Colors.blue, line3.getForColumn(8)); // l
-    try std.testing.expectEqual(Colors.blue, line3.getForColumn(9)); // o
-    try std.testing.expectEqual(Colors.blue, line3.getForColumn(10)); // g
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(8)); // l
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(9)); // o
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(10)); // g
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(11)); // .
     try std.testing.expectEqual(Colors.white, line3.getForColumn(12)); // d
     try std.testing.expectEqual(Colors.white, line3.getForColumn(13)); // e

@@ -43,7 +43,7 @@ pub const LSPRequest = struct {
     json: U8Slice,
     message_type: LSPMessageType,
     request_id: i64,
-    pub fn deinit(self: *LSPRequest) void {
+    pub fn deinit(self: LSPRequest) void {
         self.json.deinit();
     }
 };
@@ -53,12 +53,13 @@ pub const LSPResponse = struct {
     allocator: std.mem.Allocator,
     message_type: LSPMessageType,
     log_message: ?U8Slice, // TODO(remy): shouldn't this be a list of U8Slice instead?
-    completions: ?std.ArrayList(LSPCompletion),
-    diagnostics: ?std.ArrayList(LSPDiagnostic),
-    definitions: ?std.ArrayList(LSPPosition),
-    hover: ?std.ArrayList(U8Slice),
-    references: ?std.ArrayList(LSPPosition),
+    completions: ?std.ArrayListUnmanaged(LSPCompletion),
+    diagnostics: ?std.ArrayListUnmanaged(LSPDiagnostic),
+    definitions: ?std.ArrayListUnmanaged(LSPPosition),
+    hover: ?std.ArrayListUnmanaged(U8Slice),
+    references: ?std.ArrayListUnmanaged(LSPPosition),
     request_id: i64,
+
     pub fn init(allocator: std.mem.Allocator, request_id: i64, message_type: LSPMessageType) LSPResponse {
         return LSPResponse{
             .allocator = allocator,
@@ -72,39 +73,40 @@ pub const LSPResponse = struct {
             .log_message = null,
         };
     }
+
     pub fn deinit(self: LSPResponse) void {
         if (self.completions) |comps| {
-            for (comps.items) |completion| {
+            for (comps.items) |*completion| {
                 completion.deinit();
             }
-            comps.deinit();
+            self.allocator.free(comps.allocatedSlice());
         }
         if (self.diagnostics) |diags| {
-            for (diags.items) |diag| {
+            for (diags.items) |*diag| {
                 diag.deinit();
             }
-            diags.deinit();
+            self.allocator.free(diags.allocatedSlice());
         }
         if (self.definitions) |defs| {
-            for (defs.items) |def| {
+            for (defs.items) |*def| {
                 def.deinit();
             }
-            defs.deinit();
+            self.allocator.free(defs.allocatedSlice());
         }
         if (self.hover) |hover| {
-            for (hover.items) |item| {
+            for (hover.items) |*item| {
                 item.deinit();
             }
-            hover.deinit();
-        }
-        if (self.log_message) |log_message| {
-            log_message.deinit();
+            self.allocator.free(hover.allocatedSlice());
         }
         if (self.references) |refs| {
-            for (refs.items) |ref| {
+            for (refs.items) |*ref| {
                 ref.deinit();
             }
-            refs.deinit();
+            self.allocator.free(refs.allocatedSlice());
+        }
+        if (self.log_message) |*log_message| {
+            log_message.deinit();
         }
     }
 };
@@ -391,7 +393,7 @@ pub const LSP = struct {
         var new_text = U8Slice.initEmpty(self.allocator);
         var i: usize = lines_range.a;
         var last_line_size: usize = 0;
-        errdefer new_text.deinit();
+        defer new_text.deinit();
 
         while (i <= lines_range.b) : (i += 1) {
             var line = buffer.getLine(i) catch {
@@ -400,8 +402,6 @@ pub const LSP = struct {
             last_line_size = line.size();
             try new_text.appendConst(line.bytes());
         }
-
-        defer new_text.deinit();
 
         // range changed
         //        var range = if ((lines_range.b + 1) < buffer.linesCount()) Vec4u{
@@ -627,9 +627,18 @@ pub const LSPWriter = struct {
     }
 
     fn toJson(allocator: std.mem.Allocator, message: anytype) !U8Slice {
+        var json_writer = std.io.Writer.Allocating.init(allocator);
+        std.json.Stringify.value(message, std.json.Stringify.Options{}, &json_writer.writer) catch |err| {
+            std.log.err("LSPWriter.toJson: can't stringify: {}", .{err});
+            return error.CantToJSON;
+        };
+
+        try json_writer.writer.flush();
+        defer json_writer.deinit();
+
+        // we start owning the data in the U8Slice here
         var rv = U8Slice.initEmpty(allocator);
-        errdefer rv.deinit();
-        try std.json.stringify(message, std.json.StringifyOptions{}, rv.data.writer());
+        try rv.appendConst(json_writer.writer.buffer[0..json_writer.writer.end]);
         return rv;
     }
 };

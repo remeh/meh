@@ -38,7 +38,8 @@ pub const WidgetListEntry = struct {
     label: U8Slice,
     data: U8Slice,
     /// use this one if you need to display extra information in a message box
-    extra_info: ?std.ArrayList(U8Slice),
+    extra_info: ?std.ArrayListUnmanaged(U8Slice),
+    extra_info_allocator: ?std.mem.Allocator,
     data_pos: Vec2i,
     data_range: ?Vec4u = null,
 
@@ -48,11 +49,11 @@ pub const WidgetListEntry = struct {
         self.label.deinit();
         self.data.deinit();
 
-        if (self.extra_info) |extra| {
-            for (extra.items) |item| {
+        if (self.extra_info) |*extra| {
+            for (extra.items) |*item| {
                 item.deinit();
             }
-            extra.deinit();
+            extra.deinit(self.extra_info_allocator.?);
         }
     }
 };
@@ -61,10 +62,10 @@ const page_jump: usize = 15;
 
 pub const WidgetList = struct {
     allocator: std.mem.Allocator,
-    entries: std.ArrayList(WidgetListEntry),
+    entries: std.ArrayListUnmanaged(WidgetListEntry),
     /// Slices in `filtered_entries` are pointing to values in `entries`, they
     /// should not be freed.
-    filtered_entries: std.ArrayList(WidgetListEntry),
+    filtered_entries: std.ArrayListUnmanaged(WidgetListEntry),
     filter_type: WidgetListFilterType,
     input: WidgetInput,
     label: U8Slice,
@@ -78,8 +79,8 @@ pub const WidgetList = struct {
     pub fn init(allocator: std.mem.Allocator, filter_type: WidgetListFilterType) !WidgetList {
         return WidgetList{
             .allocator = allocator,
-            .entries = std.ArrayList(WidgetListEntry).init(allocator),
-            .filtered_entries = std.ArrayList(WidgetListEntry).init(allocator),
+            .entries = std.ArrayListUnmanaged(WidgetListEntry).empty,
+            .filtered_entries = std.ArrayListUnmanaged(WidgetListEntry).empty,
             .filter_type = filter_type,
             .input = try WidgetInput.init(allocator),
             .label = U8Slice.initEmpty(allocator),
@@ -91,8 +92,8 @@ pub const WidgetList = struct {
     pub fn deinit(self: *WidgetList) void {
         self.input.deinit();
         self.deleteEntries();
-        self.entries.deinit();
-        self.filtered_entries.deinit();
+        self.entries.deinit(self.allocator);
+        self.filtered_entries.deinit(self.allocator);
         self.label.deinit();
     }
 
@@ -106,8 +107,8 @@ pub const WidgetList = struct {
             self.entries.items[i].deinit();
             i += 1;
         }
-        self.entries.shrinkAndFree(0);
-        self.filtered_entries.shrinkAndFree(0);
+        self.entries.shrinkAndFree(self.allocator, 0);
+        self.filtered_entries.shrinkAndFree(self.allocator, 0);
     }
 
     /// select returns the selected WidgetListEntry if any.
@@ -128,7 +129,7 @@ pub const WidgetList = struct {
         self.input.reset();
         self.deleteEntries();
         self.selected_entry_idx = 0;
-        self.label.data.shrinkAndFree(0);
+        self.label.data.shrinkAndFree(self.label.allocator, 0);
         self.x_offset = 0;
     }
 
@@ -190,7 +191,7 @@ pub const WidgetList = struct {
     /// filter filters the `entries` list using what's available in the `input`.
     /// Slices in `filtered_entries` are pointing to values in `entries`.
     pub fn filter(self: *WidgetList) !void {
-        self.filtered_entries.shrinkAndFree(0);
+        self.filtered_entries.shrinkAndFree(self.allocator, 0);
         const entered_filter = (try self.input.text()).bytes();
         for (self.entries.items) |entry| {
             var add = (entered_filter.len == 0);
@@ -207,7 +208,7 @@ pub const WidgetList = struct {
                 }
             }
             if (add) {
-                try self.filtered_entries.append(entry);
+                try self.filtered_entries.append(self.allocator, entry);
             }
         }
         self.selected_entry_idx = 0;

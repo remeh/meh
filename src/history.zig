@@ -83,7 +83,7 @@ pub const Change = struct {
                 try editor.insertUtf8Text(self.pos, self.data.bytes(), .Undo);
             },
             .DeleteLine => {
-                try editor.buffer.lines.insert(self.pos.b, self.data);
+                try editor.buffer.lines.insert(editor.buffer.allocator, self.pos.b, self.data);
                 try editor.syntax_highlighter.insertNewLine(self.pos.b);
                 // we re-inserted the line into the document, it is not owned
                 // by this change anymore.

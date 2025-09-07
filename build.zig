@@ -17,9 +17,11 @@ pub fn build(b: *std.Build) void {
 
     const meh = b.addExecutable(.{
         .name = "meh",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
     prepare(meh);
@@ -54,9 +56,11 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     const meh_tests = b.addTest(.{
         .name = "meh unit tests",
-        .root_source_file = b.path("src/tests.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     const run_tests = b.addRunArtifact(meh_tests);
     prepare(meh_tests);
