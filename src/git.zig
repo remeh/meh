@@ -18,16 +18,13 @@ pub const GitError = error{
 };
 
 pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []const u8) !std.StringHashMap([]GitChange) {
-    var args = std.ArrayListUnmanaged([]const u8).empty;
-    defer args.deinit(allocator);
-
-    try args.append(allocator, "git");
-    try args.append(allocator, "diff");
-    try args.append(allocator, filepath);
+    const args = [_][]const u8{
+        "git", "diff", filepath,
+    };
 
     const result = try std.process.Child.run(.{
         .allocator = allocator,
-        .argv = args.items,
+        .argv = &args,
         .cwd = cwd,
         .max_output_bytes = 25 * 1024 * 1024,
     });

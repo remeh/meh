@@ -51,13 +51,9 @@ pub const FdResultsIterator = struct {
 
 pub const Fd = struct {
     pub fn search(allocator: std.mem.Allocator, parameters: []const u8, cwd: []const u8) !FdResults {
-        var args = std.ArrayListUnmanaged([]const u8).empty;
-        defer args.deinit(allocator);
-
-        try args.append(allocator, "fd");
-        try args.append(allocator, "--type");
-        try args.append(allocator, "file");
-        try args.append(allocator, parameters);
+        const args = [_][]const u8{
+            "fd", "--type", "file", parameters,
+        };
 
         // FIXME(remy): this has a bug in the stdlib, if within the `exec` call
         // the spawn call succeed, but collecting the output doesn't, it doesn't
@@ -66,7 +62,7 @@ pub const Fd = struct {
         // a `RipgrepError.TooManyResults` instead in order to display something nice.
         const result = try std.process.Child.run(.{
             .allocator = allocator,
-            .argv = args.items,
+            .argv = &args,
             .cwd = cwd,
             .max_output_bytes = 25 * 1024 * 1024,
         });

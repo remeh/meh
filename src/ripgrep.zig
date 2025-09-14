@@ -138,12 +138,9 @@ pub const RipgrepResultsIterator = struct {
 
 pub const Ripgrep = struct {
     pub fn search(allocator: std.mem.Allocator, parameters: []const u8, cwd: []const u8) !RipgrepResults {
-        var args = std.ArrayListUnmanaged([]const u8).empty;
-        defer args.deinit(allocator);
-
-        try args.append(allocator, "rg");
-        try args.append(allocator, "--vimgrep");
-        try args.append(allocator, parameters);
+        const args = [_][]const u8{
+            "rg", "--vimgrep", parameters,
+        };
 
         // FIXME(remy): this has a bug in the stdlib, if within the `exec` call
         // the spawn call succeed, but collecting the output doesn't, it doesn't
@@ -152,7 +149,7 @@ pub const Ripgrep = struct {
         // a `RipgrepError.TooManyResults` instead in order to display something nice.
         const result = try std.process.Child.run(.{
             .allocator = allocator,
-            .argv = args.items,
+            .argv = &args,
             .cwd = cwd,
             .max_output_bytes = 25 * 1024 * 1024,
         });
