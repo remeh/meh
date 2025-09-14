@@ -109,6 +109,7 @@ pub const WidgetTextEditSelection = struct {
 pub const WidgetTextEdit = struct {
     allocator: std.mem.Allocator,
     cursor: Cursor,
+    cursors_extra: std.ArrayListUnmanaged(Cursor),
     editor: Editor,
     input_mode: InputMode,
     /// render_line_numbers is set to true when the line numbers have to be rendered
@@ -149,6 +150,7 @@ pub const WidgetTextEdit = struct {
         return WidgetTextEdit{
             .allocator = allocator,
             .cursor = Cursor.init(),
+            .cursors_extra = .empty,
             .render_line_numbers = true,
             .render_horizontal_limits = true,
             .syntax_highlight = true,
@@ -173,6 +175,7 @@ pub const WidgetTextEdit = struct {
     }
 
     pub fn deinit(self: *WidgetTextEdit) void {
+        self.cursors_extra.deinit(self.allocator);
         self.last_search.deinit();
         var it = self.lines_status.valueIterator();
         while (it.next()) |line_status| {
@@ -454,7 +457,7 @@ pub const WidgetTextEdit = struct {
                             );
                         }
 
-                        // draw the cursor if necessary
+                        // draw the cursors if necessary
 
                         if (self.cursor.pos.a == it.current_glyph and (tab_idx == 4 or tab_idx == 0) and self.cursor.pos.b == i) {
                             self.cursor.render(
@@ -468,6 +471,22 @@ pub const WidgetTextEdit = struct {
                                 one_char_size,
                                 focused,
                             );
+                        }
+
+                        for (self.cursors_extra.items) |cursor| {
+                            if (cursor.pos.a == it.current_glyph and (tab_idx == 4 or tab_idx == 0) and cursor.pos.b == i) {
+                                cursor.render(
+                                    font.sdl_renderer,
+                                    self.input_mode,
+                                    scaler,
+                                    Vec2u{
+                                        .a = draw_pos.a + (offset * one_char_size.a) + left_blank_offset,
+                                        .b = draw_pos.b + y_offset,
+                                    },
+                                    one_char_size,
+                                    focused,
+                                );
+                            }
                         }
                     }
 
@@ -828,11 +847,18 @@ pub const WidgetTextEdit = struct {
             'u' => {
                 self.moveCursor(Vec2i{ .a = 0, .b = -move }, true);
             },
-            'v' => {
-                self.duplicateLine();
+            'c' => {
+                self.addCursor(self.cursor) catch |err| {
+                    std.log.err("onCtrlKeyDown: can't create cursor: {}", .{err});
+                };
             },
             else => {},
         }
+    }
+
+    /// addCursor creates a copy of current cursor and sets it as an extra cursor.
+    pub fn addCursor(self: *WidgetTextEdit, cursor: Cursor) !void {
+        try self.cursors_extra.append(self.allocator, cursor);
     }
 
     /// onArrow is called when an arrow key is pressed to move the cursor.
