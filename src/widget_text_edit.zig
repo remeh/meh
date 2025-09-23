@@ -398,14 +398,14 @@ pub const WidgetTextEdit = struct {
                             font.sdl_renderer,
                             scaler,
                             Vec2u{
-                                .a = draw_pos.a + (draw_rect.a*one_char_size.a) + left_blank_offset - 1 - (self.viewport.columns.a*one_char_size.a),
+                                .a = draw_pos.a + (draw_rect.a * one_char_size.a) + left_blank_offset - 1 - (self.viewport.columns.a * one_char_size.a) ,
                                 .b = draw_pos.b + y_offset,
                             },
                             Vec2u{
                                 .a = (draw_rect.b - draw_rect.a) * one_char_size.a + 2,
                                 .b = one_char_size.b + 1,
                             },
-                            Colors.blue,
+                            Colors.light_gray,
                         );
                     }
                 }
@@ -979,7 +979,24 @@ pub const WidgetTextEdit = struct {
                         self.moveCursorSpecial(.StartOfLine, true);
                         self.updateSelection(self.cursor.pos);
                     },
-                    'b' => self.moveCursorSpecial(CursorMove.PreviousSpace, true),
+                    'b' => {
+                        const x = self.cursor.pos.a;
+                        self.moveCursorSpecial(CursorMove.PreviousSpace, false);
+                        if (self.cursor.pos.a != 0) {
+                            self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
+                        }
+
+                        if (x == self.cursor.pos.a and self.cursor.pos.a > 0) {
+                            // we didn't move, check if we stuck on a space
+                            self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+                            self.moveCursorSpecial(CursorMove.PreviousSpace, false);
+                            if (self.cursor.pos.a != 0) {
+                                self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
+                            }
+                        }
+
+                        self.validateCursorPos(.None);
+                    },
                     'e' => self.moveCursorSpecial(CursorMove.NextSpace, true),
                     // start inserting
                     'i' => {
