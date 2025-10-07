@@ -471,7 +471,7 @@ pub const App = struct {
     /// currentWidgetTextEdit returns the currently focused WidgetTextEdit.
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
-    pub fn currentWidgetTextEdit(self: App) *WidgetTextEdit {
+    pub fn currentWidgetTextEdit(self: *App) *WidgetTextEdit {
         if (self.has_split_view and self.focused_editor == .Right) {
             return &self.textedits.items[self.current_widget_text_edit_alt];
         }
@@ -480,7 +480,7 @@ pub const App = struct {
 
     /// refreshWindowTitle refreshes the WM window title using the currently
     /// focused WidgetText editor information.
-    fn refreshWindowTitle(self: App) !void {
+    fn refreshWindowTitle(self: *App) !void {
         const wte = self.currentWidgetTextEdit();
         var title = try U8Slice.initFromSlice(self.allocator, "meh - ");
         defer title.deinit();
@@ -1645,7 +1645,11 @@ pub const App = struct {
                         }
                     },
                     c.SDLK_TAB => {
-                        self.currentWidgetTextEdit().onTab(shift);
+                        self.currentWidgetTextEdit().onTab(&self.currentWidgetTextEdit().cursor, shift);
+                        var i: usize = 0;
+                        while (i < self.currentWidgetTextEdit().cursors_extra.items.len) : (i += 1) {
+                            self.currentWidgetTextEdit().onTab(&self.currentWidgetTextEdit().cursors_extra.items[i], shift);
+                        }
                     },
                     c.SDLK_UP => self.currentWidgetTextEdit().onArrowKey(.Up),
                     c.SDLK_DOWN => self.currentWidgetTextEdit().onArrowKey(.Down),
