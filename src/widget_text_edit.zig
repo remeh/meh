@@ -1134,6 +1134,12 @@ pub const WidgetTextEdit = struct {
                                 std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
                                 return true;
                             };
+                            for (self.cursors_extra.items) |cursor| {
+                                self.editor.deleteGlyph(cursor.pos, .Right, .Input) catch |err| {
+                                    std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
+                                    return true;
+                                };
+                            }
                         }
                     },
                     // undo & redo
@@ -1324,6 +1330,15 @@ pub const WidgetTextEdit = struct {
                     std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
                 };
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+                self.validateCursorPos(.Scroll);
+
+                for (self.cursors_extra.items) |*cursor| {
+                    self.editor.deleteGlyph(cursor.*.pos, .Left, .Input) catch |err| {
+                        std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
+                    };
+                    self.moveCursorPtr(cursor, Vec2i{ .a = -1, .b = 0 }, false);
+                    self.validateCursorPosPtr(cursor, .Scroll);
+                }
             },
             .Command, .Replace => {
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
