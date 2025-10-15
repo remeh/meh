@@ -1289,11 +1289,13 @@ pub const WidgetTextEdit = struct {
         // box and removing the word highlighting, also, deleting
         // the extra cursors.
         if (shift) {
-            self.cursors_extra.clearRetainingCapacity();
             _ = self.editor.syntax_highlighter.setHighlightWord(null);
 
             return;
         }
+
+        // delete all extra cursors
+        self.cursors_extra.clearRetainingCapacity();
 
         // change the history block, we're switching to do something else
         self.editor.historyEndBlock();
