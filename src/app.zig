@@ -1628,7 +1628,7 @@ pub const App = struct {
                             self.sticky_message_box = false;
                         }
                     },
-                    c.SDLK_COLON => {
+                    c.SDLK_EXCLAIM, c.SDLK_COLON => {
                         if (self.currentWidgetTextEdit().input_mode == .Command) {
                             self.focused_widget = FocusedWidget.Command;
                         }

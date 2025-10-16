@@ -52,7 +52,7 @@ pub const WidgetCommand = struct {
     }
 
     pub fn onTextInput(self: *WidgetCommand, txt: []const u8) void {
-        _ = self.input.onTextInput(txt);
+        self.input.onTextInput(txt);
     }
 
     // Methods
@@ -286,9 +286,12 @@ pub const WidgetCommand = struct {
         // exec
         // ----
 
-        if (command.len > 2 and command[0] == ':' and command[1] == '!') {
+        if ((command.len > 2 and command[0] == ':' and command[1] == '!') or
+            (command.len > 1 and command[0] == '!'))
+        {
+            const start: usize = if (command[0] == ':') 2 else 1;
             const full_prompt = (try self.input.text()).bytes();
-            if (Exec.run(self.allocator, full_prompt[2..full_prompt.len], app.working_dir.bytes())) |*result| {
+            if (Exec.run(self.allocator, full_prompt[start..full_prompt.len], app.working_dir.bytes())) |*result| {
                 if (result.stderr.len > 0) {
                     app.showMessageBoxMultipleFromSlice(result.stderr, .ExecOutput, .WithOverlay);
                 }
