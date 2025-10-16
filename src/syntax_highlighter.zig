@@ -33,11 +33,9 @@ const keywords = [_][]const u8{
     "var",
     "let",
     "pub",
-    "std",
 
     "true",
     "false",
-    "zig",
     "import",
 };
 
@@ -266,7 +264,7 @@ pub const SyntaxHighlighter = struct {
             } else if (is_in_quote > 0 and ch == is_in_quote and previous_char != '\\') {
                 // is in quote and leaving that same quote
                 is_in_quote = 0;
-                color_with(&columns, quote_start, current_pos + 1, Colors.gray);
+                color_with(&columns, quote_start, current_pos + 1, Colors.white);
             }
 
             // end of a word
@@ -281,8 +279,8 @@ pub const SyntaxHighlighter = struct {
                         color_with(&columns, word_start, current_pos, Colors.red);
                     } else if (std.mem.eql(u8, str, "DONE")) {
                         color_with(&columns, word_start, current_pos, Colors.green);
-                    } else if (is_in_comment == false and (ch == '(' or ch == '{' or ch == '[' or char_before_word == '.')) {
-                        color_with(&columns, word_start, current_pos, Colors.white);
+                    } else if (is_in_comment == false and (ch == '(' or ch == '{' or ch == '[')) {
+                        color_with(&columns, word_start, current_pos, Colors.gray);
                     }
 
                     if (!is_in_comment and str.len > 0 and keyword_matcher.contains(str)) {
@@ -292,6 +290,7 @@ pub const SyntaxHighlighter = struct {
 
                 // maybe it is the highlighted word?
                 if (word_under_cursor != null and
+                    word_start < line_content.bytes().len and it.current_byte < line_content.bytes().len and
                     std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], word_under_cursor.?))
                 {
                     // *3 since since we already move of 1 because of the \t itself

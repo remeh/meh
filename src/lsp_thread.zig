@@ -128,9 +128,9 @@ pub const LSPThread = struct {
                 } else {
                     // another kind of message, write it on the lsp server stdin
                     if (child.stdin) |stdin| {
-                        var buff: [1024*1024]u8 = undefined;
+                        var buff: [1024 * 1024]u8 = undefined;
                         var writer = stdin.writerStreaming(&buff);
-                        
+
                         const payload = try std.fmt.allocPrint(ctx.allocator, "Content-Length: {d}\r\n\r\n{s}", .{
                             node.data.json.size(),
                             node.data.json.bytes(),

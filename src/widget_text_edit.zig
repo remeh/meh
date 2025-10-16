@@ -109,6 +109,7 @@ pub const WidgetTextEditSelection = struct {
 pub const WidgetTextEdit = struct {
     allocator: std.mem.Allocator,
     cursor: Cursor,
+    cursors_extra: std.ArrayListUnmanaged(Cursor),
     editor: Editor,
     input_mode: InputMode,
     /// render_line_numbers is set to true when the line numbers have to be rendered
@@ -149,6 +150,7 @@ pub const WidgetTextEdit = struct {
         return WidgetTextEdit{
             .allocator = allocator,
             .cursor = Cursor.init(),
+            .cursors_extra = .empty,
             .render_line_numbers = true,
             .render_horizontal_limits = true,
             .syntax_highlight = true,
@@ -173,6 +175,7 @@ pub const WidgetTextEdit = struct {
     }
 
     pub fn deinit(self: *WidgetTextEdit) void {
+        self.cursors_extra.deinit(self.allocator);
         self.last_search.deinit();
         var it = self.lines_status.valueIterator();
         while (it.next()) |line_status| {
@@ -398,7 +401,7 @@ pub const WidgetTextEdit = struct {
                             font.sdl_renderer,
                             scaler,
                             Vec2u{
-                                .a = draw_pos.a + (draw_rect.a * one_char_size.a) + left_blank_offset - 1 - (self.viewport.columns.a * one_char_size.a) ,
+                                .a = draw_pos.a + (draw_rect.a * one_char_size.a) + left_blank_offset - 1 - (self.viewport.columns.a * one_char_size.a),
                                 .b = draw_pos.b + y_offset,
                             },
                             Vec2u{
@@ -454,7 +457,7 @@ pub const WidgetTextEdit = struct {
                             );
                         }
 
-                        // draw the cursor if necessary
+                        // draw the cursors if necessary
 
                         if (self.cursor.pos.a == it.current_glyph and (tab_idx == 4 or tab_idx == 0) and self.cursor.pos.b == i) {
                             self.cursor.render(
@@ -468,6 +471,22 @@ pub const WidgetTextEdit = struct {
                                 one_char_size,
                                 focused,
                             );
+                        }
+
+                        for (self.cursors_extra.items) |cursor| {
+                            if (cursor.pos.a == it.current_glyph and (tab_idx == 4 or tab_idx == 0) and cursor.pos.b == i) {
+                                cursor.render(
+                                    font.sdl_renderer,
+                                    self.input_mode,
+                                    scaler,
+                                    Vec2u{
+                                        .a = draw_pos.a + (offset * one_char_size.a) + left_blank_offset,
+                                        .b = draw_pos.b + y_offset,
+                                    },
+                                    one_char_size,
+                                    focused,
+                                );
+                            }
                         }
                     }
 
@@ -828,11 +847,26 @@ pub const WidgetTextEdit = struct {
             'u' => {
                 self.moveCursor(Vec2i{ .a = 0, .b = -move }, true);
             },
-            'v' => {
-                self.duplicateLine();
+            'c' => {
+                self.addCursor(self.cursor) catch |err| {
+                    std.log.err("onCtrlKeyDown: can't create cursor: {}", .{err});
+                };
+                self.moveCursor(Vec2i{ .a = 0, .b = 1 }, false);
+                self.validateCursorPos(.Scroll);
             },
             else => {},
         }
+    }
+
+    /// addCursor creates a copy of current cursor and sets it as an extra cursor.
+    pub fn addCursor(self: *WidgetTextEdit, cursor: Cursor) !void {
+        // only appends one if there isn't one there already
+        for (self.cursors_extra.items) |existing| {
+            if (cursor.pos.a == existing.pos.a and cursor.pos.b == existing.pos.b) {
+                return;
+            }
+        }
+        try self.cursors_extra.append(self.allocator, cursor);
     }
 
     /// onArrow is called when an arrow key is pressed to move the cursor.
@@ -871,6 +905,13 @@ pub const WidgetTextEdit = struct {
                     self.moveCursor(Vec2i{ .a = 1, .b = 0 }, true);
                 } else |err| {
                     std.log.err("WidgetTextEdit.onTextInput: can't insert utf8 text: {}", .{err});
+                }
+                for (self.cursors_extra.items) |*cursor| {
+                    if (self.editor.insertUtf8Text(cursor.pos, txt, .Input)) {
+                        self.moveCursorPtr(cursor, Vec2i{ .a = 1, .b = 0 }, true);
+                    } else |err| {
+                        std.log.err("WidgetTextEdit.onTextInput: can't insert utf8 text: {}", .{err});
+                    }
                 }
             },
             .r, .Replace => {
@@ -1110,6 +1151,12 @@ pub const WidgetTextEdit = struct {
                                 std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
                                 return true;
                             };
+                            for (self.cursors_extra.items) |cursor| {
+                                self.editor.deleteGlyph(cursor.pos, .Right, .Input) catch |err| {
+                                    std.log.err("WidgetTextEdit.onTextInput: can't delete utf8 char while executing 'x' input: {}", .{err});
+                                    return true;
+                                };
+                            }
                         }
                     },
                     // undo & redo
@@ -1123,25 +1170,25 @@ pub const WidgetTextEdit = struct {
     }
 
     /// onTab is called when the user has pressed the Tab key.
-    pub fn onTab(self: *WidgetTextEdit, shift: bool) void {
+    pub fn onTab(self: *WidgetTextEdit, cursor: *Cursor, shift: bool) void {
         switch (self.input_mode) {
             .Insert => {
                 var i: usize = 0;
                 while (i < tab_spaces) : (i += 1) {
-                    self.editor.insertUtf8Text(self.cursor.pos, string_space, .Input) catch |err| {
+                    self.editor.insertUtf8Text(cursor.*.pos, string_space, .Input) catch |err| {
                         std.log.err("WidgetTextEdit.onTab: can't insert spaces in insert mode: {}", .{err});
                         return;
                     };
                 }
-                self.moveCursor(Vec2i{ .a = 4, .b = 0 }, true);
+                self.moveCursorPtr(cursor, Vec2i{ .a = 4, .b = 0 }, true);
             },
             else => {
                 var line_idx: usize = switch (self.selection.state) {
-                    .Inactive => self.cursor.pos.b,
+                    .Inactive => cursor.*.pos.b,
                     else => self.selection.start.b,
                 };
                 const line_idx_end = switch (self.selection.state) {
-                    .Inactive => self.cursor.pos.b + 1,
+                    .Inactive => cursor.*.pos.b + 1,
                     else => self.selection.stop.b + 1,
                 };
                 while (line_idx < line_idx_end) {
@@ -1173,7 +1220,7 @@ pub const WidgetTextEdit = struct {
         }
 
         // make sure the cursor is on a viable position.
-        self.validateCursorPos(.Scroll);
+        self.validateCursorPosPtr(cursor, .Scroll);
         self.refreshSyntaxHighlighting();
     }
 
@@ -1256,11 +1303,16 @@ pub const WidgetTextEdit = struct {
     ///   * switch the input mode to `Command`
     pub fn onEscape(self: *WidgetTextEdit, shift: bool) void {
         // shift-escape is about closing the sticky message
-        // box and removing the word highlighting
+        // box and removing the word highlighting, also, deleting
+        // the extra cursors.
         if (shift) {
             _ = self.editor.syntax_highlighter.setHighlightWord(null);
+
             return;
         }
+
+        // delete all extra cursors
+        self.cursors_extra.clearRetainingCapacity();
 
         // change the history block, we're switching to do something else
         self.editor.historyEndBlock();
@@ -1297,6 +1349,15 @@ pub const WidgetTextEdit = struct {
                     std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
                 };
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+                self.validateCursorPos(.Scroll);
+
+                for (self.cursors_extra.items) |*cursor| {
+                    self.editor.deleteGlyph(cursor.*.pos, .Left, .Input) catch |err| {
+                        std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
+                    };
+                    self.moveCursorPtr(cursor, Vec2i{ .a = -1, .b = 0 }, false);
+                    self.validateCursorPosPtr(cursor, .Scroll);
+                }
             },
             .Command, .Replace => {
                 self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
@@ -1504,18 +1565,23 @@ pub const WidgetTextEdit = struct {
         }
     }
 
+    // TODO(remy): comment
+    pub fn moveCursor(self: *WidgetTextEdit, move: Vec2i, scroll: bool) void {
+        self.moveCursorPtr(&self.cursor, move, scroll);
+    }
+
     /// moveCursor applies a relative move the cursor in the current WidgetTextEdit view.
     /// Values passed in `move` are in glyph.
     /// `scroll` forces the viewport to make the cursor visible.
     /// If you want to make sure the cursor is on a valid position, consider
     /// using `validateCursorPos`. Note that `validateCursorPos(.Scroll)` is
     /// called if `scroll` is set to true.
-    pub fn moveCursor(self: *WidgetTextEdit, move: Vec2i, scroll: bool) void {
-        const cursor_pos = Vec2utoi(self.cursor.pos);
+    pub fn moveCursorPtr(self: *WidgetTextEdit, cursor: *Cursor, move: Vec2i, scroll: bool) void {
+        const cursor_pos = Vec2utoi(cursor.*.pos);
         var line: *U8Slice = undefined;
         var utf8size: usize = 0;
 
-        if (self.editor.buffer.getLine(self.cursor.pos.b)) |l| {
+        if (self.editor.buffer.getLine(cursor.*.pos.b)) |l| {
             line = l;
         } else |err| {
             // still, report the error
@@ -1532,18 +1598,18 @@ pub const WidgetTextEdit = struct {
 
         // y movement
         if (cursor_pos.b + move.b <= 0) {
-            self.cursor.pos.b = 0;
+            cursor.*.pos.b = 0;
         } else {
-            self.cursor.pos.b = itou(cursor_pos.b + move.b);
+            cursor.*.pos.b = itou(cursor_pos.b + move.b);
         }
 
         // x movement
         if (cursor_pos.a + move.a <= 0 or line.size() == 0) {
-            self.cursor.pos.a = 0;
+            cursor.*.pos.a = 0;
         } else {
             const after_move: usize = itou(cursor_pos.a + move.a);
             if (UTF8Iterator.init(line.bytes(), after_move)) |it| {
-                self.cursor.pos.a = it.current_glyph;
+                cursor.*.pos.a = it.current_glyph;
             } else |err| {
                 std.log.err("WidgetTextEdit.moveCursor: can't compute moveCursor new position: {}", .{err});
             }
@@ -1554,38 +1620,43 @@ pub const WidgetTextEdit = struct {
         }
 
         if (self.selection.state == .KeyboardSelection) {
-            self.updateSelection(self.cursor.pos);
+            self.updateSelection(cursor.*.pos);
         }
     }
 
-    /// validateCursorPos validates that the cursor is on a valid position, moves the cursor if it is not the case.
+    // TODO(remy): comment me
     pub fn validateCursorPos(self: *WidgetTextEdit, scroll: ScrollBehavior) void {
-        if (self.cursor.pos.b >= self.editor.buffer.lines.items.len and self.editor.buffer.lines.items.len > 0) {
-            self.cursor.pos.b = self.editor.buffer.lines.items.len - 1;
+        self.validateCursorPosPtr(&self.cursor, scroll);
+    }
+
+    /// validateCursorPos validates that the cursor is on a valid position, moves the cursor if it is not the case.
+    pub fn validateCursorPosPtr(self: *WidgetTextEdit, cursor: *Cursor, scroll: ScrollBehavior) void {
+        if (cursor.*.pos.b >= self.editor.buffer.lines.items.len and self.editor.buffer.lines.items.len > 0) {
+            cursor.*.pos.b = self.editor.buffer.lines.items.len - 1;
         }
 
         if (self.editor.buffer.lines.items.len == 0) {
-            self.cursor.pos.a = 0;
-            self.cursor.pos.b = 0;
+            cursor.*.pos.a = 0;
+            cursor.*.pos.b = 0;
             return;
         }
 
-        if (self.editor.buffer.lines.items[self.cursor.pos.b].utf8size()) |utf8size| {
+        if (self.editor.buffer.lines.items[cursor.*.pos.b].utf8size()) |utf8size| {
             if (utf8size == 0) {
-                self.cursor.pos.a = 0;
+                cursor.*.pos.a = 0;
             } else {
-                if (self.cursor.pos.a >= utf8size) {
+                if (cursor.*.pos.a >= utf8size) {
                     // there is a edge case: on the last line, we're OK going one
                     // char out, in order to be able to insert new things there.
-                    if (self.cursor.pos.b < utoi(self.editor.buffer.lines.items.len) - 1) {
-                        self.cursor.pos.a = utf8size - 1;
+                    if (cursor.*.pos.b < utoi(self.editor.buffer.lines.items.len) - 1) {
+                        cursor.*.pos.a = utf8size - 1;
                     } else {
-                        self.cursor.pos.a = utf8size;
+                        cursor.*.pos.a = utf8size;
                     }
                 }
             }
         } else |err| {
-            std.log.err("WidgetTextEdit.moveCursor: can't get utf8size of the line {d}: {}", .{ self.cursor.pos.b, err });
+            std.log.err("WidgetTextEdit.moveCursor: can't get utf8size of the line {d}: {}", .{ cursor.*.pos.b, err });
         }
 
         switch (scroll) {
