@@ -262,9 +262,12 @@ pub const SyntaxHighlighter = struct {
                 }
                 is_in_comment = true;
             } else if (is_in_quote > 0 and ch == is_in_quote and previous_char != '\\') {
-                // is in quote and leaving that same quote
+                // we were in a quote and we're leaving it
                 is_in_quote = 0;
-                color_with(&columns, quote_start, current_pos + 1, Colors.white);
+                // only colors it if not in a comment
+                if (!is_in_comment) {
+                    color_with(&columns, quote_start, current_pos + 1, Colors.white);
+                }
             }
 
             // end of a word
@@ -280,7 +283,7 @@ pub const SyntaxHighlighter = struct {
                     } else if (std.mem.eql(u8, str, "DONE")) {
                         color_with(&columns, word_start, current_pos, Colors.green);
                     } else if (is_in_comment == false and (ch == '(' or ch == '{' or ch == '[')) {
-                        color_with(&columns, word_start, current_pos, Colors.gray);
+                        color_with(&columns, word_start, current_pos, Colors.whitish);
                     }
 
                     if (!is_in_comment and str.len > 0 and keyword_matcher.contains(str)) {

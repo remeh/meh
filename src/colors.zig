@@ -7,6 +7,13 @@ pub const white = Vec4u{
     .d = 255,
 };
 
+pub const whitish = Vec4u{
+    .a = 230,
+    .b = 230,
+    .c = 230,
+    .d = 255,
+};
+
 pub const light_gray = Vec4u{
     .a = 190,
     .b = 190,
