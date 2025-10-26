@@ -1724,7 +1724,11 @@ pub const App = struct {
                                     };
                                     self.openFdResults(results);
                                 },
-                                else => self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd),
+                                else => {
+                                    if (self.textedits.items.len > 0) {
+                                        self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd);
+                                    }
+                                },
                             }
                         }
                     },
@@ -1742,7 +1746,9 @@ pub const App = struct {
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
-                self.currentWidgetTextEdit().onMouseMove(mouse_coord, widget_pos);
+                if (self.textedits.items.len > 0) {
+                    self.currentWidgetTextEdit().onMouseMove(mouse_coord, widget_pos);
+                }
             },
             c.SDL_MOUSEBUTTONDOWN => {
                 const mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);

@@ -17,7 +17,7 @@ pub fn main() !void {
     var app = try App.init(allocator);
     defer app.deinit();
 
-    // open the files passed as argument
+    // nothing passed as argument
     if (std.os.argv.len <= 1) {
         const results = Fd.search(app.allocator, ".", app.working_dir.bytes()) catch |err| {
             std.log.err("main: can't exec 'fd {s}': {}", .{ ".", err });

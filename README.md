@@ -24,6 +24,7 @@ Use `zig 0.15.1` to compile.
 * Ripgrep & Fd integration.
 * File status (added, modified)
 * Hard-coded fast syntax highlighter. No tree-sitter integration.
+* Multi-cursors support edition.
 * Highlight a word using the mouse.
 * Open files navigating through directories. No fuzzy search.
 * Vertical split. One. No horizontal split.
