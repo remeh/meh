@@ -123,11 +123,12 @@ pub const WidgetCommand = struct {
         // -----
 
         if (std.mem.eql(u8, command, ":w")) {
-            var wt = app.currentWidgetTextEdit();
-            wt.editor.save() catch |err| {
-                std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ command, err });
-            };
-            app.updateDiffStats(app.currentWidgetTextEdit().editor.buffer.fullpath.bytes());
+            if (app.currentWidgetTextEdit()) |wte| {
+                wte.editor.save() catch |err| {
+                    std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ command, err });
+                };
+                app.updateDiffStats(wte.editor.buffer.fullpath.bytes());
+            }
             return;
         }
 
@@ -184,8 +185,9 @@ pub const WidgetCommand = struct {
 
             app.storeBufferPosition(.Previous);
 
-            var wt = app.currentWidgetTextEdit();
-            wt.search(str, SearchDirection.After, true);
+            if (app.currentWidgetTextEdit()) |wte| {
+                wte.search(str, SearchDirection.After, true);
+            }
             return;
         }
 
@@ -194,13 +196,14 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":rg")) {
             if (self.countArgs() == 1) {
-                var text_edit = app.currentWidgetTextEdit();
-                const word = try text_edit.editor.wordAt(text_edit.cursor.pos);
-                const results = Ripgrep.search(app.allocator, word, app.working_dir.bytes()) catch |err| {
-                    std.log.err("WidgetCommand: can't exec 'rg {s}': {}", .{ word, err });
-                    return;
-                };
-                app.openRipgrepResults(results);
+                if (app.currentWidgetTextEdit()) |wte| {
+                    const word = try wte.editor.wordAt(wte.cursor.pos);
+                    const results = Ripgrep.search(app.allocator, word, app.working_dir.bytes()) catch |err| {
+                        std.log.err("WidgetCommand: can't exec 'rg {s}': {}", .{ word, err });
+                        return;
+                    };
+                    app.openRipgrepResults(results);
+                }
                 return;
             }
             if (self.rest(1)) |parameters| {
@@ -236,10 +239,12 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":ref")) {
             if (app.lsp) |lsp| {
-                lsp.references(&(app.currentWidgetTextEdit().editor.buffer), app.currentWidgetTextEdit().cursor.pos) catch |err| {
-                    std.log.err("WidgetCommand: can't exec ':ref': {}", .{err});
-                    return;
-                };
+                if (app.currentWidgetTextEdit()) |wte| {
+                    lsp.references(&(wte.editor.buffer), wte.cursor.pos) catch |err| {
+                        std.log.err("WidgetCommand: can't exec ':ref': {}", .{err});
+                        return;
+                    };
+                }
             } else {
                 app.showMessageBoxError("LSP not initialized.", .{});
             }
@@ -248,10 +253,12 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":def")) {
             if (app.lsp) |lsp| {
-                lsp.definition(&(app.currentWidgetTextEdit().editor.buffer), app.currentWidgetTextEdit().cursor.pos) catch |err| {
-                    std.log.err("WidgetCommand: can't exec ':def': {}", .{err});
-                    return;
-                };
+                if (app.currentWidgetTextEdit()) |wte| {
+                    lsp.definition(&(wte.editor.buffer), wte.cursor.pos) catch |err| {
+                        std.log.err("WidgetCommand: can't exec ':def': {}", .{err});
+                        return;
+                    };
+                }
             } else {
                 app.showMessageBoxError("LSP not initialized.", .{});
             }
@@ -260,10 +267,12 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":i")) {
             if (app.lsp) |lsp| {
-                lsp.hover(&(app.currentWidgetTextEdit().editor.buffer), app.currentWidgetTextEdit().cursor.pos) catch |err| {
-                    std.log.err("WidgetCommand: can't exec ':i': {}", .{err});
-                    return;
-                };
+                if (app.currentWidgetTextEdit()) |wte| {
+                    lsp.hover(&(wte.editor.buffer), wte.cursor.pos) catch |err| {
+                        std.log.err("WidgetCommand: can't exec ':i': {}", .{err});
+                        return;
+                    };
+                }
             } else {
                 app.showMessageBoxError("LSP not initialized.", .{});
             }
@@ -310,19 +319,20 @@ pub const WidgetCommand = struct {
         // -----
 
         if (std.mem.eql(u8, command, ":debug")) {
-            var widget_text_edit = app.currentWidgetTextEdit();
-            std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text_edit.editor.buffer.fullpath.bytes(), widget_text_edit.editor.buffer.lines.items.len });
-            std.log.debug("Window pixel size: {}", .{app.window_pixel_size});
-            std.log.debug("Window scaled size: {}", .{app.window_scaled_size});
-            std.log.debug("Viewport: {}", .{widget_text_edit.viewport});
-            std.log.debug("History entries count: {d}", .{widget_text_edit.editor.history.items.len});
-            std.log.debug("History entries:\n{}", .{widget_text_edit.editor.history});
-            std.log.debug("Cursor position: {}", .{widget_text_edit.cursor.pos});
-            if (widget_text_edit.editor.buffer.getLine(widget_text_edit.cursor.pos.b)) |line| {
-                std.log.debug("Line size: {d}, utf8 size: {any}", .{ line.size(), line.utf8size() });
-                std.log.debug("Line content:\n{s}", .{line.bytes()});
-            } else |err| {
-                std.log.debug("Line errored while using getLine: {}", .{err});
+            if (app.currentWidgetTextEdit()) |widget_text_edit| {
+                std.log.debug("File opened: {s}, lines count: {d}", .{ widget_text_edit.editor.buffer.fullpath.bytes(), widget_text_edit.editor.buffer.lines.items.len });
+                std.log.debug("Window pixel size: {}", .{app.window_pixel_size});
+                std.log.debug("Window scaled size: {}", .{app.window_scaled_size});
+                std.log.debug("Viewport: {}", .{widget_text_edit.viewport});
+                std.log.debug("History entries count: {d}", .{widget_text_edit.editor.history.items.len});
+                std.log.debug("History entries:\n{}", .{widget_text_edit.editor.history});
+                std.log.debug("Cursor position: {}", .{widget_text_edit.cursor.pos});
+                if (widget_text_edit.editor.buffer.getLine(widget_text_edit.cursor.pos.b)) |line| {
+                    std.log.debug("Line size: {d}, utf8 size: {any}", .{ line.size(), line.utf8size() });
+                    std.log.debug("Line content:\n{s}", .{line.bytes()});
+                } else |err| {
+                    std.log.debug("Line errored while using getLine: {}", .{err});
+                }
             }
             return;
         }
@@ -334,8 +344,9 @@ pub const WidgetCommand = struct {
             // read the line number
             if (std.fmt.parseInt(usize, command[1..command.len], 10)) |line_number| {
                 app.storeBufferPosition(.Previous);
-                var wt = app.currentWidgetTextEdit();
-                wt.goToLine(line_number - 1, .Center);
+                if (app.currentWidgetTextEdit()) |wte| {
+                    wte.goToLine(line_number - 1, .Center);
+                }
                 return;
             } else |_| {
                 // it's not a number, let's continue

@@ -247,7 +247,7 @@ pub const LSP = struct {
 
     pub fn serverFromExtension(extension: []const u8) ![]const u8 {
         if (std.mem.eql(u8, extension, ".go")) {
-            return "gopls";
+             return "gopls";
         } else if (std.mem.eql(u8, extension, ".zig")) {
             return "zls";
         } else if (std.mem.eql(u8, extension, ".rs")) {
@@ -255,7 +255,7 @@ pub const LSP = struct {
         } else if (std.mem.eql(u8, extension, ".cpp")) {
             return "clangd";
         } else if (std.mem.eql(u8, extension, ".rb")) {
-            return "solargraph stdio";
+            return "/home/remy/docs/code/lsp-llm/zig-out/bin/lsp_llm";
         } else if (std.mem.eql(u8, extension, ".py")) {
             // provided by: https://github.com/python-lsp/python-lsp-server
             return "pylsp";

@@ -220,9 +220,9 @@ pub const App = struct {
 
         // load the fonts
 
-        const font_lowdpi = try Font.init(allocator, sdl_renderer.?, 18);
-        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, 18);
-        const font_hidpi = try Font.init(allocator, sdl_renderer.?, 28);
+        const font_lowdpi = try Font.init(allocator, sdl_renderer.?, 16);
+        const font_lowdpibigfont = try Font.init(allocator, sdl_renderer.?, 16);
+        const font_hidpi = try Font.init(allocator, sdl_renderer.?, 26);
 
         // working directory
 
@@ -471,8 +471,14 @@ pub const App = struct {
     /// currentWidgetTextEdit returns the currently focused WidgetTextEdit.
     // FIXME(remy): this method isn't testing anything and will crash the
     // app if no file is opened.
-    pub fn currentWidgetTextEdit(self: *App) *WidgetTextEdit {
+    pub fn currentWidgetTextEdit(self: *App) ?*WidgetTextEdit {
+        if (self.textedits.items.len == 0) {
+            return null;
+        }
         if (self.has_split_view and self.focused_editor == .Right) {
+            if (self.current_widget_text_edit_alt >= self.textedits.items.len) {
+                return null;
+            }
             return &self.textedits.items[self.current_widget_text_edit_alt];
         }
         return &self.textedits.items[self.current_widget_text_edit];
@@ -481,20 +487,21 @@ pub const App = struct {
     /// refreshWindowTitle refreshes the WM window title using the currently
     /// focused WidgetText editor information.
     fn refreshWindowTitle(self: *App) !void {
-        const wte = self.currentWidgetTextEdit();
-        var title = try U8Slice.initFromSlice(self.allocator, "meh - ");
-        defer title.deinit();
+        if (self.currentWidgetTextEdit()) |wte| {
+            var title = try U8Slice.initFromSlice(self.allocator, "meh - ");
+            defer title.deinit();
 
-        if (std.fs.path.dirname(wte.editor.buffer.fullpath.data.items)) |dir| {
-            try title.appendConst(std.fs.path.basename(dir)); // we only want the dir right before
-            try title.appendConst("/");
+            if (std.fs.path.dirname(wte.editor.buffer.fullpath.data.items)) |dir| {
+                try title.appendConst(std.fs.path.basename(dir)); // we only want the dir right before
+                try title.appendConst("/");
+            }
+
+            const file = std.fs.path.basename(wte.editor.buffer.fullpath.data.items);
+            try title.appendConst(file);
+
+            try title.append(0); // turn it into a C string
+            c.SDL_SetWindowTitle(self.sdl_window, @as([*:0]const u8, @ptrCast(title.data.items)));
         }
-
-        const file = std.fs.path.basename(wte.editor.buffer.fullpath.data.items);
-        try title.appendConst(file);
-
-        try title.append(0); // turn it into a C string
-        c.SDL_SetWindowTitle(self.sdl_window, @as([*:0]const u8, @ptrCast(title.data.items)));
     }
 
     /// setCurrentFocusedWidgetTextEditIndex is used to set the active WidgetTextEdit index (the
@@ -528,7 +535,7 @@ pub const App = struct {
             return;
         }
 
-        const textedit = self.currentWidgetTextEdit();
+        const textedit = self.currentWidgetTextEdit() orelse return;
         const buffer_pos = BufferPosition{
             .fullpath = textedit.editor.buffer.fullpath.copy(self.allocator) catch |err| {
                 std.log.err("App.storeBufferPosition: can't copy buffer fullpath: {}", .{err});
@@ -595,7 +602,9 @@ pub const App = struct {
     /// if necessary.
     pub fn jumpToBufferPosition(self: *App, buff_pos: BufferPosition) !void {
         try self.openFile(buff_pos.fullpath.bytes());
-        self.currentWidgetTextEdit().goTo(buff_pos.cursor_position, .Center);
+        if (self.currentWidgetTextEdit()) |wte| {
+            wte.goTo(buff_pos.cursor_position, .Center);
+        }
     }
 
     /// peekLine reads a file until the given line and returns that line in a new U8Slice.
@@ -835,19 +844,20 @@ pub const App = struct {
 
         switch (self.focused_widget) {
             .Autocomplete => {
-                const wt = self.currentWidgetTextEdit();
-                var cursor_pixel_pos = wt.cursor.posInPixel(wt, wt.one_char_size);
-                if (self.has_split_view and self.focused_editor == .Right) {
-                    cursor_pixel_pos.a += self.window_scaled_size.a / 2;
+                if (self.currentWidgetTextEdit()) |wte| {
+                    var cursor_pixel_pos = wte.cursor.posInPixel(wte, wte.one_char_size);
+                    if (self.has_split_view and self.focused_editor == .Right) {
+                        cursor_pixel_pos.a += self.window_scaled_size.a / 2;
+                    }
+                    self.widget_autocomplete.render(
+                        self.sdl_renderer,
+                        self.current_font,
+                        scaler,
+                        self.window_scaled_size,
+                        cursor_pixel_pos,
+                        one_char_size,
+                    );
                 }
-                self.widget_autocomplete.render(
-                    self.sdl_renderer,
-                    self.current_font,
-                    scaler,
-                    self.window_scaled_size,
-                    cursor_pixel_pos,
-                    one_char_size,
-                );
             },
             .Command => self.widget_command.render(
                 self.sdl_renderer,
@@ -1190,8 +1200,10 @@ pub const App = struct {
 
                     var definition = definitions.items[0];
                     if (self.openFile(definition.filepath.bytes())) {
-                        self.currentWidgetTextEdit().goTo(definition.start, .Center);
-                        self.currentWidgetTextEdit().setInputMode(.Command);
+                        if (self.currentWidgetTextEdit()) |wte| {
+                            wte.goTo(definition.start, .Center);
+                            wte.setInputMode(.Command);
+                        }
                     } else |err| {
                         self.showMessageBoxError("LSP: error while jumping to definition: {}", .{err});
                         std.log.debug("App.mainloop: can't jump to LSP definition: {}", .{err});
@@ -1315,39 +1327,40 @@ pub const App = struct {
                     c.SDLK_RETURN => {
                         if (self.widget_autocomplete.select()) |autocomplete_entry| {
                             if (autocomplete_entry) |entry| {
-                                const wt = self.currentWidgetTextEdit();
-                                // remove the filter if any has been entered
-                                if (self.widget_autocomplete.list.input.text()) |text| {
-                                    // first remove the extra text inserted while filtering
-                                    var remove_start = Vec2u{ .a = wt.cursor.pos.a - text.size(), .b = wt.cursor.pos.b };
-                                    var remove_end = wt.cursor.pos;
-                                    if (wt.editor.deleteChunk(
-                                        remove_start,
-                                        remove_end,
-                                        .Input,
-                                    )) |new_pos| {
-                                        wt.setCursorPos(new_pos, .Scroll);
-                                    } else |_| {}
-
-                                    // then, if any, remove the range provided by the lsp completion entry
-                                    if (entry.data_range) |range| {
-                                        remove_start = Vec2u{ .a = range.a, .b = range.b };
-                                        remove_end = Vec2u{ .a = range.c, .b = range.d };
-
-                                        if (wt.editor.deleteChunk(
+                                if (self.currentWidgetTextEdit()) |wte| {
+                                    // remove the filter if any has been entered
+                                    if (self.widget_autocomplete.list.input.text()) |text| {
+                                        // first remove the extra text inserted while filtering
+                                        var remove_start = Vec2u{ .a = wte.cursor.pos.a - text.size(), .b = wte.cursor.pos.b };
+                                        var remove_end = wte.cursor.pos;
+                                        if (wte.editor.deleteChunk(
                                             remove_start,
                                             remove_end,
                                             .Input,
                                         )) |new_pos| {
-                                            wt.setCursorPos(new_pos, .Scroll);
+                                            wte.setCursorPos(new_pos, .Scroll);
                                         } else |_| {}
-                                    }
-                                } else |_| {}
-                                // insert the completion
-                                wt.editor.insertUtf8Text(wt.cursor.pos, entry.data.bytes(), .Input) catch |err| {
-                                    self.showMessageBoxError("LSP: can't insert value (insert completion): {}", .{err});
-                                };
-                                wt.setCursorPos(Vec2u{ .a = wt.cursor.pos.a + entry.data.size(), .b = wt.cursor.pos.b }, .Scroll);
+
+                                        // then, if any, remove the range provided by the lsp completion entry
+                                        if (entry.data_range) |range| {
+                                            remove_start = Vec2u{ .a = range.a, .b = range.b };
+                                            remove_end = Vec2u{ .a = range.c, .b = range.d };
+
+                                            if (wte.editor.deleteChunk(
+                                                remove_start,
+                                                remove_end,
+                                                .Input,
+                                            )) |new_pos| {
+                                                wte.setCursorPos(new_pos, .Scroll);
+                                            } else |_| {}
+                                        }
+                                    } else |_| {}
+                                    // insert the completion
+                                    wte.editor.insertUtf8Text(wte.cursor.pos, entry.data.bytes(), .Input) catch |err| {
+                                        self.showMessageBoxError("LSP: can't insert value (insert completion): {}", .{err});
+                                    };
+                                    wte.setCursorPos(Vec2u{ .a = wte.cursor.pos.a + entry.data.size(), .b = wte.cursor.pos.b }, .Scroll);
+                                }
                             }
                         } else |err| {
                             self.showMessageBoxError("LSP: can't insert value: {}", .{err});
@@ -1376,8 +1389,10 @@ pub const App = struct {
                         self.widget_autocomplete.reset();
                     },
                     c.SDLK_BACKSPACE => {
-                        self.currentWidgetTextEdit().onBackspace();
-                        self.widget_autocomplete.list.onBackspace();
+                        if (self.currentWidgetTextEdit()) |wte| {
+                            wte.onBackspace();
+                            self.widget_autocomplete.list.onBackspace();
+                        }
                     },
                     c.SDLK_n, c.SDLK_DOWN => {
                         if (ctrl or event.key.keysym.sym == c.SDLK_DOWN) {
@@ -1394,9 +1409,11 @@ pub const App = struct {
             },
             c.SDL_TEXTINPUT => {
                 const read_text = readTextFromSDLInput(&event.text.text);
-                _ = self.currentWidgetTextEdit().onTextInput(read_text);
-                _ = self.widget_autocomplete.list.onTextInput(read_text);
-                self.widget_autocomplete.filter_size += 1;
+                if (self.currentWidgetTextEdit()) |wte| {
+                    _ = wte.onTextInput(read_text);
+                    _ = self.widget_autocomplete.list.onTextInput(read_text);
+                    self.widget_autocomplete.filter_size += 1;
+                }
             },
             else => {},
         }
@@ -1492,9 +1509,12 @@ pub const App = struct {
                                     std.log.debug("App.lookupEvents: can't open file: {}", .{err});
                                     return;
                                 };
-                                self.currentWidgetTextEdit().goTo(Vec2itou(entry.data_pos), .Center);
-                                // leave the WidgetSearchResults widget
-                                self.focused_widget = FocusedWidget.Editor;
+
+                                if (self.currentWidgetTextEdit()) |wte| {
+                                    wte.goTo(Vec2itou(entry.data_pos), .Center);
+                                    // leave the WidgetSearchResults widget
+                                    self.focused_widget = FocusedWidget.Editor;
+                                }
                             }
                         } else |err| {
                             std.log.err("App.searchResultsEvents: can't select current entry: {}", .{err});
@@ -1615,29 +1635,92 @@ pub const App = struct {
         const ctrl: bool = input_state[c.SDL_SCANCODE_LCTRL] == 1 or input_state[c.SDL_SCANCODE_RCTRL] == 1;
         const shift: bool = input_state[c.SDL_SCANCODE_LSHIFT] == 1 or input_state[c.SDL_SCANCODE_RSHIFT] == 1;
         const cmd: bool = input_state[c.SDL_SCANCODE_LGUI] == 1 or input_state[c.SDL_SCANCODE_RGUI] == 1;
+
+        // special cases for actions that does not need a text edit to be opened
+        if (event.type == c.SDL_KEYDOWN and ctrl) {
+            switch (event.key.keysym.sym) {
+                c.SDLK_j => {
+                    if (!self.has_split_view) {
+                        return;
+                    }
+                    if (self.focused_editor == .Left) {
+                        self.focused_editor = .Right;
+                    } else {
+                        self.focused_editor = .Left;
+                    }
+                    self.refreshWindowTitle() catch {};
+                },
+                c.SDLK_k => {
+                    self.widget_lookup.reset();
+                    self.widget_lookup.setTextEdits(self.textedits) catch |err| {
+                        std.log.err("App.editorEvents: can't set WidgetLookup buffers list: {}", .{err});
+                    };
+                    if (self.has_split_view and self.focused_editor == .Right) {
+                        self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit_alt;
+                    } else {
+                        self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit;
+                    }
+                    self.focused_widget = .Lookup;
+                },
+                c.SDLK_p => {
+                    self.openFileOpener();
+                },
+                c.SDLK_o => {
+                    if (shift) {
+                        self.jumpToNext() catch |err| {
+                            self.showMessageBoxError("Can't jump to next position: {}", .{err});
+                        };
+                    } else {
+                        self.jumpToPrevious() catch |err| {
+                            self.showMessageBoxError("Can't jump to previous position: {}", .{err});
+                        };
+                    }
+                },
+                c.SDLK_r => {
+                    // re-open search results, but do not reset the widget
+                    self.focused_widget = .SearchResults;
+                },
+                c.SDLK_f => {
+                    const results = Fd.search(self.allocator, ".", self.working_dir.bytes()) catch |err| {
+                        std.log.err("main: can't exec 'fd {s}': {}", .{ ".", err });
+                        return;
+                    };
+                    self.openFdResults(results);
+                },
+                else => {},
+            }
+        }
+
+        // from here, we need a text edit to be opened
+        const opt_wt = self.currentWidgetTextEdit();
+        if (opt_wt == null) {
+            return;
+        }
+        const wte = opt_wt.?;
+
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
                     c.SDLK_RETURN => {
-                        self.currentWidgetTextEdit().onReturn(ctrl);
+                        wte.onReturn(ctrl);
                     },
                     c.SDLK_ESCAPE => {
-                        _ = self.currentWidgetTextEdit().onEscape(shift);
+                        _ = wte.onEscape(shift);
                         // hide the sticky message box
                         if (shift) {
                             self.sticky_message_box = false;
                         }
                     },
                     c.SDLK_EXCLAIM, c.SDLK_COLON => {
-                        if (self.currentWidgetTextEdit().input_mode == .Command) {
+                        if (wte.input_mode == .Command) {
                             self.focused_widget = FocusedWidget.Command;
                         }
                     },
                     c.SDLK_BACKSPACE => {
-                        self.currentWidgetTextEdit().onBackspace();
+                        wte.onBackspace();
                     },
                     c.SDLK_SPACE => {
-                        self.currentWidgetTextEdit().onSpace(shift);
+                        wte.onSpace(shift);
                     },
                     c.SDLK_EQUALS => {
                         if ((ctrl or cmd) and shift) {
@@ -1645,100 +1728,49 @@ pub const App = struct {
                         }
                     },
                     c.SDLK_TAB => {
-                        self.currentWidgetTextEdit().onTab(&self.currentWidgetTextEdit().cursor, shift);
+                        wte.onTab(&wte.cursor, shift);
                         var i: usize = 0;
-                        while (i < self.currentWidgetTextEdit().cursors_extra.items.len) : (i += 1) {
-                            self.currentWidgetTextEdit().onTab(&self.currentWidgetTextEdit().cursors_extra.items[i], shift);
+                        while (i < wte.cursors_extra.items.len) : (i += 1) {
+                            wte.onTab(&wte.cursors_extra.items[i], shift);
                         }
                     },
-                    c.SDLK_UP => self.currentWidgetTextEdit().onArrowKey(.Up),
-                    c.SDLK_DOWN => self.currentWidgetTextEdit().onArrowKey(.Down),
-                    c.SDLK_LEFT => self.currentWidgetTextEdit().onArrowKey(.Left),
-                    c.SDLK_RIGHT => self.currentWidgetTextEdit().onArrowKey(.Right),
+                    c.SDLK_UP => wte.onArrowKey(.Up),
+                    c.SDLK_DOWN => wte.onArrowKey(.Down),
+                    c.SDLK_LEFT => wte.onArrowKey(.Left),
+                    c.SDLK_RIGHT => wte.onArrowKey(.Right),
                     else => {
                         // us/ascii layouts special case to open
                         // the command box.
                         if (shift and event.key.keysym.sym == c.SDLK_SEMICOLON) {
-                            if (self.currentWidgetTextEdit().input_mode == .Command) {
+                            if (wte.input_mode == .Command) {
                                 self.focused_widget = FocusedWidget.Command;
                             }
                         }
 
-                        if (ctrl) {
-                            // TODO(remy): move to a specific fn
-                            switch (event.key.keysym.sym) {
-                                c.SDLK_j => {
-                                    if (!self.has_split_view) {
-                                        return;
-                                    }
-                                    if (self.focused_editor == .Left) {
-                                        self.focused_editor = .Right;
-                                    } else {
-                                        self.focused_editor = .Left;
-                                    }
-                                    self.refreshWindowTitle() catch {};
-                                },
-                                c.SDLK_n => {
-                                    self.focused_widget = FocusedWidget.Autocomplete;
-                                    if (self.lsp) |lsp| {
-                                        const wt = self.currentWidgetTextEdit();
-                                        lsp.completion(&wt.editor.buffer, wt.cursor.pos) catch |err| {
-                                            std.log.err("App.editorEvents: can't send lsp request for definition: {}", .{err});
-                                        };
-                                    }
-                                },
-                                c.SDLK_k => {
-                                    self.widget_lookup.reset();
-                                    self.widget_lookup.setTextEdits(self.textedits) catch |err| {
-                                        std.log.err("App.editorEvents: can't set WidgetLookup buffers list: {}", .{err});
-                                    };
-                                    if (self.has_split_view and self.focused_editor == .Right) {
-                                        self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit_alt;
-                                    } else {
-                                        self.widget_lookup.list.selected_entry_idx = self.current_widget_text_edit;
-                                    }
-                                    self.focused_widget = .Lookup;
-                                },
-                                c.SDLK_p => {
-                                    self.openFileOpener();
-                                },
-                                c.SDLK_o => {
-                                    if (shift) {
-                                        self.jumpToNext() catch |err| {
-                                            self.showMessageBoxError("Can't jump to next position: {}", .{err});
-                                        };
-                                    } else {
-                                        self.jumpToPrevious() catch |err| {
-                                            self.showMessageBoxError("Can't jump to previous position: {}", .{err});
-                                        };
-                                    }
-                                },
-                                c.SDLK_r => {
-                                    // re-open search results, but do not reset the widget
-                                    self.focused_widget = .SearchResults;
-                                },
-                                c.SDLK_f => {
-                                    const results = Fd.search(self.allocator, ".", self.working_dir.bytes()) catch |err| {
-                                        std.log.err("main: can't exec 'fd {s}': {}", .{ ".", err });
-                                        return;
-                                    };
-                                    self.openFdResults(results);
-                                },
-                                else => {
-                                    if (self.textedits.items.len > 0) {
-                                        self.currentWidgetTextEdit().onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd);
-                                    }
-                                },
+                        if (ctrl and event.key.keysym.sym == c.SDLK_n) {
+                            self.focused_widget = FocusedWidget.Autocomplete;
+                            if (self.lsp) |lsp| {
+                                lsp.completion(&wte.editor.buffer, wte.cursor.pos) catch |err| {
+                                    std.log.err("App.editorEvents: can't send lsp request for definition: {}", .{err});
+                                };
                             }
+                        }
+
+                        if (ctrl) {
+                            wte.onCtrlKeyDown(event.key.keysym.sym, ctrl, cmd);
                         }
                     },
                 }
             },
             c.SDL_TEXTINPUT => {
-                _ = self.currentWidgetTextEdit().onTextInput(readTextFromSDLInput(&event.text.text));
+                if (self.textedits.items.len > 0) {
+                    _ = wte.onTextInput(readTextFromSDLInput(&event.text.text));
+                }
             },
             c.SDL_MOUSEWHEEL => {
-                _ = self.currentWidgetTextEdit().onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
+                if (self.textedits.items.len > 0) {
+                    _ = wte.onMouseWheel(Vec2i{ .a = event.wheel.x, .b = event.wheel.y });
+                }
             },
             c.SDL_MOUSEMOTION => {
                 const mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
@@ -1746,9 +1778,7 @@ pub const App = struct {
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
-                if (self.textedits.items.len > 0) {
-                    self.currentWidgetTextEdit().onMouseMove(mouse_coord, widget_pos);
-                }
+                wte.onMouseMove(mouse_coord, widget_pos);
             },
             c.SDL_MOUSEBUTTONDOWN => {
                 const mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
@@ -1764,7 +1794,7 @@ pub const App = struct {
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
-                self.currentWidgetTextEdit().onMouseStartSelection(mouse_coord, widget_pos);
+                wte.onMouseStartSelection(mouse_coord, widget_pos);
             },
             c.SDL_MOUSEBUTTONUP => {
                 const mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
@@ -1772,7 +1802,7 @@ pub const App = struct {
                 if (self.has_split_view and self.focused_editor == .Right) {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
-                self.currentWidgetTextEdit().onMouseStopSelection(mouse_coord, widget_pos);
+                wte.onMouseStopSelection(mouse_coord, widget_pos);
             },
             else => {},
         }
