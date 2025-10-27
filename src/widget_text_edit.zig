@@ -973,7 +973,7 @@ pub const WidgetTextEdit = struct {
             .d => {
                 switch (txt[0]) {
                     // delete the word under the cursor
-                    'i' => {
+                    'i', 's' => {
                         const word_pos = self.editor.wordPosAt(self.cursor.pos) catch |err| {
                             std.log.err("WidgetTextEdit.onTextInput: di: {}", .{err});
                             return true;
@@ -987,7 +987,15 @@ pub const WidgetTextEdit = struct {
                             return true;
                         };
                         self.setCursorPos(cursor_pos, .Scroll);
-                        self.setInputMode(.Insert);
+                        if (txt[0] == 's') {
+                            self.paste() catch |err| {
+                                std.log.err("can't paste: {}", .{err});
+                            };
+                            self.setInputMode(.Command);
+                        }
+                        if (txt[0] == 'i') {
+                            self.setInputMode(.Insert);
+                        }
                     },
                     // delete the line
                     'd' => {
