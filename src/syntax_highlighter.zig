@@ -70,9 +70,9 @@ pub const LineSyntaxHighlight = struct {
 
     pub fn copy(self: *LineSyntaxHighlight, allocator: std.mem.Allocator) !LineSyntaxHighlight {
         var columns = std.ArrayListUnmanaged(Vec4u).empty;
-        try columns.appendSlice(self.allocator, self.columns.items);
+        try columns.appendSlice(allocator, self.columns.items);
         var rects = std.ArrayListUnmanaged(Vec2u).empty;
-        try rects.appendSlice(self.allocator, self.highlight_rects.items);
+        try rects.appendSlice(allocator, self.highlight_rects.items);
         return LineSyntaxHighlight{
             .allocator = allocator,
             .columns = columns,
