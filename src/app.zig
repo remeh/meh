@@ -1556,7 +1556,14 @@ pub const App = struct {
                 }
             },
             c.SDL_TEXTINPUT => {
-                _ = self.widget_search_results.list.onTextInput(readTextFromSDLInput(&event.text.text));
+                // the !ctrl here is a hack to ignore these inputs:
+                // it is most likely that ctrl-n or similar is pressed
+                // to move in many lines, but for some reasons when this happens,
+                // we receive both a KEYDOWN & TEXTINPUT event. This !ctrl condition
+                // is the hack to ignore the TEXTINPUT in this particular case.
+                if (!ctrl) {
+                    _ = self.widget_search_results.list.onTextInput(readTextFromSDLInput(&event.text.text));
+                }
             },
             else => {},
         }
@@ -1624,7 +1631,14 @@ pub const App = struct {
                 }
             },
             c.SDL_TEXTINPUT => {
-                _ = self.widget_lookup.list.onTextInput(readTextFromSDLInput(&event.text.text));
+                // the !ctrl here is a hack to ignore these inputs:
+                // it is most likely that ctrl-n or similar is pressed
+                // to move in many lines, but for some reasons when this happens,
+                // we receive both a KEYDOWN & TEXTINPUT event. This !ctrl condition
+                // is the hack to ignore the TEXTINPUT in this particular case.
+                if (!ctrl) {
+                    _ = self.widget_lookup.list.onTextInput(readTextFromSDLInput(&event.text.text));
+                }
             },
             else => {},
         }
