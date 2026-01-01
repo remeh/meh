@@ -71,10 +71,10 @@ fn prepare(step: *std.Build.Step.Compile) void {
     // step.use_stage1 = true;
 
     // linked libraries
-    step.linkSystemLibrary("SDL2");
-    step.linkSystemLibrary("SDL2_ttf");
+    step.root_module.linkSystemLibrary("SDL2", .{});
+    step.root_module.linkSystemLibrary("SDL2_ttf", .{});
     switch (builtin.os.tag) {
-        .linux => step.linkLibC(),
+        .linux => step.root_module.link_libc = true,
         else => {},
     }
 }
