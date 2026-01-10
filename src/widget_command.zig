@@ -191,6 +191,18 @@ pub const WidgetCommand = struct {
             return;
         }
 
+        // copy the whole buffer
+        // ---------------------
+
+        if (std.mem.eql(u8, command, ":copy")) {
+            if (app.currentWidgetTextEdit()) |wte| {
+                const fulltext = try wte.editor.buffer.fulltext();
+                _ = c.SDL_SetClipboardText(@as([*:0]const u8, @ptrCast(fulltext.bytes())));
+                fulltext.deinit();
+            }
+            return;
+        }
+
         // ripgrep
         // -------
 
