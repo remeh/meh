@@ -293,7 +293,8 @@ pub const SyntaxHighlighter = struct {
 
                 // maybe it is the highlighted word?
                 if (word_under_cursor != null and
-                    word_start < line_content.bytes().len and it.current_byte < line_content.bytes().len and
+                    word_start < line_content.bytes().len and it.current_byte <= line_content.bytes().len and
+                    word_start <= it.current_byte and
                     std.mem.eql(u8, line_content.bytes()[word_start..it.current_byte], word_under_cursor.?))
                 {
                     // *3 since since we already move of 1 because of the \t itself
