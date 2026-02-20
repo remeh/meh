@@ -85,7 +85,7 @@ pub const MessageAssembler = struct {
                         };
 
                         offset += contentLength + lr;
-                        done = offset == chunk.len;
+                        done = offset >= response.len;
                     } else {
                         // append to the buffer assembly,
                         // the next message will contain the remaining data.
@@ -133,7 +133,7 @@ pub const MessageAssembler = struct {
                     };
 
                     offset += missing;
-                    done = offset == chunk.len;
+                    done = offset >= response.len;
                 } else {
                     // still won't be enough, append everything
                     self.buffer.appendConst(chunk) catch |err| {
