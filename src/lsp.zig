@@ -29,6 +29,7 @@ pub const LSPMessageType = enum {
     Diagnostic,
     DidChange,
     Hover,
+    Implementation,
     Initialize,
     Initialized,
     LogMessage,
@@ -324,6 +325,7 @@ pub const LSP = struct {
         const json = switch (msg_type) {
             .References => try LSPWriter.textDocumentReference(self.allocator, msg_id, uri.bytes(), cursor),
             .Definition => try LSPWriter.textDocumentDefinition(self.allocator, msg_id, uri.bytes(), cursor),
+            .Implementation => try LSPWriter.textDocumentImplementation(self.allocator, msg_id, uri.bytes(), cursor),
             .Completion => try LSPWriter.textDocumentCompletion(self.allocator, msg_id, uri.bytes(), cursor),
             .Hover => try LSPWriter.textDocumentHover(self.allocator, msg_id, uri.bytes(), cursor),
             else => unreachable, // unimplemented message type for a request
@@ -352,6 +354,10 @@ pub const LSP = struct {
 
     pub fn hover(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
         return self.internal(buffer, cursor, .Hover);
+    }
+
+    pub fn implementation(self: *LSP, buffer: *Buffer, cursor: Vec2u) !void {
+        return self.internal(buffer, cursor, .Implementation);
     }
 
     pub fn didChangeComplete(self: *LSP, buffer: *Buffer) !void {
@@ -596,6 +602,24 @@ pub const LSPWriter = struct {
             .method = "textDocument/completion",
             .id = msg_id,
             .params = LSPMessages.completionParams{
+                .textDocument = LSPMessages.textDocumentIdentifier{
+                    .uri = filepath,
+                },
+                .position = LSPMessages.position{
+                    .character = cursor_pos.a,
+                    .line = cursor_pos.b,
+                },
+            },
+        };
+        return try LSPWriter.toJson(allocator, m);
+    }
+
+    fn textDocumentImplementation(allocator: std.mem.Allocator, msg_id: i64, filepath: []const u8, cursor_pos: Vec2u) !U8Slice {
+        const m = LSPMessages.textDocumentImplementation{
+            .jsonrpc = "2.0",
+            .method = "textDocument/implementation",
+            .id = msg_id,
+            .params = LSPMessages.implementationParams{
                 .textDocument = LSPMessages.textDocumentIdentifier{
                     .uri = filepath,
                 },

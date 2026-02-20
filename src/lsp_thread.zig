@@ -304,6 +304,7 @@ pub const LSPThread = struct {
                         return LSPError.CompletionError;
                     },
                     .Definition => LSPThread.interpretDefinition(&rv, response, idx.?),
+                    .Implementation => LSPThread.interpretDefinition(&rv, response, idx.?),
                     .References => LSPThread.interpretReferences(&rv, response, idx.?) catch |err| {
                         std.log.debug("interpret: error during the references interpret: {}", .{err});
                         return LSPError.ReferencesError;

@@ -182,6 +182,21 @@ pub const definitionParams = struct {
     position: position,
 };
 
+// message: textDocument/implementation
+// -------------------------------------
+
+pub const textDocumentImplementation = struct {
+    jsonrpc: []const u8,
+    method: []const u8,
+    id: i64,
+    params: implementationParams,
+};
+
+pub const implementationParams = struct {
+    textDocument: textDocumentIdentifier,
+    position: position,
+};
+
 // message: textDocument/didChange
 // -------------------------------
 

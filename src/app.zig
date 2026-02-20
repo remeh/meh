@@ -1213,6 +1213,32 @@ pub const App = struct {
                 }
                 return true;
             },
+            .Implementation => {
+                if (response.definitions) |definitions| {
+                    self.storeBufferPosition(.Previous);
+
+                    if (definitions.items.len == 1) {
+                        const impl = definitions.items[0];
+                        if (self.openFile(impl.filepath.bytes())) {
+                            if (self.currentWidgetTextEdit()) |wte| {
+                                wte.goTo(impl.start, .Center);
+                                wte.setInputMode(.Command);
+                            }
+                        } else |err| {
+                            self.showMessageBoxError("LSP: error while jumping to implementation: {}", .{err});
+                            std.log.debug("App.mainloop: can't jump to LSP implementation: {}", .{err});
+                        }
+                    } else {
+                        self.widget_search_results.setLspImplementations(self, definitions) catch |err| {
+                            self.showMessageBoxError("LSP: can't display implementations: {}", .{err});
+                        };
+                        self.focused_widget = .SearchResults;
+                    }
+                } else {
+                    self.showMessageBoxError("LSP: can't find implementation.", .{});
+                }
+                return true;
+            },
             .Hover => {
                 if (response.hover == null or response.hover.?.items.len == 0) {
                     self.showMessageBoxError("LSP: empty hover.", .{});

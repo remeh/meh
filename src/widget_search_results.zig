@@ -142,6 +142,28 @@ pub const WidgetSearchResults = struct {
         try self.list.filter();
     }
 
+    /// setLspImplementations creates all entries in the widget list using LSPPositions data.
+    /// The given `implementations` are _NOT_ owned by the WidgetSearchResults (copies are created).
+    pub fn setLspImplementations(self: *WidgetSearchResults, app: *App, implementations: std.ArrayListUnmanaged(LSPPosition)) !void {
+        self.list.reset();
+
+        for (implementations.items) |impl| {
+            const line = try app.peekLine(impl.filepath.bytes(), impl.start.b);
+            const pos = Vec2i{ .a = utoi(impl.start.a), .b = utoi(impl.start.b) };
+            try self.list.entries.append(self.list.allocator, WidgetListEntry{
+                .label = line,
+                .data = try U8Slice.initFromSlice(self.allocator, impl.filepath.bytes()),
+                .data_pos = pos,
+                .extra_info = null,
+                .extra_info_allocator = null,
+                .type = .SearchResult,
+            });
+        }
+
+        try self.list.label.appendConst("Implementations found:");
+        try self.list.filter();
+    }
+
     pub fn render(
         self: *WidgetSearchResults,
         sdl_renderer: *c.SDL_Renderer,
