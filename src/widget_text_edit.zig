@@ -639,14 +639,23 @@ pub const WidgetTextEdit = struct {
 
     /// clearLineStatus empties the diagnostics map.
     pub fn clearLineStatus(self: *WidgetTextEdit, kinds: []const LineStatusType) void {
+        // collect keys to remove first to avoid mutating the map during iteration
+        var to_remove = std.ArrayListUnmanaged(usize).empty;
+        defer to_remove.deinit(self.allocator);
+
         var it = self.lines_status.keyIterator();
         while (it.next()) |key| {
             const line_status = self.lines_status.get(key.*).?;
             for (kinds) |kind| {
                 if (line_status.type == kind) {
-                    _ = self.lines_status.remove(key.*);
-                    line_status.deinit();
+                    to_remove.append(self.allocator, key.*) catch break;
                 }
+            }
+        }
+
+        for (to_remove.items) |key| {
+            if (self.lines_status.fetchRemove(key)) |entry| {
+                entry.value.deinit();
             }
         }
     }
