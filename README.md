@@ -20,9 +20,10 @@ Use `zig 0.15.1` to compile.
 * Modal vim-ish editor. Not vim-compliant: remeh-compliant.
 * HiDPI support, smooth font rendering. SDL2 accelerated rendering.
 * UTF8.
-* LSP support: go to definition, references, completion, info/doc.
+* LSP support: go to definition, go to implementations, references, completion, info/doc.
 * Ripgrep & Fd integration.
 * File status (added, modified)
+* Substitute in file/selection.
 * Hard-coded fast syntax highlighter. No tree-sitter integration.
 * Multi-cursors support edition.
 * Highlight a word using the mouse.
