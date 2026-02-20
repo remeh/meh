@@ -28,6 +28,14 @@ pub const WidgetCommandError = error{
 pub const WidgetCommand = struct {
     allocator: std.mem.Allocator,
     input: WidgetInput,
+    /// history contains the previously executed commands, oldest first.
+    history: std.ArrayListUnmanaged(U8Slice),
+    /// history_index is the current position while browsing history with Up/Down.
+    /// null means we are not currently browsing history.
+    history_index: ?usize,
+    /// current_input saves whatever was being typed when the user started browsing
+    /// history, so that pressing Down past the newest entry restores it.
+    current_input: U8Slice,
 
     // Constructors
     // ------------
@@ -36,12 +44,20 @@ pub const WidgetCommand = struct {
         const rv = WidgetCommand{
             .allocator = allocator,
             .input = try WidgetInput.init(allocator),
+            .history = std.ArrayListUnmanaged(U8Slice).empty,
+            .history_index = null,
+            .current_input = U8Slice.initEmpty(allocator),
         };
         return rv;
     }
 
     pub fn deinit(self: *WidgetCommand) void {
         self.input.deinit();
+        for (self.history.items) |*entry| {
+            entry.deinit();
+        }
+        self.history.deinit(self.allocator);
+        self.current_input.deinit();
     }
 
     // Events
@@ -52,6 +68,7 @@ pub const WidgetCommand = struct {
     }
 
     pub fn onTextInput(self: *WidgetCommand, txt: []const u8) void {
+        self.history_index = null;
         self.input.onTextInput(txt);
     }
 
@@ -110,6 +127,10 @@ pub const WidgetCommand = struct {
         }
 
         var command = prompt.?;
+
+        // save to history before executing, then reset browsing state
+        try self.saveToHistory();
+        self.history_index = null;
 
         // quit
         // ----
@@ -385,13 +406,71 @@ pub const WidgetCommand = struct {
     }
 
     pub fn reset(self: *WidgetCommand) void {
+        self.history_index = null;
         self.input.reset();
     }
 
-    /// onArrow is called when an arrow key is pressed to move the cursor.
-    /// hjkl are redirected to this method.
+    /// onArrowKey handles Up/Down for history navigation and Left/Right for cursor movement.
     pub fn onArrowKey(self: *WidgetCommand, direction: Direction) void {
-        self.input.onArrowKey(direction);
+        switch (direction) {
+            .Up => {
+                if (self.history.items.len == 0) return;
+                if (self.history_index == null) {
+                    // entering history browse mode: save whatever is currently typed
+                    const line = self.input.text() catch return;
+                    self.current_input.deinit();
+                    self.current_input = line.copy(self.allocator) catch return;
+                    self.history_index = self.history.items.len - 1;
+                } else if (self.history_index.? > 0) {
+                    self.history_index.? -= 1;
+                }
+                self.loadHistoryEntry(self.history_index.?);
+            },
+            .Down => {
+                if (self.history_index == null) return;
+                if (self.history_index.? + 1 < self.history.items.len) {
+                    self.history_index.? += 1;
+                    self.loadHistoryEntry(self.history_index.?);
+                } else {
+                    // past the newest entry: restore what was being typed
+                    self.history_index = null;
+                    self.loadFromSlice(self.current_input.bytes());
+                }
+            },
+            else => self.input.onArrowKey(direction),
+        }
+    }
+
+    const max_history_size = 100;
+
+    /// saveToHistory appends the current input to the history list, skipping
+    /// empty inputs and consecutive duplicates. Evicts the oldest entry once
+    /// the list exceeds max_history_size.
+    fn saveToHistory(self: *WidgetCommand) !void {
+        const line = try self.input.text();
+        const text = line.bytes();
+        if (text.len == 0) return;
+        if (self.history.items.len > 0) {
+            const last = self.history.items[self.history.items.len - 1];
+            if (std.mem.eql(u8, last.bytes(), text)) return;
+        }
+        const copy = try U8Slice.initFromSlice(self.allocator, text);
+        try self.history.append(self.allocator, copy);
+        if (self.history.items.len > max_history_size) {
+            self.history.items[0].deinit();
+            _ = self.history.orderedRemove(0);
+        }
+    }
+
+    /// loadHistoryEntry replaces the input content with the history entry at idx.
+    fn loadHistoryEntry(self: *WidgetCommand, idx: usize) void {
+        self.loadFromSlice(self.history.items[idx].bytes());
+    }
+
+    /// loadFromSlice resets the input and fills it with the given text.
+    fn loadFromSlice(self: *WidgetCommand, text: []const u8) void {
+        self.input.reset();
+        self.input.onTextInput(text);
     }
 
     /// countArgs returns how many arguments there currently is in the buff.
