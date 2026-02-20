@@ -67,12 +67,13 @@ pub const Change = struct {
     pub fn undo(self: *Change, editor: *Editor) !void {
         switch (self.type) {
             .InsertNewLine => {
-                var extra = try editor.buffer.getLine(@as(u64, @intCast(self.pos.b + 1)));
-                if (extra.size() > 1) {
-                    // append the extra text but don't keep the \n
-                    try editor.insertUtf8Text(self.pos, extra.bytes()[0 .. extra.size() - 1], .Undo);
-                }
-                editor.deleteLine(self.pos.b + 1, .Undo);
+                if (editor.buffer.getLine(@as(u64, @intCast(self.pos.b + 1)))) |extra| {
+                    if (extra.size() > 1) {
+                        // append the extra text but don't keep the \n
+                        try editor.insertUtf8Text(self.pos, extra.bytes()[0 .. extra.size() - 1], .Undo);
+                    }
+                    editor.deleteLine(self.pos.b + 1, .Undo);
+                } else |_| {}
             },
             .InsertUtf8Text => {
                 var end = self.pos;
