@@ -74,7 +74,7 @@ fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8
                 // something happened
                 try rv.append(allocator, GitChange{
                     .line = 0,
-                    .status = .GitAdded,
+                    .status = .GitRemoved,
                 });
             }
             continue;
