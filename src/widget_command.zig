@@ -196,9 +196,10 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":copy")) {
             if (app.currentWidgetTextEdit()) |wte| {
-                const fulltext = try wte.editor.buffer.fulltext();
-                _ = c.SDL_SetClipboardText(@as([*:0]const u8, @ptrCast(fulltext.bytes())));
-                fulltext.deinit();
+                var fulltext = try wte.editor.buffer.fulltext();
+                defer fulltext.deinit();
+                try fulltext.append(0);
+                _ = c.SDL_SetClipboardText(@as([*:0]const u8, @ptrCast(fulltext.data.items.ptr)));
             }
             return;
         }
