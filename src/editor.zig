@@ -676,7 +676,90 @@ pub const Editor = struct {
     pub fn linesCount(self: Editor) usize {
         return self.buffer.linesCount();
     }
+
+    /// substitute replaces every occurrence of `old` with `new` in lines [line_start, line_end).
+    /// Pass line_start=0 and line_end=linesCount() to operate on the whole buffer.
+    /// Returns the number of replacements made.
+    /// Uses `.Paste` triggerer so all changes are recorded as a single undoable
+    /// block without flooding the LSP with per-character notifications.
+    pub fn substitute(self: *Editor, old: []const u8, new: []const u8, line_start: usize, line_end: usize) !usize {
+        if (old.len == 0) return 0;
+
+        // clear redo: we are about to make new edits
+        while (self.history_redo.pop()) |change| {
+            change.deinit();
+        }
+
+        // start a fresh history block so the whole substitution undoes in one step
+        self.historyEndBlock();
+
+        var count: usize = 0;
+        var line_idx: usize = line_start;
+
+        while (line_idx < @min(line_end, self.buffer.lines.items.len)) : (line_idx += 1) {
+            var byte_pos: usize = 0;
+
+            while (true) {
+                const line = try self.buffer.getLine(line_idx);
+                const found = std.mem.indexOfPos(u8, line.bytes(), byte_pos, old) orelse break;
+
+                const glyph_pos = byteToGlyphPos(line.bytes(), found);
+                const old_glyph_len = glyphCount(old);
+
+                // delete each glyph of `old` at the same position (right-delete shifts content left)
+                var i: usize = 0;
+                while (i < old_glyph_len) : (i += 1) {
+                    try self.deleteGlyph(Vec2u{ .a = glyph_pos, .b = line_idx }, .Right, .Paste);
+                }
+
+                if (new.len > 0) {
+                    try self.insertUtf8Text(Vec2u{ .a = glyph_pos, .b = line_idx }, new, .Paste);
+                }
+
+                count += 1;
+
+                // advance past the replacement to avoid re-matching it
+                byte_pos = found + new.len;
+            }
+        }
+
+        if (count > 0) {
+            // seal the block so future edits don't join it
+            self.historyEndBlock();
+            self.has_changes_compared_to_disk = true;
+            if (self.lsp) |lsp| {
+                try lsp.didChangeComplete(&self.buffer);
+            }
+        }
+
+        return count;
+    }
 };
+
+/// byteToGlyphPos returns the glyph (codepoint) index corresponding to `byte_pos`
+/// within `line_bytes`. Assumes well-formed UTF-8.
+fn byteToGlyphPos(line_bytes: []const u8, byte_pos: usize) usize {
+    var glyph: usize = 0;
+    var i: usize = 0;
+    while (i < byte_pos) {
+        const seq_len = std.unicode.utf8ByteSequenceLength(line_bytes[i]) catch 1;
+        i += seq_len;
+        glyph += 1;
+    }
+    return glyph;
+}
+
+/// glyphCount returns the number of UTF-8 codepoints in `text`.
+fn glyphCount(text: []const u8) usize {
+    var count: usize = 0;
+    var i: usize = 0;
+    while (i < text.len) {
+        const seq_len = std.unicode.utf8ByteSequenceLength(text[i]) catch 1;
+        i += seq_len;
+        count += 1;
+    }
+    return count;
+}
 
 test "editor insert utf8 and undo/redo" {
     const allocator = std.testing.allocator;

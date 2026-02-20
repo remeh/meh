@@ -385,6 +385,34 @@ pub const WidgetCommand = struct {
             return;
         }
 
+        // substitute
+        // ----------
+
+        if (command.len > 3 and std.mem.eql(u8, command[0..3], ":s/")) {
+            const tail = command[3..];
+            if (std.mem.indexOfScalar(u8, tail, '/')) |mid| {
+                const old = tail[0..mid];
+                const new = tail[mid + 1 ..];
+                if (app.currentWidgetTextEdit()) |wte| {
+                    const SelectionState = @import("widget_text_edit.zig").SelectionState;
+                    const line_start, const line_end = if (wte.selection.state != SelectionState.Inactive)
+                        .{ wte.selection.start.b, wte.selection.stop.b + 1 }
+                    else
+                        .{ 0, wte.editor.linesCount() };
+                    const count = wte.editor.substitute(old, new, line_start, line_end) catch |err| {
+                        std.log.err("WidgetCommand: can't execute ':s': {}", .{err});
+                        return;
+                    };
+                    if (count == 0) {
+                        app.showMessageBoxError("No match found.", .{});
+                    }
+                }
+            } else {
+                app.showMessageBoxError("Usage: :s/old/new", .{});
+            }
+            return;
+        }
+
         // go to line
         // ----------
 
