@@ -176,10 +176,10 @@ pub const LSP = struct {
         ctx.response_queue = AtomicQueue(LSPResponse).init();
         ctx.send_queue = AtomicQueue(LSPRequest).init();
         ctx.server_exec = server_exec;
+        ctx.is_running = std.atomic.Value(bool).init(true);
 
         // spawn the LSP thread
         const thread = try std.Thread.spawn(std.Thread.SpawnConfig{}, LSPThread.run, .{ctx});
-        ctx.is_running = std.atomic.Value(bool).init(true);
 
         var uri_working_dir = try U8Slice.initFromSlice(allocator, "file://");
         try uri_working_dir.appendConst(working_dir);
