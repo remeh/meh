@@ -1362,18 +1362,29 @@ pub const WidgetTextEdit = struct {
     pub fn onBackspace(self: *WidgetTextEdit) void {
         switch (self.input_mode) {
             .Insert => {
-                self.editor.deleteGlyph(self.cursor.pos, .Left, .Input) catch |err| {
-                    std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
-                };
-                self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
-                self.validateCursorPos(.Scroll);
-
-                for (self.cursors_extra.items) |*cursor| {
-                    self.editor.deleteGlyph(cursor.*.pos, .Left, .Input) catch |err| {
+                if (self.cursor.pos.a == 0 and self.cursor.pos.b > 0) {
+                    // merge current line into previous line
+                    const join_col = self.editor.mergeWithPreviousLine(self.cursor.pos) catch |err| {
+                        std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
+                        return;
+                    };
+                    self.cursor.pos = Vec2u{ .a = join_col, .b = self.cursor.pos.b - 1 };
+                    self.cursors_extra.clearRetainingCapacity();
+                    self.validateCursorPos(.Scroll);
+                } else {
+                    self.editor.deleteGlyph(self.cursor.pos, .Left, .Input) catch |err| {
                         std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
                     };
-                    self.moveCursorPtr(cursor, Vec2i{ .a = -1, .b = 0 }, false);
-                    self.validateCursorPosPtr(cursor, .Scroll);
+                    self.moveCursor(Vec2i{ .a = -1, .b = 0 }, true);
+                    self.validateCursorPos(.Scroll);
+
+                    for (self.cursors_extra.items) |*cursor| {
+                        self.editor.deleteGlyph(cursor.*.pos, .Left, .Input) catch |err| {
+                            std.log.err("WidgetTextEdit.onBackspace: {}", .{err});
+                        };
+                        self.moveCursorPtr(cursor, Vec2i{ .a = -1, .b = 0 }, false);
+                        self.validateCursorPosPtr(cursor, .Scroll);
+                    }
                 }
             },
             .Command, .Replace => {

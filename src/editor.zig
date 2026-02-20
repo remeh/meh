@@ -405,6 +405,31 @@ pub const Editor = struct {
         self.deleteLine(pos.b + 1, .Input);
     }
 
+    /// mergeWithPreviousLine merges the line at `pos.b` into line `pos.b - 1`.
+    /// Returns the glyph column of the join point on the previous line, which is
+    /// where the cursor should land after the merge.
+    pub fn mergeWithPreviousLine(self: *Editor, pos: Vec2u) !usize {
+        const prev_line = try self.buffer.getLine(pos.b - 1);
+        const join_col = try prev_line.utf8size() - 1; // position before the \n
+
+        const curr_line = try self.buffer.getLine(pos.b);
+        const curr_bytes = curr_line.bytes();
+        // strip the trailing \n before appending
+        const to_append = if (curr_bytes.len > 0 and curr_bytes[curr_bytes.len - 1] == '\n')
+            curr_bytes[0 .. curr_bytes.len - 1]
+        else
+            curr_bytes;
+
+        self.historyEndBlock();
+        if (to_append.len > 0) {
+            try self.insertUtf8Text(Vec2u{ .a = join_col, .b = pos.b - 1 }, to_append, .Input);
+        }
+        self.deleteLine(pos.b, .Input);
+        self.historyEndBlock();
+
+        return join_col;
+    }
+
     /// insertUtf8Text inserts the given UTF8 `text` at the given position.
     pub fn insertUtf8Text(self: *Editor, pos: Vec2u, txt: []const u8, triggerer: Triggerer) !void {
         if (self.buffer.lines.items.len == 0) {
@@ -440,10 +465,7 @@ pub const Editor = struct {
     pub fn deleteGlyph(self: *Editor, pos: Vec2u, direction: DeleteDirection, triggerer: Triggerer) !void {
         var line = try self.buffer.getLine(pos.b);
         if (direction == .Left and pos.a == 0) {
-            if (pos.b != 0) {
-                // TODO(remy): removing a line.
-                std.log.debug("TODO(remy): removing a line", .{});
-            }
+            // nothing to do, line merging is handled by the caller
         } else {
             var remove_pos: usize = 0;
             if (direction == .Left) {
