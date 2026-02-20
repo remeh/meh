@@ -238,7 +238,7 @@ pub const Editor = struct {
 
         var end_position = position;
         end_position.a = line_size;
-        if (end_position.a > 0 and line.data.items[end_position.a - 1] == '\n') {
+        if (end_position.a > 0 and line.data.items[line.data.items.len - 1] == '\n') {
             // we don't want to delete the line return
             end_position.a -= 1;
         }
