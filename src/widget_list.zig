@@ -118,7 +118,7 @@ pub const WidgetList = struct {
             return null;
         }
 
-        if (self.selected_entry_idx > self.filtered_entries.items.len) {
+        if (self.selected_entry_idx >= self.filtered_entries.items.len) {
             return null;
         }
 
