@@ -54,7 +54,6 @@ pub const RipgrepResultsIterator = struct {
             };
 
             var start_idx: usize = 0;
-            var idx: usize = 0;
             var token: usize = 0;
             var filename = U8Slice.initEmpty(self.allocator);
             var content = U8Slice.initEmpty(self.allocator);
@@ -67,37 +66,37 @@ pub const RipgrepResultsIterator = struct {
                         // filename
                         // --------
                         0 => {
-                            filename.appendConst(line[start_idx..idx]) catch |err| {
+                            filename.appendConst(line[start_idx..it.current_byte]) catch |err| {
                                 filename.deinit();
                                 content.deinit();
                                 std.log.err("RipgrepResultsIterator: can't appendConst the filename: {}", .{err});
                                 return null;
                             };
-                            start_idx = idx + 1;
+                            start_idx = it.current_byte + 1;
                         },
                         // line number
                         // -----------
                         1 => {
-                            line_number = std.fmt.parseInt(usize, line[start_idx..idx], 10) catch |err| {
+                            line_number = std.fmt.parseInt(usize, line[start_idx..it.current_byte], 10) catch |err| {
                                 filename.deinit();
                                 content.deinit();
                                 std.log.err("RipgrepResultsIterator: can't read line number: {}", .{err});
                                 return null;
                             };
-                            start_idx = idx + 1;
+                            start_idx = it.current_byte + 1;
                         },
                         // column number and content
                         // ----------
                         2 => {
                             // column
                             // ------
-                            column = std.fmt.parseInt(usize, line[start_idx..idx], 10) catch |err| {
+                            column = std.fmt.parseInt(usize, line[start_idx..it.current_byte], 10) catch |err| {
                                 filename.deinit();
                                 content.deinit();
                                 std.log.err("RipgrepResultsIterator: can't read column: {}", .{err});
                                 return null;
                             };
-                            start_idx = idx + 1;
+                            start_idx = it.current_byte + 1;
 
                             // content
                             // -------
@@ -122,7 +121,6 @@ pub const RipgrepResultsIterator = struct {
                 if (!it.next()) {
                     break;
                 }
-                idx += 1;
             }
 
             return RipgrepResult{
