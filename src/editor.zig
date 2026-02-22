@@ -487,7 +487,8 @@ pub const Editor = struct {
                 try removed.append(ch);
             }
 
-            const utf8_pos = Vec2u{ .a = remove_pos, .b = pos.b };
+            const glyph_pos: usize = if (direction == .Left) pos.a - 1 else pos.a;
+            const utf8_pos = Vec2u{ .a = glyph_pos, .b = pos.b };
             self.historyAppend(ChangeType.DeleteGlyph, removed, utf8_pos, triggerer);
 
             if (self.lsp) |lsp| {
