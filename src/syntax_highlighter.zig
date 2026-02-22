@@ -187,7 +187,8 @@ pub const SyntaxHighlighter = struct {
         }
 
         // refresh this line syntax highlighting
-        existing.deinit();
+        self.lines.items[line_number].deinit();
+        self.lines.items[line_number] = LineSyntaxHighlight.init(self.allocator, true);
 
         const line_syntax_highlight = try SyntaxHighlighter.compute(self.allocator, line_content, self.word_under_cursor, self.keyword_matcher);
         self.lines.items[line_number] = line_syntax_highlight;
