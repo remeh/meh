@@ -670,7 +670,7 @@ pub const Editor = struct {
 
                 // search, if anything is found, return the result
                 if (std.mem.indexOfPos(u8, line.bytes(), utf8pos, txt.bytes())) |result| {
-                    return Vec2u{ .a = result, .b = i };
+                    return Vec2u{ .a = byteToGlyphPos(line.bytes(), result), .b = i };
                 }
             } else |err| {
                 std.log.err("Editor.search: can't getLine: {}", .{err});
