@@ -181,7 +181,7 @@ pub const SyntaxHighlighter = struct {
         }
 
         // if existing and not dirty, nothing to do the highlight is already ok
-        var existing = self.lines.items[line_number];
+        const existing = &self.lines.items[line_number];
         if (!existing.dirty) {
             return false;
         }
