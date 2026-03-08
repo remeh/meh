@@ -26,6 +26,7 @@ const WidgetMessageBoxOverlay = @import("widget_messagebox.zig").WidgetMessageBo
 const WidgetMessageBoxType = @import("widget_messagebox.zig").WidgetMessageBoxType;
 const WidgetSearchResults = @import("widget_search_results.zig").WidgetSearchResults;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
+const Exec = @import("exec.zig").Exec;
 
 const Vec2f = @import("vec.zig").Vec2f;
 const Vec2i = @import("vec.zig").Vec2i;
@@ -1835,6 +1836,11 @@ pub const App = struct {
                     widget_pos.a = self.window_scaled_size.a / 2;
                 }
                 wte.onMouseStartSelection(mouse_coord, widget_pos);
+                if (shift) {
+                    self.openUrlAtCursor() catch |err| {
+                        std.log.err("App.openUrlAtCursor: {}", .{err});
+                    };
+                }
             },
             c.SDL_MOUSEBUTTONUP => {
                 const mouse_coord = sdlMousePosToVec2u(event.motion.x, event.motion.y);
@@ -1881,6 +1887,44 @@ pub const App = struct {
             rv.b = @as(usize, @intCast(y));
         }
         return rv;
+    }
+
+    /// openUrlAtCursor opens the URL under the cursor using xdg-open.
+    fn openUrlAtCursor(self: *App) !void {
+        const wte = self.currentWidgetTextEdit() orelse return;
+
+        const line = try wte.editor.buffer.getLine(wte.cursor.pos.b);
+        const line_bytes = line.bytes();
+        if (line_bytes.len == 0) {
+            return;
+        }
+
+        var start = wte.cursor.pos.a;
+        while (start > 0) {
+            start -= 1;
+            if (std.ascii.isWhitespace(line_bytes[start])) {
+                start += 1;
+                break;
+            }
+        }
+
+        var end = wte.cursor.pos.a;
+        while (end < line_bytes.len) {
+            if (std.ascii.isWhitespace(line_bytes[end])) {
+                break;
+            }
+            end += 1;
+        }
+
+        const url_text = line_bytes[start..end];
+        if (!std.mem.startsWith(u8, url_text, "http://") and !std.mem.startsWith(u8, url_text, "https://")) {
+            return;
+        }
+
+        const cmd = try std.fmt.allocPrint(self.allocator, "xdg-open {s}", .{url_text});
+        defer self.allocator.free(cmd);
+        const result = try Exec.run(self.allocator, cmd, self.working_dir.bytes());
+        result.deinit();
     }
 
     /// readTextFromSDLInput reads and sizes the received text from the SDL_TEXTINPUT event.
