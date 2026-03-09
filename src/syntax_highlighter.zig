@@ -419,27 +419,27 @@ test "line_syntax_highlighter main test" {
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(1)); // space
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(2)); // space
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(3)); // space
-    try std.testing.expectEqual(Colors.gray_blue, line3.getForColumn(4)); // s
-    try std.testing.expectEqual(Colors.gray_blue, line3.getForColumn(5)); // t
-    try std.testing.expectEqual(Colors.gray_blue, line3.getForColumn(6)); // d
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(4)); // s
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(5)); // t
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(6)); // d
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(7)); // .
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(8)); // l
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(9)); // o
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(10)); // g
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(8)); // l
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(9)); // o
+    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(10)); // g
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(11)); // .
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(12)); // d
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(13)); // e
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(14)); // b
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(15)); // u
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(16)); // g
+    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(12)); // d
+    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(13)); // e
+    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(14)); // b
+    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(15)); // u
+    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(16)); // g
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(17)); // (
-    try std.testing.expectEqual(Colors.gray, line3.getForColumn(18)); // "
-    try std.testing.expectEqual(Colors.gray, line3.getForColumn(19)); // h
-    try std.testing.expectEqual(Colors.gray, line3.getForColumn(20)); // e
-    try std.testing.expectEqual(Colors.gray, line3.getForColumn(21)); // l
-    try std.testing.expectEqual(Colors.gray, line3.getForColumn(22)); // l
-    try std.testing.expectEqual(Colors.gray, line3.getForColumn(23)); // o
-    try std.testing.expectEqual(Colors.gray, line3.getForColumn(24)); // "
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(18)); // "
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(19)); // h
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(20)); // e
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(21)); // l
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(22)); // l
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(23)); // o
+    try std.testing.expectEqual(Colors.white, line3.getForColumn(24)); // "
     try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(25)); // ,
 
     sh.removeLine(4);
