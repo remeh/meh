@@ -149,6 +149,64 @@ pub const Buffer = struct {
         self.in_ram_only = false;
     }
 
+    /// reload reloads the buffer from disk, discarding any unsaved changes.
+    pub fn reload(self: *Buffer) !void {
+        if (self.in_ram_only) {
+            return;
+        }
+        if (self.fullpath.size() == 0) {
+            return BufferError.NoFilepath;
+        }
+
+        // Clear existing lines
+        for (self.lines.items) |*line| {
+            line.deinit();
+        }
+        self.lines.clearRetainingCapacity();
+
+        // Read the file again
+        const filepath = self.fullpath.bytes();
+        var file = try std.fs.cwd().openFile(filepath, .{});
+        defer file.close();
+
+        const block_size = 4096;
+        var slice: [4096]u8 = undefined;
+        var buff = &slice;
+        var read: usize = block_size;
+
+        var u8slice = U8Slice.initEmpty(self.allocator);
+        var i: usize = 0;
+        var last_append: usize = 0;
+
+        while (read == block_size) {
+            i = 0;
+            last_append = 0;
+
+            read = try file.read(buff);
+
+            while (i < read) : (i += 1) {
+                if (buff[i] == '\n') {
+                    // append the data left until the \n with the \n included
+                    try u8slice.appendConst(buff[last_append .. i + 1]);
+                    // append the line in the lines list of the buffer
+                    try self.lines.append(self.allocator, u8slice);
+                    // move the cursor in this buffer
+                    last_append = i + 1;
+                    // recreate a new u8slice to work with for next lines
+                    u8slice = U8Slice.initEmpty(self.allocator);
+                }
+            }
+            // append the rest of the read buffer
+            try u8slice.appendConst(buff[last_append..read]);
+        }
+
+        // we completely read the file, if the buffer isn't empty, it means we have
+        // dangling data, append it to the buffer.
+        if (!u8slice.isEmpty()) {
+            try self.lines.append(self.allocator, u8slice);
+        }
+    }
+
     pub fn deinit(self: *Buffer) void {
         for (self.lines.items) |*line| {
             line.deinit();

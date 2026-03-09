@@ -186,6 +186,20 @@ pub const WidgetCommand = struct {
             return;
         }
 
+        // reload current buffer from disk
+        // -------------------------------
+
+        if (std.mem.eql(u8, command, ":reload")) {
+            if (app.currentWidgetTextEdit()) |wte| {
+                wte.editor.buffer.reload() catch |err| {
+                    std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ command, err });
+                    return;
+                };
+                app.updateDiffStats(wte.editor.buffer.fullpath.bytes());
+            }
+            return;
+        }
+
         // search
         // ------
 
