@@ -447,3 +447,101 @@ test "line_syntax_highlighter main test" {
     sh.removeLine(1);
     try std.testing.expectEqual(sh.lines.items.len, 3);
 }
+
+test "line_syntax_highlighter URL in comment" {
+    const allocator = std.testing.allocator;
+
+    var sh = try SyntaxHighlighter.init(allocator, 1);
+    defer sh.deinit();
+
+    // Test URL in comment - URL should be blue even when inside a comment
+    const test_line = "// Visit https://example.com for more info";
+    var line = try U8Slice.initFromSlice(allocator, test_line);
+    defer line.deinit();
+
+    _ = try sh.refresh(0, &line);
+
+    const highlighted = sh.getLine(0);
+
+    // Check that the URL part is colored blue
+    // "https://example.com" starts at position 9 (after "// Visit ")
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(9));  // h
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(10)); // t
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(11)); // t
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(12)); // p
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(13)); // s
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(14)); // :
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(15)); // /
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(16)); // /
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(17)); // e
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(27)); // m
+
+    // Check that comment text after URL is gray
+    try std.testing.expectEqual(Colors.gray, highlighted.getForColumn(29)); // f (for "for")
+
+    // Check that comment start is gray
+    try std.testing.expectEqual(Colors.gray, highlighted.getForColumn(0)); // /
+    try std.testing.expectEqual(Colors.gray, highlighted.getForColumn(1)); // /
+}
+
+test "line_syntax_highlighter URL in regular text" {
+    const allocator = std.testing.allocator;
+
+    var sh = try SyntaxHighlighter.init(allocator, 1);
+    defer sh.deinit();
+
+    // Test URL in regular text (not in comment)
+    const test_line = "Check out https://ziglang.org now";
+    var line = try U8Slice.initFromSlice(allocator, test_line);
+    defer line.deinit();
+
+    _ = try sh.refresh(0, &line);
+
+    const highlighted = sh.getLine(0);
+
+    // Check that the URL part is colored blue
+    // "https://ziglang.org" starts at position 10 (after "Check out ")
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(10)); // h
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(11)); // t
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(12)); // t
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(13)); // p
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(14)); // s
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(15)); // :
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(16)); // /
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(17)); // /
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(18)); // z
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(27)); // g
+
+    // Check that text before URL is light gray
+    try std.testing.expectEqual(Colors.light_gray, highlighted.getForColumn(0)); // C
+    try std.testing.expectEqual(Colors.light_gray, highlighted.getForColumn(9)); // (space)
+
+    // Check that text after URL is light gray
+    try std.testing.expectEqual(Colors.light_gray, highlighted.getForColumn(29)); // n (for "now")
+}
+
+test "line_syntax_highlighter http URL" {
+    const allocator = std.testing.allocator;
+
+    var sh = try SyntaxHighlighter.init(allocator, 1);
+    defer sh.deinit();
+
+    // Test http:// URL (not https)
+    const test_line = "http://example.com/path";
+    var line = try U8Slice.initFromSlice(allocator, test_line);
+    defer line.deinit();
+
+    _ = try sh.refresh(0, &line);
+
+    const highlighted = sh.getLine(0);
+
+    // Check that the URL part is colored blue
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(0));  // h
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(1));  // t
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(2));  // t
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(3));  // p
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(4));  // :
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(5));  // /
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(6));  // /
+    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(14)); // c (example.com)
+}
