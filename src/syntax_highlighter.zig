@@ -224,6 +224,7 @@ pub const SyntaxHighlighter = struct {
 
         var is_in_quote: usize = 0; // contains which quote char has been used to start
         var is_in_comment: bool = false;
+        var is_in_url: bool = false;
         var char_before_word: usize = 0; // contains which char was before the word
         var current_pos: usize = 0;
         var previous_char: usize = 0;
@@ -235,8 +236,45 @@ pub const SyntaxHighlighter = struct {
         while (true) {
             const ch: usize = it.glyph()[0];
 
+            // Check for URL start BEFORE comment detection to prevent // in URLs from triggering comments
+            var just_detected_url = false;
+            if (is_in_quote == 0 and !is_in_url and
+                previous_char != '\\' and current_pos >= 4)
+            {
+                const slice = line_content.bytes();
+                // Check if http:// or https:// is preceded by non-alphanumeric char
+                const char_before_https: usize = if (it.current_byte >= 8) slice[it.current_byte - 8] else 0;
+                const is_https_start = char_before_https == 0 or !std.ascii.isAlphanumeric(@as(u8, @intCast(char_before_https)));
+                const char_before_http: usize = if (it.current_byte >= 7) slice[it.current_byte - 7] else 0;
+                const is_http_start = char_before_http == 0 or !std.ascii.isAlphanumeric(@as(u8, @intCast(char_before_http)));
+
+                if (is_https_start and it.current_byte >= 7 and
+                    std.mem.eql(u8, slice[it.current_byte - 7..it.current_byte], "https:/"))
+                {
+                    is_in_url = true;
+                    just_detected_url = true;
+                    const url_start = if (columns.items.len >= 7) columns.items.len - 7 else 0;
+                    color_with(&columns, url_start, columns.items.len, Colors.blue);
+                } else if (is_http_start and it.current_byte >= 6 and
+                    std.mem.eql(u8, slice[it.current_byte - 6..it.current_byte], "http:/"))
+                {
+                    is_in_url = true;
+                    just_detected_url = true;
+                    const url_start = if (columns.items.len >= 6) columns.items.len - 6 else 0;
+                    color_with(&columns, url_start, columns.items.len, Colors.blue);
+                }
+            }
+
+            // Check for URL end
+            if (is_in_url and (ch == ' ' or ch == '\t' or ch == '\n' or ch == '\r')) {
+                is_in_url = false;
+            }
+
             // immediately set this glyph color to the default color
-            if (is_in_comment) {
+            // URLs take precedence over comments
+            if (is_in_url) {
+                try columns.append(allocator, Colors.blue);
+            } else if (is_in_comment) {
                 try columns.append(allocator, Colors.gray);
             } else {
                 try columns.append(allocator, Colors.light_gray);
@@ -252,7 +290,7 @@ pub const SyntaxHighlighter = struct {
                 // entering a quoted text
                 is_in_quote = ch;
                 quote_start = current_pos;
-            } else if (is_in_quote == 0 and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' ') or (previous_char == '#' and ch == '#') or (previous_char == '#' and ch == '\n'))) {
+            } else if (is_in_quote == 0 and !just_detected_url and ((previous_char == '/' and ch == '/') or (previous_char == '#' and ch == ' ') or (previous_char == '#' and ch == '#') or (previous_char == '#' and ch == '\n'))) {
                 // entering a comment
                 if (columns.items.len > 0) {
                     // TODO(remy): color previous char
