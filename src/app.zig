@@ -794,26 +794,30 @@ pub const App = struct {
 
             var widget_text_edit = &self.textedits.items[self.current_widget_text_edit];
 
-            // File fullpath - draw background bar first
+            // File fullpath - draw background bar only for focused editor
             const title_bar_height = self.current_font.font_size + 4;
-            Draw.fillRect(
-                self.sdl_renderer,
-                scaler,
-                Vec2u{ .a = 0, .b = 0 },
-                Vec2u{ .a = widget_size.a, .b = title_bar_height },
-                Vec4u{ .a = 50, .b = 50, .c = 50, .d = 255 },
-            );
+            if (self.focused_editor == .Left or !self.has_split_view) {
+                Draw.fillRect(
+                    self.sdl_renderer,
+                    scaler,
+                    Vec2u{ .a = 0, .b = 0 },
+                    Vec2u{ .a = widget_size.a, .b = title_bar_height },
+                    Vec4u{ .a = 50, .b = 50, .c = 50, .d = 255 },
+                );
+            }
 
             Draw.text(self.current_font, scaler, Vec2u{ .a = 2, .b = 2 }, widget_size.a, Colors.white, widget_text_edit.editor.buffer.fullpath.bytes());
 
-            // Draw horizontal line below the title bar (full width)
-            Draw.line(
-                self.sdl_renderer,
-                scaler,
-                Vec2u{ .a = 0, .b = title_bar_height },
-                Vec2u{ .a = widget_size.a, .b = title_bar_height },
-                Vec4u{ .a = 70, .b = 70, .c = 70, .d = 255 },
-            );
+            // Draw horizontal line below the title bar (full width) only for focused editor
+            if (self.focused_editor == .Left or !self.has_split_view) {
+                Draw.line(
+                    self.sdl_renderer,
+                    scaler,
+                    Vec2u{ .a = 0, .b = title_bar_height },
+                    Vec2u{ .a = widget_size.a, .b = title_bar_height },
+                    Vec4u{ .a = 70, .b = 70, .c = 70, .d = 255 },
+                );
+            }
 
             // LSP message buffer
             if (self.lsp_messages.items.len > 0) {
@@ -844,25 +848,30 @@ pub const App = struct {
 
                 var widget_text_edit_alt = &self.textedits.items[self.current_widget_text_edit_alt];
 
-                // Draw background bar for right editor title
-                Draw.fillRect(
-                    self.sdl_renderer,
-                    scaler,
-                    Vec2u{ .a = split_pos.a, .b = 0 },
-                    Vec2u{ .a = widget_size.a, .b = title_bar_height },
-                    Vec4u{ .a = 50, .b = 50, .c = 50, .d = 255 },
-                );
+                // Draw background bar for right editor title only if focused
+                if (self.focused_editor == .Right) {
+                    Draw.fillRect(
+                        self.sdl_renderer,
+                        scaler,
+                        Vec2u{ .a = split_pos.a, .b = 0 },
+                        Vec2u{ .a = widget_size.a, .b = title_bar_height },
+                        Vec4u{ .a = 50, .b = 50, .c = 50, .d = 255 },
+                    );
 
-                Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a + 2, .b = 2 }, widget_size.a, Colors.white, widget_text_edit_alt.editor.buffer.fullpath.bytes());
+                    Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a + 2, .b = 2 }, widget_size.a, Colors.white, widget_text_edit_alt.editor.buffer.fullpath.bytes());
 
-                // Draw horizontal line below the title bar (full width)
-                Draw.line(
-                    self.sdl_renderer,
-                    scaler,
-                    Vec2u{ .a = split_pos.a, .b = title_bar_height },
-                    Vec2u{ .a = split_pos.a + widget_size.a, .b = title_bar_height },
-                    Vec4u{ .a = 70, .b = 70, .c = 70, .d = 255 },
-                );
+                    // Draw horizontal line below the title bar (full width)
+                    Draw.line(
+                        self.sdl_renderer,
+                        scaler,
+                        Vec2u{ .a = split_pos.a, .b = title_bar_height },
+                        Vec2u{ .a = split_pos.a + widget_size.a, .b = title_bar_height },
+                        Vec4u{ .a = 70, .b = 70, .c = 70, .d = 255 },
+                    );
+                } else {
+                    // Draw text without background for unfocused editor
+                    Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a + 2, .b = 2 }, widget_size.a, Colors.white, widget_text_edit_alt.editor.buffer.fullpath.bytes());
+                }
 
                 widget_text_edit_alt.render(
                     self.sdl_renderer,
