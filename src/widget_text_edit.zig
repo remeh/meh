@@ -77,6 +77,14 @@ pub const LineStatusType = enum {
     Diagnostic,
     GitAdded,
     GitRemoved,
+
+    pub fn color(self: LineStatusType) Vec4u {
+        return switch (self) {
+            .Diagnostic => Colors.red,
+            .GitAdded => Colors.green,
+            .GitRemoved => Colors.orange,
+        };
+    }
 };
 
 pub const LineStatus = struct {
@@ -244,7 +252,7 @@ pub const WidgetTextEdit = struct {
 
         // render minimap
         if (self.render_minimap) {
-            self.renderMiniMap(sdl_renderer, font, scaler, draw_pos, widget_size, one_char_size);
+            self.renderMiniMap(sdl_renderer, scaler, draw_pos, widget_size);
         }
     }
 
@@ -295,11 +303,7 @@ pub const WidgetTextEdit = struct {
             }
 
             if (self.lines_status.get(i)) |status| {
-                switch (status.type) {
-                    .Diagnostic => text_color = Colors.red,
-                    .GitAdded => text_color = Colors.green,
-                    .GitRemoved => text_color = Colors.orange,
-                }
+                text_color = status.type.color();
             }
 
             Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset }, 0, text_color, cbuff);
@@ -340,169 +344,74 @@ pub const WidgetTextEdit = struct {
     /// renderMiniMap renders a minimap of the entire buffer on the right side.
     /// It shows a scaled-down version of the code with a viewport rectangle indicating
     /// the currently visible area.
-    fn renderMiniMap(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) void {
-        _ = font;
-        _ = one_char_size;
+    fn renderMiniMap(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u) void {
+        const bg_color = Vec4u{ .a = 40, .b = 40, .c = 40, .d = 255 };
+        const viewport_fill_color = Vec4u{ .a = 100, .b = 100, .c = 100, .d = 100 };
+        const viewport_border_color = Vec4u{ .a = 150, .b = 150, .c = 150, .d = 255 };
+        const max_lines: usize = 5000;
+        const x_margin: usize = 2;
+        const width_margin: usize = 4;
+        const max_line_height: f32 = 3.0;
+
         const minimap_width_px = self.minimap_width * self.minimap_char_size.a;
-        const minimap_x = draw_pos.a + widget_size.a - minimap_width_px; // No margin, completely on the right
+        const minimap_x = draw_pos.a + widget_size.a - minimap_width_px;
         const minimap_y = draw_pos.b;
         const minimap_height = widget_size.b;
 
-        // Draw background for minimap
-        Draw.fillRect(
-            sdl_renderer,
-            scaler,
-            Vec2u{ .a = minimap_x, .b = minimap_y },
-            Vec2u{ .a = minimap_width_px, .b = minimap_height },
-            Vec4u{ .a = 40, .b = 40, .c = 40, .d = 255 },
-        );
+        // Draw background
+        Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = minimap_x, .b = minimap_y }, Vec2u{ .a = minimap_width_px, .b = minimap_height }, bg_color);
 
-        // Calculate total lines and visible portion
         const total_lines = self.editor.buffer.linesCount();
         if (total_lines == 0) return;
 
-        // Calculate line height in minimap with a maximum of 3 pixels
-        // This ensures lines are packed tightly even in small files
-        const max_line_height: f32 = 3.0;
-        const line_height = @min(max_line_height, @as(f32, @floatFromInt(minimap_height)) / @as(f32, @floatFromInt(total_lines)));
+        const capped_lines = @min(total_lines, max_lines);
+        const line_height = @min(max_line_height, @as(f32, @floatFromInt(minimap_height)) / @as(f32, @floatFromInt(capped_lines)));
+        const bar_height = @max(1, @as(usize, @intFromFloat(line_height)));
 
-        // Calculate viewport rectangle position and size using the same line_height
+        // Draw viewport indicator and borders
         const viewport_y = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.viewport.lines.a)) * line_height));
-        const viewport_height = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.visible_cols_and_lines.b)) * line_height));
+        const viewport_h = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.visible_cols_and_lines.b)) * line_height));
+        Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y }, Vec2u{ .a = minimap_width_px, .b = viewport_h }, viewport_fill_color);
+        Draw.line(sdl_renderer, scaler, Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y }, Vec2u{ .a = minimap_x + minimap_width_px, .b = minimap_y + viewport_y }, viewport_border_color);
+        Draw.line(sdl_renderer, scaler, Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y + viewport_h }, Vec2u{ .a = minimap_x + minimap_width_px, .b = minimap_y + viewport_y + viewport_h }, viewport_border_color);
 
-        // Draw viewport indicator
-        Draw.fillRect(
-            sdl_renderer,
-            scaler,
-            Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y },
-            Vec2u{ .a = minimap_width_px, .b = viewport_height },
-            Vec4u{ .a = 100, .b = 100, .c = 100, .d = 100 },
-        );
+        const max_visible_width = minimap_width_px - width_margin;
 
-        // Draw viewport border (top and bottom lines)
-        Draw.line(
-            sdl_renderer,
-            scaler,
-            Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y },
-            Vec2u{ .a = minimap_x + minimap_width_px, .b = minimap_y + viewport_y },
-            Vec4u{ .a = 150, .b = 150, .c = 150, .d = 255 },
-        );
-        Draw.line(
-            sdl_renderer,
-            scaler,
-            Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y + viewport_height },
-            Vec2u{ .a = minimap_x + minimap_width_px, .b = minimap_y + viewport_y + viewport_height },
-            Vec4u{ .a = 150, .b = 150, .c = 150, .d = 255 },
-        );
-
-        // Render each line as a small horizontal bar
-        const line_color = Colors.gray;
-        const line_color_visible = Colors.light_gray;
-
-        // First pass: find the maximum line length for better scaling
-        var max_line_len: usize = 0;
-        var scan_idx: usize = 0;
-        while (scan_idx < total_lines and scan_idx < 5000) : (scan_idx += 1) {
-            if (self.editor.buffer.getLine(scan_idx)) |line| {
-                const bytes = line.bytes();
-                if (bytes.len > max_line_len) {
-                    max_line_len = bytes.len;
-                }
+        // Single pass: find max line length and render
+        var max_line_len: usize = 1;
+        var line_idx: usize = 0;
+        while (line_idx < capped_lines) : (line_idx += 1) {
+            if (self.editor.buffer.getLine(line_idx)) |line| {
+                const len = line.bytes().len;
+                if (len > max_line_len) max_line_len = len;
             } else |_| {}
         }
-        if (max_line_len == 0) max_line_len = 1; // Avoid division by zero
 
-        // Calculate scaling factor: map max line length to ~90% of minimap width
-        const max_visible_width = minimap_width_px - 4; // Leave some margin
         const scale_factor = @as(f32, @floatFromInt(max_visible_width)) / @as(f32, @floatFromInt(max_line_len));
 
-        var line_idx: usize = 0;
-        while (line_idx < total_lines and line_idx < 5000) : (line_idx += 1) { // Limit to 5000 lines for performance
-            if (self.editor.buffer.getLine(line_idx)) |line| {
-                const bytes = line.bytes();
-                const bar_height = @max(1, @as(usize, @intFromFloat(line_height)));
-                const y = @as(usize, @intFromFloat(@as(f32, @floatFromInt(line_idx)) * line_height));
+        line_idx = 0;
+        while (line_idx < capped_lines) : (line_idx += 1) {
+            const line = self.editor.buffer.getLine(line_idx) catch continue;
+            const len = line.bytes().len;
+            const y = @as(usize, @intFromFloat(@as(f32, @floatFromInt(line_idx)) * line_height));
+            const pos = Vec2u{ .a = minimap_x + x_margin, .b = minimap_y + y };
+            const line_status = self.lines_status.get(line_idx);
 
-                // Get line status for diagnostics and git changes
-                const line_status = self.lines_status.get(line_idx);
+            // Determine bar color: status color > viewport highlight > default gray
+            const color = if (line_status) |status|
+                status.type.color()
+            else if (line_idx >= self.viewport.lines.a and line_idx < self.viewport.lines.b)
+                Colors.light_gray
+            else
+                Colors.gray;
 
-                if (bytes.len == 0) {
-                    // Draw a tiny dot for empty lines
-                    if (line_status) |status| {
-                        // Draw status marker for empty lines with diagnostics or git changes
-                        const marker_color = switch (status.type) {
-                            .Diagnostic => Colors.red,
-                            .GitAdded => Colors.green,
-                            .GitRemoved => Colors.orange,
-                        };
-                        Draw.fillRect(
-                            sdl_renderer,
-                            scaler,
-                            Vec2u{ .a = minimap_x + 2, .b = minimap_y + y },
-                            Vec2u{ .a = bar_height, .b = bar_height },
-                            marker_color,
-                        );
-                    } else {
-                        Draw.fillRect(
-                            sdl_renderer,
-                            scaler,
-                            Vec2u{ .a = minimap_x + 2, .b = minimap_y + y },
-                            Vec2u{ .a = 2, .b = bar_height },
-                            line_color,
-                        );
-                    }
-                    continue;
-                }
+            // Bar width: empty lines get a small dot, others scale proportionally
+            const bar_width = if (len == 0)
+                x_margin
+            else
+                @max(2, @min(max_visible_width, @as(usize, @intFromFloat(@as(f32, @floatFromInt(len)) * scale_factor))));
 
-                // Scale line width proportionally
-                const scaled_width = @as(f32, @floatFromInt(bytes.len)) * scale_factor;
-                const bar_width = @max(2, @min(max_visible_width, @as(usize, @intFromFloat(scaled_width))));
-
-                // Check if this line is in the visible viewport
-                const is_visible = line_idx >= self.viewport.lines.a and line_idx < self.viewport.lines.b;
-
-                // Choose base color based on visibility
-                var color = if (is_visible) line_color_visible else line_color;
-
-                // Determine if we should draw a status marker
-                var draw_marker: ?Vec4u = null;
-                if (line_status) |status| {
-                    // Draw status marker on the left side of the minimap
-                    const marker_color = switch (status.type) {
-                        .Diagnostic => Colors.red,
-                        .GitAdded => Colors.green,
-                        .GitRemoved => Colors.orange,
-                    };
-                    draw_marker = marker_color;
-
-                    // Also change the line color to make it more visible
-                    color = marker_color;
-                }
-
-                // Draw a small rectangle for this line
-                Draw.fillRect(
-                    sdl_renderer,
-                    scaler,
-                    Vec2u{ .a = minimap_x + 2, .b = minimap_y + y },
-                    Vec2u{ .a = bar_width, .b = bar_height },
-                    color,
-                );
-
-                // Draw status marker if applicable (small square on the left edge)
-                if (draw_marker) |marker_color| {
-                    const marker_size = @max(2, bar_height);
-                    Draw.fillRect(
-                        sdl_renderer,
-                        scaler,
-                        Vec2u{ .a = minimap_x + 2, .b = minimap_y + y },
-                        Vec2u{ .a = marker_size, .b = marker_size },
-                        marker_color,
-                    );
-                }
-            } else |_| {
-                // Skip lines that can't be retrieved
-                continue;
-            }
+            Draw.fillRect(sdl_renderer, scaler, pos, Vec2u{ .a = bar_width, .b = bar_height }, color);
         }
     }
 
