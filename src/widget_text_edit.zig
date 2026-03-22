@@ -113,8 +113,11 @@ pub const WidgetTextEditSelection = struct {
     state: SelectionState,
 };
 
-// TODO(remy): comment
+/// WidgetTextEdit is a text editing widget with vim-like modal input,
+/// syntax highlighting, line numbers, a minimap, and LSP/git integration.
 pub const WidgetTextEdit = struct {
+    const max_minimap_lines: usize = 5000;
+
     allocator: std.mem.Allocator,
     cursor: Cursor,
     cursors_extra: std.ArrayListUnmanaged(Cursor),
@@ -155,6 +158,9 @@ pub const WidgetTextEdit = struct {
     /// lines_status contains information on every line status (added (git),
     /// with an diag (lsp), etc.).
     lines_status: std.AutoHashMap(usize, LineStatus),
+    /// minimap_highlight_lines contains line indices that match the current
+    /// highlight word, precomputed to avoid per-frame scanning.
+    minimap_highlight_lines: std.AutoHashMap(usize, void),
 
     // Constructors
     // ------------
@@ -188,6 +194,7 @@ pub const WidgetTextEdit = struct {
             },
             .last_search = U8Slice.initEmpty(allocator),
             .lines_status = std.AutoHashMap(usize, LineStatus).init(allocator),
+            .minimap_highlight_lines = std.AutoHashMap(usize, void).init(allocator),
         };
     }
 
@@ -199,6 +206,7 @@ pub const WidgetTextEdit = struct {
             line_status.deinit();
         }
         self.lines_status.deinit();
+        self.minimap_highlight_lines.deinit();
         self.editor.deinit();
     }
 
@@ -348,7 +356,6 @@ pub const WidgetTextEdit = struct {
         const bg_color = Vec4u{ .a = 40, .b = 40, .c = 40, .d = 255 };
         const viewport_fill_color = Vec4u{ .a = 100, .b = 100, .c = 100, .d = 100 };
         const viewport_border_color = Vec4u{ .a = 150, .b = 150, .c = 150, .d = 255 };
-        const max_lines: usize = 5000;
         const x_margin: usize = 2;
         const width_margin: usize = 4;
         const max_line_height: f32 = 3.0;
@@ -364,7 +371,7 @@ pub const WidgetTextEdit = struct {
         const total_lines = self.editor.buffer.linesCount();
         if (total_lines == 0) return;
 
-        const capped_lines = @min(total_lines, max_lines);
+        const capped_lines = @min(total_lines, max_minimap_lines);
         const line_height = @min(max_line_height, @as(f32, @floatFromInt(minimap_height)) / @as(f32, @floatFromInt(capped_lines)));
         const bar_height = @max(1, @as(usize, @intFromFloat(line_height)));
 
@@ -397,9 +404,12 @@ pub const WidgetTextEdit = struct {
             const pos = Vec2u{ .a = minimap_x + x_margin, .b = minimap_y + y };
             const line_status = self.lines_status.get(line_idx);
 
-            // Determine bar color: status color > viewport highlight > default gray
+            // Determine bar color: status > highlight > viewport > default
+            const has_highlight = self.minimap_highlight_lines.contains(line_idx);
             const color = if (line_status) |status|
                 status.type.color()
+            else if (has_highlight)
+                Colors.blue
             else if (line_idx >= self.viewport.lines.a and line_idx < self.viewport.lines.b)
                 Colors.light_gray
             else
@@ -727,6 +737,21 @@ pub const WidgetTextEdit = struct {
         }
 
         return false;
+    }
+
+    /// refreshMinimapHighlights recomputes which lines contain the current
+    /// highlight word. Called when the highlight word changes.
+    pub fn refreshMinimapHighlights(self: *WidgetTextEdit) void {
+        self.minimap_highlight_lines.clearRetainingCapacity();
+        const word = self.editor.syntax_highlighter.word_under_cursor orelse return;
+        const total_lines = self.editor.buffer.linesCount();
+        var line_idx: usize = 0;
+        while (line_idx < total_lines and line_idx < max_minimap_lines) : (line_idx += 1) {
+            const line = self.editor.buffer.getLine(line_idx) catch continue;
+            if (std.mem.indexOf(u8, line.bytes(), word) != null) {
+                self.minimap_highlight_lines.put(line_idx, {}) catch continue;
+            }
+        }
     }
 
     /// clearLineStatus empties the diagnostics map.
@@ -1188,6 +1213,7 @@ pub const WidgetTextEdit = struct {
                     '*' => {
                         if (self.editor.wordAt(self.cursor.pos)) |word| {
                             _ = self.editor.syntax_highlighter.setHighlightWord(word);
+                            self.refreshMinimapHighlights();
                             self.last_search.deinit();
                             const data = U8Slice.initFromSlice(self.allocator, word) catch |err| {
                                 std.log.err("WidgetTextEdit.onTextInput: can't store last search: {}", .{err});
@@ -1416,6 +1442,7 @@ pub const WidgetTextEdit = struct {
         // the extra cursors.
         if (shift) {
             _ = self.editor.syntax_highlighter.setHighlightWord(null);
+            self.refreshMinimapHighlights();
 
             return;
         }
@@ -1538,6 +1565,7 @@ pub const WidgetTextEdit = struct {
         const has_changed = self.editor.syntax_highlighter.setHighlightWord(word);
         if (has_changed) {
             self.refreshSyntaxHighlighting();
+            self.refreshMinimapHighlights();
         }
     }
 
