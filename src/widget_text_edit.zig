@@ -420,22 +420,39 @@ pub const WidgetTextEdit = struct {
         while (line_idx < total_lines and line_idx < 5000) : (line_idx += 1) { // Limit to 5000 lines for performance
             if (self.editor.buffer.getLine(line_idx)) |line| {
                 const bytes = line.bytes();
+                const bar_height = @max(1, @as(usize, @intFromFloat(line_height)));
+                const y = @as(usize, @intFromFloat(@as(f32, @floatFromInt(line_idx)) * line_height));
+
+                // Get line status for diagnostics and git changes
+                const line_status = self.lines_status.get(line_idx);
+
                 if (bytes.len == 0) {
                     // Draw a tiny dot for empty lines
-                    const y = @as(usize, @intFromFloat(@as(f32, @floatFromInt(line_idx)) * line_height));
-                    const bar_height = @max(1, @as(usize, @intFromFloat(line_height)));
-                    Draw.fillRect(
-                        sdl_renderer,
-                        scaler,
-                        Vec2u{ .a = minimap_x + 2, .b = minimap_y + y },
-                        Vec2u{ .a = 2, .b = bar_height },
-                        line_color,
-                    );
+                    if (line_status) |status| {
+                        // Draw status marker for empty lines with diagnostics or git changes
+                        const marker_color = switch (status.type) {
+                            .Diagnostic => Colors.red,
+                            .GitAdded => Colors.green,
+                            .GitRemoved => Colors.orange,
+                        };
+                        Draw.fillRect(
+                            sdl_renderer,
+                            scaler,
+                            Vec2u{ .a = minimap_x + 2, .b = minimap_y + y },
+                            Vec2u{ .a = bar_height, .b = bar_height },
+                            marker_color,
+                        );
+                    } else {
+                        Draw.fillRect(
+                            sdl_renderer,
+                            scaler,
+                            Vec2u{ .a = minimap_x + 2, .b = minimap_y + y },
+                            Vec2u{ .a = 2, .b = bar_height },
+                            line_color,
+                        );
+                    }
                     continue;
                 }
-
-                // Calculate y position for this line with capped line height (starting from top)
-                const y = @as(usize, @intFromFloat(@as(f32, @floatFromInt(line_idx)) * line_height));
 
                 // Scale line width proportionally
                 const scaled_width = @as(f32, @floatFromInt(bytes.len)) * scale_factor;
@@ -444,11 +461,25 @@ pub const WidgetTextEdit = struct {
                 // Check if this line is in the visible viewport
                 const is_visible = line_idx >= self.viewport.lines.a and line_idx < self.viewport.lines.b;
 
-                // Choose color based on visibility
-                const color = if (is_visible) line_color_visible else line_color;
+                // Choose base color based on visibility
+                var color = if (is_visible) line_color_visible else line_color;
 
-                // Draw a small rectangle for this line with capped height
-                const bar_height = @max(1, @as(usize, @intFromFloat(line_height)));
+                // Determine if we should draw a status marker
+                var draw_marker: ?Vec4u = null;
+                if (line_status) |status| {
+                    // Draw status marker on the left side of the minimap
+                    const marker_color = switch (status.type) {
+                        .Diagnostic => Colors.red,
+                        .GitAdded => Colors.green,
+                        .GitRemoved => Colors.orange,
+                    };
+                    draw_marker = marker_color;
+
+                    // Also change the line color to make it more visible
+                    color = marker_color;
+                }
+
+                // Draw a small rectangle for this line
                 Draw.fillRect(
                     sdl_renderer,
                     scaler,
@@ -456,6 +487,18 @@ pub const WidgetTextEdit = struct {
                     Vec2u{ .a = bar_width, .b = bar_height },
                     color,
                 );
+
+                // Draw status marker if applicable (small square on the left edge)
+                if (draw_marker) |marker_color| {
+                    const marker_size = @max(2, bar_height);
+                    Draw.fillRect(
+                        sdl_renderer,
+                        scaler,
+                        Vec2u{ .a = minimap_x + 2, .b = minimap_y + y },
+                        Vec2u{ .a = marker_size, .b = marker_size },
+                        marker_color,
+                    );
+                }
             } else |_| {
                 // Skip lines that can't be retrieved
                 continue;
