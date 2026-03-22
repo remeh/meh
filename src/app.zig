@@ -795,7 +795,7 @@ pub const App = struct {
             var widget_text_edit = &self.textedits.items[self.current_widget_text_edit];
 
             // File fullpath - draw background bar only for focused editor
-            const title_bar_height = self.current_font.font_size + 4;
+            const title_bar_height = one_char_size.b + 4;
             if (self.focused_editor == .Left or !self.has_split_view) {
                 Draw.fillRect(
                     self.sdl_renderer,
@@ -961,18 +961,16 @@ pub const App = struct {
         switch (font_mode) {
             .LowDPI => {
                 self.current_font = self.font_lowdpi;
-                self.widget_text_edit_pos.b = 16 + 4;
             },
             .LowDPIBigFont => {
                 self.current_font = self.font_lowdpibigfont;
-                self.widget_text_edit_pos.b = 20 + 4;
             },
             .HiDPI => {
                 self.current_font = self.font_hidpi;
-                self.widget_text_edit_pos.b = 16 + 4;
             },
         }
         self.font_mode = font_mode;
+        self.widget_text_edit_pos.b = self.oneCharSize().b + 4;
     }
 
     /// refreshWindowPixelSize refreshes the window pixel size.
