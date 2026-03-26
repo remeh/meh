@@ -220,8 +220,9 @@ pub const WidgetTextEdit = struct {
     /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
     pub fn render(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u, focused: bool) void {
         self.one_char_size = one_char_size;
+        const minimap_width_px = if (self.render_minimap) self.minimap_width * self.minimap_char_size.a else 0;
         self.visible_cols_and_lines = Vec2u{
-            .a = (widget_size.a - self.line_numbers_offset) / @as(usize, @intFromFloat(@as(f32, @floatFromInt(one_char_size.a)))),
+            .a = (widget_size.a - self.line_numbers_offset - minimap_width_px) / @as(usize, @intFromFloat(@as(f32, @floatFromInt(one_char_size.a)))),
             .b = ((widget_size.b) / @as(usize, @intFromFloat(@as(f32, @floatFromInt(one_char_size.b))))) - 1, // FIXME(remy): this -1 is based on nothing
         };
 
