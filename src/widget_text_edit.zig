@@ -288,44 +288,79 @@ pub const WidgetTextEdit = struct {
         }
         const width = (max_digits + 2) * one_char_size.a;
 
-        // render the separation line
+        // render line number background panel with subtle border
+        Draw.fillRect(
+            sdl_renderer,
+            scaler,
+            Vec2u{ .a = draw_pos.a, .b = draw_pos.b },
+            Vec2u{ .a = width, .b = widget_size.b - draw_pos.b },
+            Colors.ui_line_number_bg,
+        );
 
+        // render the separation line
         Draw.line(
             sdl_renderer,
             scaler,
             Vec2u{ .a = draw_pos.a + width, .b = draw_pos.b },
             Vec2u{ .a = draw_pos.a + width, .b = widget_size.b - draw_pos.b },
-            Vec4u{ .a = 70, .b = 70, .c = 70, .d = 255 },
+            Colors.ui_border,
         );
 
         // render the line numbers
-
         while (i < self.viewport.lines.b and i < self.editor.buffer.lines.items.len) : (i += 1) {
             _ = std.fmt.bufPrintZ(cbuff, "{d}", .{i + 1}) catch |err| {
                 std.log.err("WidgetTextEdit.renderLineNumbers: can't render line number {}: {}", .{ i, err });
                 return 0;
             };
 
-            var text_color = Colors.gray;
-            if (i == self.cursor.pos.b) {
-                text_color = Colors.white;
-            }
+            var text_color = Colors.ui_line_number;
+            var has_status = false;
 
             if (self.lines_status.get(i)) |status| {
-                text_color = status.type.color();
+                // Use gutter colors for git/diagnostic indicators
+                text_color = switch (status.type) {
+                    .Diagnostic => Colors.ui_gutter_diagnostic_error,
+                    .GitAdded => Colors.ui_gutter_git_added,
+                    .GitRemoved => Colors.ui_gutter_git_removed,
+                };
+                has_status = true;
             }
 
-            Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset }, 0, text_color, cbuff);
+            if (i == self.cursor.pos.b) {
+                text_color = Colors.ui_line_number_current;
+            }
 
+            // Draw git/diagnostic indicator bar on the left
+            if (has_status and i == self.cursor.pos.b) {
+                Draw.fillRect(
+                    sdl_renderer,
+                    scaler,
+                    Vec2u{ .a = draw_pos.a + 2, .b = y_offset + 1 },
+                    Vec2u{ .a = 3, .b = one_char_size.b - 2 },
+                    text_color,
+                );
+            } else if (has_status) {
+                Draw.fillRect(
+                    sdl_renderer,
+                    scaler,
+                    Vec2u{ .a = draw_pos.a + 2, .b = y_offset + 2 },
+                    Vec2u{ .a = 2, .b = one_char_size.b - 4 },
+                    text_color,
+                );
+            }
+
+            // Render current line background
             if (i == self.cursor.pos.b) {
                 Draw.fillRect(
                     sdl_renderer,
                     scaler,
-                    Vec2u{ .a = draw_pos.a, .b = y_offset },
-                    Vec2u{ .a = width, .b = self.one_char_size.b },
-                    Vec4u{ .a = 220, .b = 220, .c = 220, .d = 20 },
+                    Vec2u{ .a = draw_pos.a + 6, .b = y_offset },
+                    Vec2u{ .a = width - 8, .b = self.one_char_size.b },
+                    Colors.withAlpha(Colors.ui_surface_highlight, 50),
                 );
             }
+
+            Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset + 1 }, 0, text_color, cbuff);
 
             y_offset += self.one_char_size.b;
         }
@@ -354,10 +389,10 @@ pub const WidgetTextEdit = struct {
     /// It shows a scaled-down version of the code with a viewport rectangle indicating
     /// the currently visible area.
     fn renderMiniMap(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u) void {
-        const bg_color = Vec4u{ .a = 40, .b = 40, .c = 40, .d = 255 };
-        const viewport_fill_color = Vec4u{ .a = 100, .b = 100, .c = 100, .d = 100 };
-        const viewport_border_color = Vec4u{ .a = 150, .b = 150, .c = 150, .d = 255 };
-        const x_margin: usize = 2;
+        const bg_color = Colors.darker_gray;
+        const viewport_fill_color = Colors.withAlpha(Colors.ui_surface_highlight, 60);
+        const viewport_border_color = Colors.ui_border_light;
+        const x_margin: usize = 3;
         const width_margin: usize = 4;
         const max_line_height: f32 = 3.0;
 
@@ -376,12 +411,11 @@ pub const WidgetTextEdit = struct {
         const line_height = @min(max_line_height, @as(f32, @floatFromInt(minimap_height)) / @as(f32, @floatFromInt(capped_lines)));
         const bar_height = @max(1, @as(usize, @intFromFloat(line_height)));
 
-        // Draw viewport indicator and borders
+        // Draw viewport indicator with subtle border
         const viewport_y = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.viewport.lines.a)) * line_height));
-        const viewport_h = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.visible_cols_and_lines.b)) * line_height));
-        Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y }, Vec2u{ .a = minimap_width_px, .b = viewport_h }, viewport_fill_color);
-        Draw.line(sdl_renderer, scaler, Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y }, Vec2u{ .a = minimap_x + minimap_width_px, .b = minimap_y + viewport_y }, viewport_border_color);
-        Draw.line(sdl_renderer, scaler, Vec2u{ .a = minimap_x, .b = minimap_y + viewport_y + viewport_h }, Vec2u{ .a = minimap_x + minimap_width_px, .b = minimap_y + viewport_y + viewport_h }, viewport_border_color);
+        const viewport_h = @max(1, @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.visible_cols_and_lines.b)) * line_height)));
+        Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = minimap_x + 1, .b = minimap_y + viewport_y + 1 }, Vec2u{ .a = minimap_width_px - 2, .b = viewport_h - 2 }, viewport_fill_color);
+        Draw.rect(sdl_renderer, scaler, Vec2u{ .a = minimap_x + 1, .b = minimap_y + viewport_y + 1 }, Vec2u{ .a = minimap_width_px - 2, .b = viewport_h - 2 }, viewport_border_color);
 
         const max_visible_width = minimap_width_px - width_margin;
 
@@ -408,13 +442,17 @@ pub const WidgetTextEdit = struct {
             // Determine bar color: status > highlight > viewport > default
             const has_highlight = self.minimap_highlight_lines.contains(line_idx);
             const color = if (line_status) |status|
-                status.type.color()
+                switch (status.type) {
+                    .Diagnostic => Colors.ui_gutter_diagnostic_error,
+                    .GitAdded => Colors.ui_gutter_git_added,
+                    .GitRemoved => Colors.ui_gutter_git_removed,
+                }
             else if (has_highlight)
-                Colors.blue
+                Colors.blue_light
             else if (line_idx >= self.viewport.lines.a and line_idx < self.viewport.lines.b)
-                Colors.light_gray
+                Colors.withAlpha(Colors.ui_selection, 40)
             else
-                Colors.gray;
+                Colors.medium_gray;
 
             // Bar width: empty lines get a small dot, others scale proportionally
             const bar_width = if (len == 0)
@@ -548,6 +586,11 @@ pub const WidgetTextEdit = struct {
                         // draw the selection rectangle if necessary
 
                         if (self.isSelected(Vec2u{ .a = it.current_glyph, .b = i })) {
+                            // Use gradient-like selection with better colors
+                            const selection_color = if (focused)
+                                Colors.ui_selection_focused
+                            else
+                                Colors.ui_selection;
                             Draw.fillRect(
                                 font.sdl_renderer,
                                 scaler,
@@ -556,7 +599,7 @@ pub const WidgetTextEdit = struct {
                                     .b = draw_pos.b + y_offset,
                                 },
                                 one_char_size,
-                                Vec4u{ .a = 175, .b = 175, .c = 175, .d = 100 },
+                                selection_color,
                             );
                         }
 

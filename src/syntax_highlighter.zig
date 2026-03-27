@@ -254,14 +254,14 @@ pub const SyntaxHighlighter = struct {
                     is_in_url = true;
                     just_detected_url = true;
                     const url_start = if (columns.items.len >= 7) columns.items.len - 7 else 0;
-                    color_with(&columns, url_start, columns.items.len, Colors.blue);
+                    color_with(&columns, url_start, columns.items.len, Colors.syntax_url);
                 } else if (is_http_start and it.current_byte >= 6 and
                     std.mem.eql(u8, slice[it.current_byte - 6..it.current_byte], "http:/"))
                 {
                     is_in_url = true;
                     just_detected_url = true;
                     const url_start = if (columns.items.len >= 6) columns.items.len - 6 else 0;
-                    color_with(&columns, url_start, columns.items.len, Colors.blue);
+                    color_with(&columns, url_start, columns.items.len, Colors.syntax_url);
                 }
             }
 
@@ -273,11 +273,11 @@ pub const SyntaxHighlighter = struct {
             // immediately set this glyph color to the default color
             // URLs take precedence over comments
             if (is_in_url) {
-                try columns.append(allocator, Colors.blue);
+                try columns.append(allocator, Colors.syntax_url);
             } else if (is_in_comment) {
-                try columns.append(allocator, Colors.gray);
+                try columns.append(allocator, Colors.syntax_comment);
             } else {
-                try columns.append(allocator, Colors.light_gray);
+                try columns.append(allocator, Colors.ui_text_primary);
             }
 
             if (ch == '\t') {
@@ -295,9 +295,9 @@ pub const SyntaxHighlighter = struct {
                 if (columns.items.len > 0) {
                     // TODO(remy): color previous char
                     if ((previous_char == '/' or previous_char == '#') and columns.items.len > 1) {
-                        columns.items[columns.items.len - 2] = Colors.gray;
+                        columns.items[columns.items.len - 2] = Colors.syntax_comment;
                     }
-                    columns.items[columns.items.len - 1] = Colors.gray;
+                    columns.items[columns.items.len - 1] = Colors.syntax_comment;
                 }
                 is_in_comment = true;
             } else if (is_in_quote > 0 and ch == is_in_quote and previous_char != '\\') {
@@ -305,7 +305,7 @@ pub const SyntaxHighlighter = struct {
                 is_in_quote = 0;
                 // only colors it if not in a comment
                 if (!is_in_comment) {
-                    color_with(&columns, quote_start, current_pos + 1, Colors.white);
+                    color_with(&columns, quote_start, current_pos + 1, Colors.syntax_string);
                 }
             }
 
@@ -318,15 +318,15 @@ pub const SyntaxHighlighter = struct {
                         std.mem.eql(u8, str, "XXX") or
                         std.mem.eql(u8, str, "FIXME"))
                     {
-                        color_with(&columns, word_start, current_pos, Colors.red);
+                        color_with(&columns, word_start, current_pos, Colors.syntax_todo);
                     } else if (std.mem.eql(u8, str, "DONE")) {
-                        color_with(&columns, word_start, current_pos, Colors.green);
+                        color_with(&columns, word_start, current_pos, Colors.syntax_done);
                     } else if (is_in_comment == false and (ch == '(' or ch == '{' or ch == '[')) {
-                        color_with(&columns, word_start, current_pos, Colors.whitish);
+                        color_with(&columns, word_start, current_pos, Colors.syntax_function);
                     }
 
                     if (!is_in_comment and str.len > 0 and keyword_matcher.contains(str)) {
-                        color_with(&columns, word_start, current_pos, Colors.gray_blue);
+                        color_with(&columns, word_start, current_pos, Colors.syntax_keyword);
                     }
                 }
 
@@ -415,32 +415,32 @@ test "line_syntax_highlighter main test" {
     try std.testing.expectEqual(true, try sh.refresh(3, &buffer.lines.items[3]));
 
     const line3 = sh.getLine(3);
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(0)); // space
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(1)); // space
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(2)); // space
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(3)); // space
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(4)); // s
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(5)); // t
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(6)); // d
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(7)); // .
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(8)); // l
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(9)); // o
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(10)); // g
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(11)); // .
-    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(12)); // d
-    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(13)); // e
-    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(14)); // b
-    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(15)); // u
-    try std.testing.expectEqual(Colors.whitish, line3.getForColumn(16)); // g
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(17)); // (
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(18)); // "
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(19)); // h
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(20)); // e
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(21)); // l
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(22)); // l
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(23)); // o
-    try std.testing.expectEqual(Colors.white, line3.getForColumn(24)); // "
-    try std.testing.expectEqual(Colors.light_gray, line3.getForColumn(25)); // ,
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(0)); // space
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(1)); // space
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(2)); // space
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(3)); // space
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(4)); // s
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(5)); // t
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(6)); // d
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(7)); // .
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(8)); // l
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(9)); // o
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(10)); // g
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(11)); // .
+    try std.testing.expectEqual(Colors.syntax_function, line3.getForColumn(12)); // d
+    try std.testing.expectEqual(Colors.syntax_function, line3.getForColumn(13)); // e
+    try std.testing.expectEqual(Colors.syntax_function, line3.getForColumn(14)); // b
+    try std.testing.expectEqual(Colors.syntax_function, line3.getForColumn(15)); // u
+    try std.testing.expectEqual(Colors.syntax_function, line3.getForColumn(16)); // g
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(17)); // (
+    try std.testing.expectEqual(Colors.syntax_string, line3.getForColumn(18)); // "
+    try std.testing.expectEqual(Colors.syntax_string, line3.getForColumn(19)); // h
+    try std.testing.expectEqual(Colors.syntax_string, line3.getForColumn(20)); // e
+    try std.testing.expectEqual(Colors.syntax_string, line3.getForColumn(21)); // l
+    try std.testing.expectEqual(Colors.syntax_string, line3.getForColumn(22)); // l
+    try std.testing.expectEqual(Colors.syntax_string, line3.getForColumn(23)); // o
+    try std.testing.expectEqual(Colors.syntax_string, line3.getForColumn(24)); // "
+    try std.testing.expectEqual(Colors.ui_text_primary, line3.getForColumn(25)); // ,
 
     sh.removeLine(4);
     try std.testing.expectEqual(sh.lines.items.len, 4);
@@ -463,25 +463,25 @@ test "line_syntax_highlighter URL in comment" {
 
     const highlighted = sh.getLine(0);
 
-    // Check that the URL part is colored blue
+    // Check that the URL part is colored with syntax_url
     // "https://example.com" starts at position 9 (after "// Visit ")
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(9));  // h
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(10)); // t
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(11)); // t
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(12)); // p
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(13)); // s
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(14)); // :
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(15)); // /
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(16)); // /
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(17)); // e
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(27)); // m
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(9));  // h
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(10)); // t
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(11)); // t
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(12)); // p
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(13)); // s
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(14)); // :
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(15)); // /
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(16)); // /
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(17)); // e
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(27)); // m
 
     // Check that comment text after URL is gray
-    try std.testing.expectEqual(Colors.gray, highlighted.getForColumn(29)); // f (for "for")
+    try std.testing.expectEqual(Colors.syntax_comment, highlighted.getForColumn(29)); // f (for "for")
 
-    // Check that comment start is gray
-    try std.testing.expectEqual(Colors.gray, highlighted.getForColumn(0)); // /
-    try std.testing.expectEqual(Colors.gray, highlighted.getForColumn(1)); // /
+    // Check that comment start is syntax_comment
+    try std.testing.expectEqual(Colors.syntax_comment, highlighted.getForColumn(0)); // /
+    try std.testing.expectEqual(Colors.syntax_comment, highlighted.getForColumn(1)); // /
 }
 
 test "line_syntax_highlighter URL in regular text" {
@@ -499,25 +499,25 @@ test "line_syntax_highlighter URL in regular text" {
 
     const highlighted = sh.getLine(0);
 
-    // Check that the URL part is colored blue
+    // Check that the URL part is colored with syntax_url
     // "https://ziglang.org" starts at position 10 (after "Check out ")
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(10)); // h
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(11)); // t
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(12)); // t
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(13)); // p
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(14)); // s
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(15)); // :
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(16)); // /
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(17)); // /
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(18)); // z
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(27)); // g
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(10)); // h
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(11)); // t
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(12)); // t
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(13)); // p
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(14)); // s
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(15)); // :
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(16)); // /
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(17)); // /
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(18)); // z
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(27)); // g
 
-    // Check that text before URL is light gray
-    try std.testing.expectEqual(Colors.light_gray, highlighted.getForColumn(0)); // C
-    try std.testing.expectEqual(Colors.light_gray, highlighted.getForColumn(9)); // (space)
+    // Check that text before URL is primary text
+    try std.testing.expectEqual(Colors.ui_text_primary, highlighted.getForColumn(0)); // C
+    try std.testing.expectEqual(Colors.ui_text_primary, highlighted.getForColumn(9)); // (space)
 
-    // Check that text after URL is light gray
-    try std.testing.expectEqual(Colors.light_gray, highlighted.getForColumn(29)); // n (for "now")
+    // Check that text after URL is primary text
+    try std.testing.expectEqual(Colors.ui_text_primary, highlighted.getForColumn(29)); // n (for "now")
 }
 
 test "line_syntax_highlighter http URL" {
@@ -535,13 +535,13 @@ test "line_syntax_highlighter http URL" {
 
     const highlighted = sh.getLine(0);
 
-    // Check that the URL part is colored blue
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(0));  // h
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(1));  // t
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(2));  // t
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(3));  // p
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(4));  // :
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(5));  // /
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(6));  // /
-    try std.testing.expectEqual(Colors.blue, highlighted.getForColumn(14)); // c (example.com)
+    // Check that the URL part is colored with syntax_url
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(0));  // h
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(1));  // t
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(2));  // t
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(3));  // p
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(4));  // :
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(5));  // /
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(6));  // /
+    try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(14)); // c (example.com)
 }

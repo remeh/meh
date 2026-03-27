@@ -39,13 +39,7 @@ pub const Cursor = struct {
     // -------
 
     /// `render` renders the cursor in the `WidgetTextEdit`.
-    /// `line_offset_in_buffer` contains the first visible line (of the buffer) in the current window. With this + the position
-    /// of the cursor in the buffer, we can compute where to relatively position the cursor in the window in order to draw it.
-    // TODO(remy): consider redrawing the character which is under the cursor in a reverse color to see it above the cursor
     pub fn render(_: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u, focused: bool) void {
-        var color = Colors.white;
-        color.d = 180;
-
         if (!focused) {
             Draw.rect(
                 sdl_renderer,
@@ -55,7 +49,7 @@ pub const Cursor = struct {
                     .b = draw_pos.b,
                 },
                 Vec2u{ .a = one_char_size.a, .b = one_char_size.b },
-                Colors.white,
+                Colors.medium_gray,
             );
             return;
         }
@@ -70,16 +64,16 @@ pub const Cursor = struct {
                         .b = draw_pos.b,
                     },
                     Vec2u{ .a = 2, .b = one_char_size.b },
-                    Colors.white,
+                    Colors.ui_cursor_insert,
                 );
             },
             .d, .f => {
-                Draw.rect(
+                Draw.fillRect(
                     sdl_renderer,
                     scaler,
                     Vec2u{ .a = draw_pos.a, .b = draw_pos.b + (one_char_size.b - 2) },
                     Vec2u{ .a = one_char_size.a, .b = 2 },
-                    Colors.white,
+                    Colors.ui_cursor_command,
                 );
             },
             else => {
@@ -91,14 +85,12 @@ pub const Cursor = struct {
                         .b = draw_pos.b,
                     },
                     Vec2u{ .a = one_char_size.a, .b = one_char_size.b },
-                    color,
+                    Colors.ui_cursor,
                 );
             },
         }
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
     pub fn posInPixel(cursor: Cursor, text_edit: *WidgetTextEdit, one_char_size: Vec2u) Vec2u {
         const rv = Vec2u{
             .a = text_edit.line_numbers_offset + (cursor.pos.a * one_char_size.a) - (text_edit.viewport.columns.a * one_char_size.a),
@@ -108,21 +100,13 @@ pub const Cursor = struct {
         return rv;
     }
 
-    // TODO(remy): comment
-    // TODO(remy): unit test
     pub fn posFromWindowPos(_: Cursor, text_edit: *WidgetTextEdit, click_window_pos: Vec2u, draw_pos: Vec2u) Vec2u {
         var rv = Vec2u{ .a = 0, .b = 0 };
-
-        // position in char in window
-        // --
 
         const in_editor = Vec2u{
             .a = itou(@max(utoi(click_window_pos.a - draw_pos.a) - utoi(text_edit.line_numbers_offset), 0)) / text_edit.one_char_size.a,
             .b = (click_window_pos.b - draw_pos.b) / text_edit.one_char_size.b,
         };
-
-        // line
-        // --
 
         rv.b = in_editor.b;
         rv.b += text_edit.viewport.lines.a;
@@ -137,7 +121,6 @@ pub const Cursor = struct {
                     return rv;
                 };
 
-                // happens when there is no content yet the last line of buffer
                 if (last_line.size() > 0) {
                     rv.a = last_line.size() - 1;
                 } else {
@@ -149,9 +132,6 @@ pub const Cursor = struct {
             }
             return rv;
         }
-
-        // column
-        // --
 
         var line = text_edit.editor.buffer.getLine(rv.b) catch |err| {
             std.log.err("Cursor.posFromWindowPos: can't get current line {d}: {}", .{ rv.b, err });
@@ -177,7 +157,6 @@ pub const Cursor = struct {
 
         while (move_done < text_edit.viewport.columns.b) {
             if (it.glyph()[0] == char_tab and tabs_idx == 0) {
-                // it is a tab
                 tabs_idx = 4;
             }
             if (tabs_idx > 0) {
@@ -196,8 +175,6 @@ pub const Cursor = struct {
             }
         }
 
-        // if the click is done after the line end, just move the cursor
-        // to the line end.
         if (in_editor.a > move_done) {
             rv.a = utf8size;
             return rv;
@@ -206,7 +183,6 @@ pub const Cursor = struct {
         return rv;
     }
 
-    /// isVisible returns true if the cursor is visible in the given viewport.
     pub fn isVisible(self: Cursor, viewport: WidgetTextEditViewport) bool {
         return (self.pos.b >= viewport.lines.a and self.pos.b <= viewport.lines.b and
             self.pos.a >= viewport.columns.a and self.pos.a <= viewport.columns.b);

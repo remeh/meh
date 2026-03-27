@@ -103,16 +103,16 @@ pub const WidgetMessageBox = struct {
 
         // overlay
         if (self.overlay == .WithOverlay) {
-            Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Vec4u{ .a = 20, .b = 20, .c = 20, .d = 130 });
+            Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Colors.withAlpha(Colors.darkest_gray, 150));
         }
 
         const lines_to_draw = @min(10, self.lines.items.len);
 
         switch (self.message) {
             .ExecOutput, .LSPDiagnostic, .LSPHover, .LSPMessage => {
-                var color = Colors.light_gray;
+                var color = Colors.ui_text_secondary;
                 if (self.message == .LSPDiagnostic) {
-                    color = Colors.red;
+                    color = Colors.syntax_todo;
                 }
 
                 const lines_pixel_height: usize = lines_to_draw * (one_char_size.b + 1);
@@ -125,8 +125,11 @@ pub const WidgetMessageBox = struct {
                     .b = 30 + lines_pixel_height,
                 };
 
+                // Draw shadow first
+                Draw.shadow(sdl_renderer, scaler, position, size, 4, 4, 8, Colors.shadow_medium);
+
                 // dark background
-                Draw.fillRect(sdl_renderer, scaler, position, size, Vec4u{ .a = 20, .b = 20, .c = 20, .d = 240 });
+                Draw.fillRect(sdl_renderer, scaler, position, size, Colors.ui_surface);
 
                 // content
 

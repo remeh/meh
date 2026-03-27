@@ -236,7 +236,7 @@ pub const WidgetList = struct {
             .Autocomplete => 0,
             else => one_char_size.b,
         };
-        const entry_sep_margin = 2;
+        const entry_sep_margin = 6;
 
         // when reaching the bottom of the list, we want to start scrolling before
         // reaching the last entry.
@@ -276,7 +276,7 @@ pub const WidgetList = struct {
         while (idx < self.filtered_entries.items.len) {
             const entry = self.filtered_entries.items[idx];
             const pos = Vec2u{ .a = position.a, .b = position.b + input_height + label_sep_margin + entry_sep_margin + offset };
-            const size = Vec2u{ .a = widget_size.a, .b = one_char_size.b + entry_sep_margin + 1 };
+            const size = Vec2u{ .a = widget_size.a, .b = one_char_size.b + entry_sep_margin };
 
             self.renderEntry(
                 sdl_renderer,
@@ -309,7 +309,7 @@ pub const WidgetList = struct {
         selected: bool,
     ) void {
         if (selected) {
-            Draw.rect(sdl_renderer, scaler, Vec2u{ .a = position.a, .b = position.b + 2 }, size, Colors.white);
+            Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = position.a + 2, .b = position.b + 5}, Vec2u{ .a = size.a - 4, .b = size.b - 4 }, Colors.ui_selection_focused);
         }
 
         // maximum amount if visible glyph
@@ -324,7 +324,7 @@ pub const WidgetList = struct {
                 };
                 const filename_size = font.textPixelSize(scaler, filename);
 
-                Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 3 }, size.a, Colors.white, filename);
+                Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 6 }, size.a, Colors.white, filename);
 
                 var content = entry.label.bytes();
 
@@ -354,7 +354,7 @@ pub const WidgetList = struct {
                     Draw.text(
                         font,
                         scaler,
-                        Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 3 },
+                        Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 6 },
                         content_visible_glyph_count * font.font_size / 2,
                         Colors.white,
                         content[start_bytes_offset..it.current_byte],
@@ -374,7 +374,7 @@ pub const WidgetList = struct {
                 Draw.text(
                     font,
                     scaler,
-                    Vec2u{ .a = position.a + 5, .b = position.b + 3 },
+                    Vec2u{ .a = position.a + 5, .b = position.b + 6 },
                     size.a,
                     Colors.white,
                     content[it.current_byte..],
