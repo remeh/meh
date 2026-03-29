@@ -40,7 +40,7 @@ pub const WidgetAutocomplete = struct {
             .no_results = false,
             .loading = true,
             .list = try WidgetList.init(allocator, WidgetListFilterType.Autocomplete),
-            .mbox = WidgetMessageBox.init(allocator),
+            .mbox = try WidgetMessageBox.init(allocator),
         };
     }
 

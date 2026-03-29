@@ -55,8 +55,6 @@ pub const Font = struct {
             return FontError.CantLoadFont;
         }
 
-        c.TTF_SetFontHinting(font, c.TTF_HINTING_LIGHT);
-
         var rv = Font{
             .font_size = font_size,
             .ttf_font = font,

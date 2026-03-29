@@ -7,7 +7,10 @@ const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
+const syntax_highlighter = @import("syntax_highlighter.zig");
+const SyntaxHighlighter = syntax_highlighter.SyntaxHighlighter;
 const U8Slice = @import("u8slice.zig").U8Slice;
+const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 
@@ -31,11 +34,17 @@ pub const WidgetMessageBox = struct {
     overlay: WidgetMessageBoxOverlay,
     x_offset: usize,
     y_offset: usize,
+    keyword_matcher: std.StringHashMap(void),
 
     // Constructors
     // ------------
 
-    pub fn init(allocator: std.mem.Allocator) WidgetMessageBox {
+    pub fn init(allocator: std.mem.Allocator) !WidgetMessageBox {
+        var keyword_matcher = std.StringHashMap(void).init(allocator);
+        for (syntax_highlighter.keywords) |keyword| {
+            try keyword_matcher.put(keyword, {});
+        }
+
         return WidgetMessageBox{
             .allocator = allocator,
             .lines = std.ArrayListUnmanaged(U8Slice).empty,
@@ -43,11 +52,13 @@ pub const WidgetMessageBox = struct {
             .overlay = .WithOverlay,
             .x_offset = 0,
             .y_offset = 0,
+            .keyword_matcher = keyword_matcher,
         };
     }
 
     pub fn deinit(self: *WidgetMessageBox) void {
         self.resetLines();
+        self.keyword_matcher.deinit();
     }
 
     // Methods
@@ -89,6 +100,39 @@ pub const WidgetMessageBox = struct {
         self.overlay = overlay;
         self.x_offset = 0;
         self.y_offset = 0;
+    }
+
+    fn renderSyntaxHighlighted(self: WidgetMessageBox, font: Font, scaler: Scaler, x: usize, y: usize, max_width: usize, text: []const u8) void {
+        _ = max_width;
+
+        var content_slice = U8Slice.initEmpty(self.allocator);
+        defer content_slice.deinit();
+        content_slice.appendConst(text) catch {
+            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, 0, Colors.ui_text_secondary, text);
+            return;
+        };
+
+        var line_highlight = SyntaxHighlighter.compute(self.allocator, &content_slice, null, self.keyword_matcher) catch {
+            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, 0, Colors.ui_text_secondary, text);
+            return;
+        };
+        defer line_highlight.deinit();
+
+        var it = UTF8Iterator.init(text, 0) catch {
+            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, 0, Colors.ui_text_secondary, text);
+            return;
+        };
+
+        const base_pos = scaler.Scale2u(Vec2u{ .a = x, .b = y });
+        var render_x: usize = 0;
+        var has_more = true;
+
+        while (has_more) {
+            const color = line_highlight.getForColumn(it.current_glyph);
+            font.drawGlyph(Vec2u{ .a = base_pos.a + render_x, .b = base_pos.b }, color, it.glyph());
+            render_x += font.font_size / 2;
+            has_more = it.next();
+        }
     }
 
     /// render renders the messagebox on the given renderer.
@@ -136,6 +180,7 @@ pub const WidgetMessageBox = struct {
 
                 var y = position.b + 15;
                 var i: usize = 0;
+                const use_syntax = self.message == .LSPHover;
                 for (self.lines.items) |line| {
                     if (self.y_offset > i) {
                         i += 1;
@@ -145,7 +190,13 @@ pub const WidgetMessageBox = struct {
                     if (self.x_offset < line.size()) {
                         text = line.bytes()[self.x_offset..];
                     }
-                    Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = y }, size.a - 30, color, text);
+
+                    if (use_syntax and text.len > 0) {
+                        self.renderSyntaxHighlighted(font, scaler, position.a + 15, y, size.a - 30, text);
+                    } else {
+                        Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = y }, size.a - 30, color, text);
+                    }
+
                     y += one_char_size.b + 1;
                     i += 1;
                     if (i > self.y_offset + 10) {
@@ -181,7 +232,7 @@ pub const WidgetMessageBox = struct {
 
 test "widget_message_box main tests" {
     const allocator = std.testing.allocator;
-    var msgbox = WidgetMessageBox.init(allocator);
+    var msgbox = try WidgetMessageBox.init(allocator);
     defer msgbox.deinit();
 
     try msgbox.append("hello");

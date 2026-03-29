@@ -11,6 +11,8 @@ const Editor = @import("editor.zig").Editor;
 const Font = @import("font.zig").Font;
 const Scaler = @import("scaler.zig").Scaler;
 const SearchDirection = @import("editor.zig").SearchDirection;
+const SyntaxHighlighter = @import("syntax_highlighter.zig").SyntaxHighlighter;
+const SyntaxHighlighterKeywords = @import("syntax_highlighter.zig").keywords;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2i = @import("vec.zig").Vec2i;
@@ -72,11 +74,17 @@ pub const WidgetList = struct {
     selected_entry_idx: usize,
     // when moving left/right because of long lines, how many glyphs we should offset with
     x_offset: usize,
+    keyword_matcher: std.StringHashMap(void),
 
     // Constructors
     // ------------
 
     pub fn init(allocator: std.mem.Allocator, filter_type: WidgetListFilterType) !WidgetList {
+        var keyword_matcher = std.StringHashMap(void).init(allocator);
+        for (SyntaxHighlighterKeywords) |keyword| {
+            try keyword_matcher.put(keyword, {});
+        }
+
         return WidgetList{
             .allocator = allocator,
             .entries = std.ArrayListUnmanaged(WidgetListEntry).empty,
@@ -86,6 +94,7 @@ pub const WidgetList = struct {
             .label = U8Slice.initEmpty(allocator),
             .selected_entry_idx = 0,
             .x_offset = 0,
+            .keyword_matcher = keyword_matcher,
         };
     }
 
@@ -95,6 +104,7 @@ pub const WidgetList = struct {
         self.entries.deinit(self.allocator);
         self.filtered_entries.deinit(self.allocator);
         self.label.deinit();
+        self.keyword_matcher.deinit();
     }
 
     // Methods
@@ -331,7 +341,7 @@ pub const WidgetList = struct {
 
                 Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 6 }, size.a, Colors.white, filename);
 
-                var content = entry.label.bytes();
+                const content = entry.label.bytes();
 
                 // compute what's the space left for the result content
 
@@ -343,27 +353,47 @@ pub const WidgetList = struct {
                     return;
                 }
 
-                var it = UTF8Iterator.init(content, self.x_offset) catch |err| {
-                    std.log.err("WidgetList.renderEntry: can't create an UTF8Iterator: {}", .{err});
+                // Compute syntax highlighting using the editor's highlighter
+                var content_slice = U8Slice.initEmpty(self.allocator);
+                defer content_slice.deinit();
+                content_slice.appendConst(content) catch |err| {
+                    std.log.err("WidgetList.renderEntry: can't create content slice: {}", .{err});
+                    self.allocator.free(filename);
                     return;
                 };
 
-                const start_bytes_offset = it.current_byte;
-                var glyphs_count: usize = 0;
+                var line_highlight = SyntaxHighlighter.compute(self.allocator, &content_slice, null, self.keyword_matcher) catch |err| {
+                    std.log.err("WidgetList.renderEntry: can't compute syntax highlight: {}", .{err});
+                    self.allocator.free(filename);
+                    return;
+                };
+                defer line_highlight.deinit();
 
-                while (glyphs_count <= content_visible_glyph_count and it.next()) {
-                    glyphs_count += 1;
-                }
+                var it = UTF8Iterator.init(content, self.x_offset) catch |err| {
+                    std.log.err("WidgetList.renderEntry: can't create iterator: {}", .{err});
+                    self.allocator.free(filename);
+                    return;
+                };
 
-                if (glyphs_count > 0) {
-                    Draw.text(
-                        font,
-                        scaler,
-                        Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 6 },
-                        content_visible_glyph_count * font.font_size / 2,
-                        Colors.white,
-                        content[start_bytes_offset..it.current_byte],
-                    );
+                const base_pos = scaler.Scale2u(Vec2u{ .a = position.a + 5 + filename_size, .b = position.b + 6 });
+                var render_x_pixel: usize = 0;
+                var rendered_glyphs: usize = 0;
+                var has_more = true;
+
+                while (has_more and rendered_glyphs < content_visible_glyph_count) {
+                    const g = it.glyph();
+                    if (g[0] == 0 or g[0] == '\n' or g[0] == '\r') {
+                        break;
+                    }
+                    if (g[0] == '\t') {
+                        render_x_pixel += font.font_size * 2;
+                    } else {
+                        const color = line_highlight.getForColumn(it.current_glyph);
+                        font.drawGlyph(Vec2u{ .a = base_pos.a + render_x_pixel, .b = base_pos.b }, color, g);
+                        render_x_pixel += font.font_size / 2;
+                    }
+                    rendered_glyphs += 1;
+                    has_more = it.next();
                 }
 
                 self.allocator.free(filename);

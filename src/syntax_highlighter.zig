@@ -7,7 +7,7 @@ const UTF8Iterator = @import("u8slice.zig").UTF8Iterator;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 
-const keywords = [_][]const u8{
+pub const keywords = [_][]const u8{
     "type",
     "interface",
     "struct",
@@ -202,7 +202,7 @@ pub const SyntaxHighlighter = struct {
     // syntax highlighting
     // -------------------
 
-    fn compute(
+    pub fn compute(
         allocator: std.mem.Allocator,
         line_content: *U8Slice,
         word_under_cursor: ?[]const u8,

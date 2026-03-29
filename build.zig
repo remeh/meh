@@ -31,13 +31,13 @@ pub fn build(b: *std.Build) void {
 
     // macOS application artifact
     if (builtin.os.tag == .macos) {
-        // copy the macOS app def
-        const install_dir = b.addInstallDirectory(.{
-            .source_dir = b.path("src/macos"), // source of the files to copy
-            .install_dir = .prefix,            // install to zig-out/
-            .install_subdir = "macos",         // subdirectory in the install path
-        });
-        b.getInstallStep().dependOn(&install_dir.step);
+//        // copy the macOS app def
+//        const install_dir = b.addInstallDirectory(.{
+//            .source_dir = b.path("src/macos"), // source of the files to copy
+//            .install_dir = .prefix, // install to zig-out/
+//            .install_subdir = "macos", // subdirectory in the install path
+//        });
+//        b.getInstallStep().dependOn(&install_dir.step);
         const install_macos_release = b.addInstallArtifact(meh, .{
             .dest_dir = .{ .override = .{ .custom = "macos/meh.app/contents/MacOS/" } },
         });
@@ -74,6 +74,12 @@ fn prepare(step: *std.Build.Step.Compile) void {
     step.root_module.linkSystemLibrary("SDL2", .{});
     step.root_module.linkSystemLibrary("SDL2_ttf", .{});
     switch (builtin.os.tag) {
+        .macos => {
+            step.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            step.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+            step.root_module.link_libc = true;
+        },
+
         .linux => step.root_module.link_libc = true,
         else => {},
     }
