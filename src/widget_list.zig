@@ -234,7 +234,7 @@ pub const WidgetList = struct {
         };
         const label_sep_margin: usize = switch (self.filter_type) {
             .Autocomplete => 0,
-            else => one_char_size.b,
+            else => one_char_size.b + 10,
         };
         const entry_sep_margin = 6;
 
@@ -247,17 +247,22 @@ pub const WidgetList = struct {
 
         if (self.filter_type != .Autocomplete) {
             const input_pos = Vec2u{ .a = position.a + 5, .b = position.b + 5 };
-            const input_size = Vec2u{ .a = widget_size.a, .b = input_height };
+            const input_size = Vec2u{ .a = widget_size.a - 10, .b = input_height };
 
-            self.input.render(sdl_renderer, font, scaler, input_pos, input_size, one_char_size);
+            // input background
+            Draw.fillRect(sdl_renderer, scaler, input_pos, input_size, Colors.ui_surface_highlight);
+            Draw.rect(sdl_renderer, scaler, input_pos, input_size, Colors.ui_border);
+
+            const text_y = input_pos.b + (input_height - one_char_size.b) / 2;
+            self.input.render(sdl_renderer, font, scaler, .{ .a = input_pos.a + 4, .b = text_y }, input_size, one_char_size);
         }
 
         // label below the input / above the list
         // ----
 
         if (self.filter_type != .Autocomplete) {
-            const label_pos = Vec2u{ .a = position.a + one_char_size.a, .b = position.b + (one_char_size.b * 2) };
-            Draw.text(font, scaler, label_pos, widget_size.a, Colors.white, self.label.bytes());
+            const label_pos = Vec2u{ .a = position.a + one_char_size.a, .b = position.b + input_height + 12 };
+            Draw.text(font, scaler, label_pos, widget_size.a, Colors.ui_text_secondary, self.label.bytes());
         }
 
         // list the entries

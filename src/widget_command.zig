@@ -4,6 +4,7 @@ const expect = std.testing.expect;
 
 const App = @import("app.zig").App;
 const Direction = @import("app.zig").Direction;
+const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const Exec = @import("exec.zig").Exec;
 const Fd = @import("fd.zig").Fd;
@@ -86,37 +87,22 @@ pub const WidgetCommand = struct {
         one_char_size: Vec2u,
     ) void {
         // overlay
-        Draw.fillRect(
-            sdl_renderer,
-            scaler,
-            Vec2u{ .a = 0, .b = 0 },
-            window_scaled_size,
-            Vec4u{ .a = 20, .b = 20, .c = 20, .d = 130 },
-        );
+        Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Vec4u{ .a = 0, .b = 0, .c = 0, .d = 120 });
 
-        // text edit background
-        Draw.fillRect(
-            sdl_renderer,
-            scaler,
-            draw_pos,
-            widget_size,
-            Vec4u{ .a = 20, .b = 20, .c = 20, .d = 240 },
-        );
+        // shadow
+        Draw.fillRect(sdl_renderer, scaler, .{ .a = draw_pos.a + 6, .b = draw_pos.b + 6 }, widget_size, Colors.shadow_medium);
 
-        const margin: Vec2u = Vec2u{ .a = 15, .b = 15 };
+        // background
+        Draw.fillRect(sdl_renderer, scaler, draw_pos, widget_size, Colors.ui_surface);
+
+        // border
+        Draw.rect(sdl_renderer, scaler, draw_pos, widget_size, Colors.ui_border_light);
 
         // text edit
         var pos = draw_pos;
-        pos.a += margin.a;
-        pos.b += margin.b;
-        self.input.render(
-            sdl_renderer,
-            font,
-            scaler,
-            pos,
-            widget_size,
-            one_char_size,
-        );
+        pos.a += 15;
+        pos.b += (widget_size.b - one_char_size.b) / 2;
+        self.input.render(sdl_renderer, font, scaler, pos, widget_size, one_char_size);
     }
 
     pub fn interpret(self: *WidgetCommand, app: *App) !void {
