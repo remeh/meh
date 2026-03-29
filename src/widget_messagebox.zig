@@ -125,8 +125,8 @@ pub const WidgetMessageBox = struct {
                     .b = 30 + lines_pixel_height,
                 };
 
-                // Draw shadow first
-                Draw.shadow(sdl_renderer, scaler, position, size, 4, 4, 8, Colors.shadow_medium);
+                // Draw shadow
+                Draw.fillRect(sdl_renderer, scaler, .{ .a = position.a + 6, .b = position.b + 6 }, size, Colors.shadow_medium);
 
                 // dark background
                 Draw.fillRect(sdl_renderer, scaler, position, size, Colors.ui_surface);
