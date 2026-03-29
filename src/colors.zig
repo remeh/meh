@@ -32,9 +32,7 @@ pub const red = Vec4u{ .a = 224, .b = 90, .c = 79, .d = 255 };
 
 pub const syntax_keyword = Vec4u{ .a = 130, .b = 100, .c = 180, .d = 255 };      // Purple-ish for keywords
 pub const syntax_string = Vec4u{ .a = 200, .b = 180, .c = 100, .d = 255 };      // Yellow-ish for strings
-pub const syntax_number = Vec4u{ .a = 100, .b = 180, .c = 140, .d = 255 };      // Green-ish for numbers
 pub const syntax_function = Vec4u{ .a = 100, .b = 160, .c = 220, .d = 255 };    // Blue-ish for functions
-pub const syntax_type = Vec4u{ .a = 220, .b = 160, .c = 140, .d = 255 };        // Orange-ish for types
 pub const syntax_comment = Vec4u{ .a = 90, .b = 95, .c = 105, .d = 255 };       // Muted gray for comments
 pub const syntax_url = Vec4u{ .a = 100, .b = 180, .c = 220, .d = 255 };         // Cyan-blue for URLs
 pub const syntax_todo = Vec4u{ .a = 240, .b = 140, .c = 80, .d = 255 };         // Orange for TODO

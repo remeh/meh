@@ -183,6 +183,7 @@ pub const Cursor = struct {
         return rv;
     }
 
+    /// isVisible returns true if the cursor is visible in the given viewport.
     pub fn isVisible(self: Cursor, viewport: WidgetTextEditViewport) bool {
         return (self.pos.b >= viewport.lines.a and self.pos.b <= viewport.lines.b and
             self.pos.a >= viewport.columns.a and self.pos.a <= viewport.columns.b);

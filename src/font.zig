@@ -44,11 +44,6 @@ pub const Font = struct {
     /// creates a font atlas in a texture.
     /// filepath must be null-terminated.
     pub fn init(allocator: std.mem.Allocator, sdl_renderer: *c.SDL_Renderer, font_size: usize) !Font {
-        return Font.initWithOptions(allocator, sdl_renderer, font_size, true);
-    }
-
-    /// initWithOptions initializes the font with additional options for rendering quality.
-    pub fn initWithOptions(allocator: std.mem.Allocator, sdl_renderer: *c.SDL_Renderer, font_size: usize, use_font_smoothing: bool) !Font {
         // will be cleaned up by the TTF_OpenFontRW call (the second parameter set to 1).
         const rwops: *c.SDL_RWops = c.SDL_RWFromConstMem(font_data, font_data.len);
 
@@ -60,12 +55,7 @@ pub const Font = struct {
             return FontError.CantLoadFont;
         }
 
-        // Enable font hinting and smoothing for better text quality
-        if (use_font_smoothing) {
-            c.TTF_SetFontHinting(font, c.TTF_HINTING_LIGHT);
-        } else {
-            c.TTF_SetFontHinting(font, c.TTF_HINTING_NORMAL);
-        }
+        c.TTF_SetFontHinting(font, c.TTF_HINTING_LIGHT);
 
         var rv = Font{
             .font_size = font_size,

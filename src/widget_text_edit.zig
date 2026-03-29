@@ -80,9 +80,9 @@ pub const LineStatusType = enum {
 
     pub fn color(self: LineStatusType) Vec4u {
         return switch (self) {
-            .Diagnostic => Colors.red,
-            .GitAdded => Colors.green,
-            .GitRemoved => Colors.orange,
+            .Diagnostic => Colors.ui_gutter_diagnostic_error,
+            .GitAdded => Colors.ui_gutter_git_added,
+            .GitRemoved => Colors.ui_gutter_git_removed,
         };
     }
 };
@@ -317,12 +317,7 @@ pub const WidgetTextEdit = struct {
             var has_status = false;
 
             if (self.lines_status.get(i)) |status| {
-                // Use gutter colors for git/diagnostic indicators
-                text_color = switch (status.type) {
-                    .Diagnostic => Colors.ui_gutter_diagnostic_error,
-                    .GitAdded => Colors.ui_gutter_git_added,
-                    .GitRemoved => Colors.ui_gutter_git_removed,
-                };
+                text_color = status.type.color();
                 has_status = true;
             }
 
@@ -442,11 +437,7 @@ pub const WidgetTextEdit = struct {
             // Determine bar color: status > highlight > viewport > default
             const has_highlight = self.minimap_highlight_lines.contains(line_idx);
             const color = if (line_status) |status|
-                switch (status.type) {
-                    .Diagnostic => Colors.ui_gutter_diagnostic_error,
-                    .GitAdded => Colors.ui_gutter_git_added,
-                    .GitRemoved => Colors.ui_gutter_git_removed,
-                }
+                status.type.color()
             else if (has_highlight)
                 Colors.blue_light
             else if (line_idx >= self.viewport.lines.a and line_idx < self.viewport.lines.b)
