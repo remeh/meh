@@ -450,9 +450,9 @@ pub const WidgetTextEdit = struct {
             else if (has_highlight)
                 Colors.blue_light
             else if (line_idx >= self.viewport.lines.a and line_idx < self.viewport.lines.b)
-                Colors.withAlpha(Colors.ui_selection, 40)
+                Colors.white
             else
-                Colors.medium_gray;
+                Colors.gray;
 
             // Bar width: empty lines get a small dot, others scale proportionally
             const bar_width = if (len == 0)

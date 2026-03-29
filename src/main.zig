@@ -7,7 +7,7 @@ const Fd = @import("fd.zig").Fd;
 
 pub fn main() !void {
     // TODO(remy): configure the allocator properly
-    var gpa = std.heap.GeneralPurposeAllocator(.{
+    var gpa = std.heap.DebugAllocator(.{
         .stack_trace_frames = 32,
     }){};
     const allocator = gpa.allocator();
