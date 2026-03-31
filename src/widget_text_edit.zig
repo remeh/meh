@@ -90,6 +90,7 @@ pub const LineStatusType = enum {
 pub const LineStatus = struct {
     type: LineStatusType,
     message: ?U8Slice,
+    severity: ?u64 = null,
 
     pub fn deinit(self: LineStatus) void {
         if (self.message) |message| {

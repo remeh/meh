@@ -142,6 +142,7 @@ pub const LSPDiagnostic = struct {
     filepath: U8Slice,
     message: U8Slice,
     range: Vec4u,
+    severity: ?u64 = null,
     pub fn deinit(self: LSPDiagnostic) void {
         self.filepath.deinit();
         self.message.deinit();

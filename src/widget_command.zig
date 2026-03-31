@@ -327,6 +327,11 @@ pub const WidgetCommand = struct {
             return;
         }
 
+        if (std.mem.eql(u8, command, ":diag")) {
+            app.openDiagnosticResults();
+            return;
+        }
+
         if (std.mem.eql(u8, command, ":m")) {
             if (app.lsp_messages.items.len > 0) {
                 app.showMessageBoxMultiple(app.lsp_messages, .LSPMessage, .WithOverlay);

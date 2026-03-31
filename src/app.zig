@@ -752,6 +752,20 @@ pub const App = struct {
         self.focused_widget = .SearchResults;
     }
 
+    pub fn openDiagnosticResults(self: *App) void {
+        self.widget_search_results.setDiagnostics(self) catch |err| {
+            std.log.err("App.openDiagnosticResults: {}", .{err});
+            return;
+        };
+
+        if (self.widget_search_results.list.entries.items.len == 0) {
+            self.showMessageBoxError("No diagnostics.", .{});
+            return;
+        }
+
+        self.focused_widget = .SearchResults;
+    }
+
     pub fn increaseFont(self: *App) void {
         const font = Font.init(self.allocator, self.sdl_renderer, self.current_font.font_size + 2) catch |err| {
             std.log.err("App.increaseFont: can't load temporary font: {}", .{err});
@@ -1370,6 +1384,7 @@ pub const App = struct {
                             textedit.lines_status.put(diagnostic.range.b, LineStatus{
                                 .message = message,
                                 .type = .Diagnostic,
+                                .severity = diagnostic.severity,
                             }) catch |err| {
                                 std.log.err("App.interpretLSPMessage: can't add a diagnostic: {}", .{err});
                             };

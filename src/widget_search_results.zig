@@ -14,6 +14,7 @@ const utoi = @import("vec.zig").utoi;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
+const LineStatus = @import("widget_text_edit.zig").LineStatus;
 const WidgetInput = @import("widget_input.zig").WidgetInput;
 const WidgetList = @import("widget_list.zig").WidgetList;
 const WidgetListEntry = @import("widget_list.zig").WidgetListEntry;
@@ -161,6 +162,48 @@ pub const WidgetSearchResults = struct {
         }
 
         try self.list.label.appendConst("Implementations found:");
+        try self.list.filter();
+    }
+
+    pub fn setDiagnostics(self: *WidgetSearchResults, app: *App) !void {
+        self.list.reset();
+
+        for (app.textedits.items) |*textedit| {
+            const filepath = textedit.editor.buffer.fullpath.bytes();
+            var it = textedit.lines_status.iterator();
+            while (it.next()) |entry| {
+                const line_status = entry.value_ptr.*;
+                if (line_status.type != .Diagnostic) continue;
+
+                const line_num = entry.key_ptr.*;
+
+                var label = U8Slice.initEmpty(self.allocator);
+                if (line_status.severity) |sev| {
+                    const prefix: []const u8 = switch (sev) {
+                        1 => "[E] ",
+                        2 => "[W] ",
+                        3 => "[I] ",
+                        4 => "[H] ",
+                        else => "",
+                    };
+                    try label.appendConst(prefix);
+                }
+                if (line_status.message) |msg| {
+                    try label.appendConst(msg.bytes());
+                }
+
+                try self.list.entries.append(self.list.allocator, WidgetListEntry{
+                    .label = label,
+                    .data = try U8Slice.initFromSlice(self.allocator, filepath),
+                    .data_pos = Vec2i{ .a = 0, .b = utoi(line_num) },
+                    .extra_info = null,
+                    .extra_info_allocator = null,
+                    .type = .SearchResult,
+                });
+            }
+        }
+
+        try self.list.label.appendConst("Diagnostics:");
         try self.list.filter();
     }
 

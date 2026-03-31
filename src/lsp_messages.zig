@@ -316,6 +316,7 @@ pub const publishDiagnosticsParams = struct {
 pub const diagnostic = struct {
     message: []const u8,
     range: range,
+    severity: ?u64 = null, // 1=Error, 2=Warning, 3=Information, 4=Hint
 };
 
 pub const showMessageNotification = struct {

@@ -412,6 +412,7 @@ pub const LSPThread = struct {
                         .filepath = try filepath.copy(allocator),
                         .message = try U8Slice.initFromSlice(allocator, diagnostic.message),
                         .range = diagnostic.range.vec4u(),
+                        .severity = diagnostic.severity,
                     });
                 }
             }
