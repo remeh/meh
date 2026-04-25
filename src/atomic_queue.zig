@@ -142,7 +142,8 @@ pub fn DoublyLinkedList(comptime T: type) type {
 pub fn AtomicQueue(comptime T: type) type {
     return struct {
         l: DoublyLinkedList(T),
-        mutex: std.Thread.Mutex,
+        mutex: std.Io.Mutex,
+        io: std.Io,
         size: u32,
 
         const Self = @This();
@@ -150,25 +151,27 @@ pub fn AtomicQueue(comptime T: type) type {
 
         /// init creates an AtomicQueue.
         pub fn init() Self {
+            var threaded: std.Io.Threaded = .init_single_threaded;
             return .{
                 .l = DoublyLinkedList(T){},
-                .mutex = std.Thread.Mutex{},
+                .mutex = std.Io.Mutex.init,
+                .io = threaded.io(),
                 .size = 0,
             };
         }
 
         /// isEmpty returns if the queue is empty.
         pub fn isEmpty(self: *Self) bool {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lock(self.io) catch {};
+            defer self.mutex.unlock(self.io);
 
             return self.size == 0;
         }
 
         /// put puts a new entry in the queue.
         pub fn put(self: *Self, v: *Node) void {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lock(self.io) catch {};
+            defer self.mutex.unlock(self.io);
 
             self.size += 1;
 
@@ -177,8 +180,8 @@ pub fn AtomicQueue(comptime T: type) type {
 
         /// get returns the oldest message pushed into the queue.
         pub fn get(self: *Self) ?*Node {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            self.mutex.lock(self.io) catch {};
+            defer self.mutex.unlock(self.io);
 
             if (self.size == 0) {
                 return null;

@@ -152,6 +152,7 @@ pub const LSPDiagnostic = struct {
 // TODO(remy): comment
 pub const LSPContext = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     server_exec: []const u8,
     // queue used to communicate from the LSP thread to the main thread.
     response_queue: AtomicQueue(LSPResponse),
@@ -170,11 +171,12 @@ pub const LSP = struct {
     uri_working_dir: U8Slice,
     language_id: U8Slice,
 
-    pub fn init(allocator: std.mem.Allocator, server_exec: []const u8, language_id: []const u8, working_dir: []const u8) !*LSP {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, server_exec: []const u8, language_id: []const u8, working_dir: []const u8) !*LSP {
         // start a thread dealing with the LSP server in the background
         // create two queues for bidirectional communication
         var ctx = try allocator.create(LSPContext);
         ctx.allocator = allocator;
+        ctx.io = io;
         ctx.response_queue = AtomicQueue(LSPResponse).init();
         ctx.send_queue = AtomicQueue(LSPRequest).init();
         ctx.server_exec = server_exec;
@@ -652,7 +654,7 @@ pub const LSPWriter = struct {
     }
 
     fn toJson(allocator: std.mem.Allocator, message: anytype) !U8Slice {
-        var json_writer = std.io.Writer.Allocating.init(allocator);
+        var json_writer = std.Io.Writer.Allocating.init(allocator);
         std.json.Stringify.value(message, std.json.Stringify.Options{}, &json_writer.writer) catch |err| {
             std.log.err("LSPWriter.toJson: can't stringify: {}", .{err});
             return error.CantToJSON;

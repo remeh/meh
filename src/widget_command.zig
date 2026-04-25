@@ -131,7 +131,7 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":w")) {
             if (app.currentWidgetTextEdit()) |wte| {
-                wte.editor.save() catch |err| {
+                wte.editor.save(app.io) catch |err| {
                     std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ command, err });
                 };
                 app.updateDiffStats(wte.editor.buffer.fullpath.bytes());
@@ -177,7 +177,7 @@ pub const WidgetCommand = struct {
 
         if (std.mem.eql(u8, command, ":reload")) {
             if (app.currentWidgetTextEdit()) |wte| {
-                wte.editor.buffer.reload() catch |err| {
+                wte.editor.buffer.reload(app.io) catch |err| {
                     std.log.err("WidgetCommand.interpret: can't execute {s}: {}", .{ command, err });
                     return;
                 };

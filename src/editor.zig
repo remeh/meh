@@ -187,8 +187,8 @@ pub const Editor = struct {
     /// Returns an error if the Editor is wrapping a Buffer not based on a file (or not containing
     /// any filepath to write to).
     /// Resets the "changed" status.
-    pub fn save(self: *Editor) !void {
-        try self.buffer.writeOnDisk();
+    pub fn save(self: *Editor, io: std.Io) !void {
+        try self.buffer.writeOnDisk(io);
         self.has_changes_compared_to_disk = false;
     }
 
@@ -786,7 +786,7 @@ fn glyphCount(text: []const u8) usize {
 
 test "editor insert utf8 and undo/redo" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5"));
 
     try editor.insertUtf8Text(Vec2u{ .a = 0, .b = 9 }, "this is a test", .Input);
     var line = try editor.buffer.getLine(9);
@@ -807,7 +807,7 @@ test "editor insert utf8 and undo/redo" {
 
 test "editor new_line and undo/redo" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
     try editor.newLine(Vec2u{ .a = 3, .b = 1 }, .Input);
     try expect(editor.buffer.lines.items.len == 4);
@@ -835,7 +835,7 @@ test "editor new_line and undo/redo" {
 
 test "editor delete_line and undo/redo" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
     editor.deleteLine(0, .Input);
     try expect(editor.buffer.lines.items.len == 2);
@@ -855,7 +855,7 @@ test "editor delete_line and undo/redo" {
 
 test "editor delete_glyph and undo/redo" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_2"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_2"));
     try expect(editor.buffer.lines.items.len == 3);
     try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right, .Input);
     try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right, .Input);
@@ -887,7 +887,7 @@ test "editor delete_glyph and undo/redo" {
 
 test "editor delete_glyph utf8 and undo/redo" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_3"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_3"));
     try expect(editor.buffer.lines.items.len == 1);
     try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right, .Input);
     try editor.deleteGlyph(Vec2u{ .a = 0, .b = 0 }, .Right, .Input);
@@ -904,7 +904,7 @@ test "editor delete_glyph utf8 and undo/redo" {
 
 test "editor word_pos_at" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5"));
 
     var pos = try editor.wordPosAt(Vec2u{ .a = 16, .b = 3 });
     try expect(pos.a == 14);
@@ -923,7 +923,7 @@ test "editor word_pos_at" {
 
 test "editor word_pos" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5"));
 
     var str = try editor.wordAt(Vec2u{ .a = 16, .b = 3 });
     try expect(std.mem.eql(u8, str, "continuing"));
@@ -942,7 +942,7 @@ test "editor word_pos" {
 
 test "editor delete_chunk" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5"));
     defer editor.deinit();
 
     // complete first line, complete second, chunk of the third
@@ -960,7 +960,7 @@ test "editor delete_chunk" {
     // chunk within a line
     // ------------
 
-    editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5"));
     try expect(editor.buffer.linesCount() == 12);
 
     // start of a line
@@ -993,7 +993,7 @@ test "editor delete_chunk" {
 
 test "editor paste and undo/redo" {
     const allocator = std.testing.allocator;
-    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, "tests/sample_5"));
+    var editor = try Editor.init(allocator, try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5"));
     defer editor.deinit();
 
     var text = try U8Slice.initFromSlice(allocator, "text 👻 copied\nwith return line");

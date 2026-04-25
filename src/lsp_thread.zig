@@ -17,7 +17,8 @@ const Vec4u = @import("vec.zig").Vec4u;
 /// with the LSP server thread.
 const stdoutThreadContext = struct {
     allocator: std.mem.Allocator,
-    child: *std.process.Child,
+    io: std.Io,
+    child: std.process.Child,
     is_running: std.atomic.Value(bool),
     queue: AtomicQueue(U8Slice),
 };
@@ -38,16 +39,18 @@ pub const LSPThread = struct {
         const slice = try cmd.toOwnedSlice(ctx.allocator);
         defer ctx.allocator.free(slice);
 
-        var child = std.process.Child.init(slice, ctx.allocator);
-        child.stdin_behavior = .Pipe;
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Inherit; // display the error directly in the editor tty
-        try child.spawn();
+        var child = try std.process.spawn(ctx.io, .{
+            .argv = slice,
+            .stdin = .pipe,
+            .stdout = .pipe,
+            .stderr = .inherit, // display the error directly in the editor tty
+        });
 
         // start a thread reading the subprocess stdout
         var stdout_ctx = stdoutThreadContext{
             .allocator = ctx.allocator,
-            .child = &child,
+            .io = ctx.io,
+            .child = child,
             .queue = AtomicQueue(U8Slice).init(),
             .is_running = std.atomic.Value(bool).init(true),
         };
@@ -128,18 +131,14 @@ pub const LSPThread = struct {
                 } else {
                     // another kind of message, write it on the lsp server stdin
                     if (child.stdin) |stdin| {
-                        var buff: [1024 * 1024]u8 = undefined;
-                        var writer = stdin.writerStreaming(&buff);
-
                         const payload = try std.fmt.allocPrint(ctx.allocator, "Content-Length: {d}\r\n\r\n{s}", .{
                             node.data.json.size(),
                             node.data.json.bytes(),
                         });
-                        _ = writer.interface.write(payload) catch |err| {
+                        _ = stdin.writeStreamingAll(ctx.io, payload) catch |err| {
                             std.log.err("lspThread: can't send to the server: {}", .{err});
                         };
                         ctx.allocator.free(payload);
-                        try writer.interface.flush();
 
                         // store the request infos needed for later interpretation of the response
                         requests.put(node.data.request_id, node.data.message_type) catch |err| {
@@ -152,7 +151,7 @@ pub const LSPThread = struct {
                 ctx.allocator.destroy(node);
             }
 
-            std.posix.nanosleep(0, 100_000_000); // TODO(remy): replace with epoll/kqueue?
+            ctx.io.sleep(.fromNanoseconds(100_000_000), .awake) catch {};
         }
 
         message_assembler.deinit();
@@ -161,13 +160,7 @@ pub const LSPThread = struct {
 
         // kill the LSP server process
 
-        _ = child.kill() catch |err| {
-            if (err == error.FileNotFound) {
-                std.log.debug("LSP server binary not available on the system", .{});
-            } else {
-                std.log.debug("can't kill the lsp thread: {}", .{err});
-            }
-        };
+        child.kill(ctx.io);
 
         requests.deinit();
         drainQueues(ctx, &stdout_ctx);

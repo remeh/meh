@@ -29,11 +29,13 @@ pub const Exec = struct {
         // properly tear down the process. Using a 25MB read buffer for now to
         // avoid this as much as possible but in the future, I would like to return
         // a `RipgrepError.TooManyResults` instead in order to display something nice.
-        const result = try std.process.Child.run(.{
-            .allocator = allocator,
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const io = threaded.io();
+        const result = try std.process.run(allocator, io, .{
             .argv = args.items,
-            .cwd = cwd,
-            .max_output_bytes = 25 * 1024 * 1024,
+            .cwd = .{ .path = cwd },
+            .stdout_limit = .limited(25 * 1024 * 1024),
+            .stderr_limit = .limited(25 * 1024 * 1024),
         });
         errdefer {
             allocator.free(result.stderr);

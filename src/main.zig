@@ -5,20 +5,17 @@ const c = @import("clib.zig").c;
 const App = @import("app.zig").App;
 const Fd = @import("fd.zig").Fd;
 
-pub fn main() !void {
-    // TODO(remy): configure the allocator properly
-    var gpa = std.heap.DebugAllocator(.{
-        .stack_trace_frames = 32,
-    }){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.detectLeaks();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     // app
-    var app = try App.init(allocator);
+    var app = try App.init(allocator, io);
     defer app.deinit();
 
     // nothing passed as argument
-    if (std.os.argv.len <= 1) {
+    if (args.len <= 1) {
         const results = Fd.search(app.allocator, ".", app.working_dir.bytes()) catch |err| {
             std.log.err("main: can't exec 'fd {s}': {}", .{ ".", err });
             return;
@@ -28,14 +25,13 @@ pub fn main() !void {
         // stat the first parameter, if it is a directory, we want
         // to use it as the working dir and open the file opener
         // in this directory.
-        const first_arg = std.os.argv[1];
-        const first_arg_as_const = first_arg[0..std.mem.len(first_arg)];
-        const stat = std.fs.cwd().statFile(first_arg_as_const) catch |err| {
+        const first_arg = args[1];
+        const stat = std.Io.Dir.cwd().statFile(io, first_arg, .{}) catch |err| {
             std.log.debug("Error while opening the file: {}. Closing.", .{err});
             return;
         };
         if (stat.kind == .directory) {
-            const fullpath = try std.fs.realpathAlloc(allocator, first_arg_as_const);
+            const fullpath = try std.Io.Dir.cwd().realPathFileAlloc(io, first_arg, allocator);
             defer allocator.free(fullpath);
             app.working_dir.reset();
             try app.working_dir.appendConst(fullpath);
@@ -43,11 +39,9 @@ pub fn main() !void {
         } else {
             // otherwise, opens all of them as files
             var i: usize = 1;
-            while (i < std.os.argv.len) : (i += 1) {
-                var arg = std.os.argv[i];
-                const len = std.mem.len(arg);
-                app.openFile(arg[0..len]) catch {
-                    if (std.os.argv.len == 2) {
+            while (i < args.len) : (i += 1) {
+                app.openFile(args[i]) catch {
+                    if (args.len == 2) {
                         // do not open the app if there is only one file to open
                         // and we can't open it
                         return;

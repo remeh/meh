@@ -22,11 +22,13 @@ pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []con
         "git", "diff", filepath,
     };
 
-    const result = try std.process.Child.run(.{
-        .allocator = allocator,
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
+    const result = try std.process.run(allocator, io, .{
         .argv = &args,
-        .cwd = cwd,
-        .max_output_bytes = 25 * 1024 * 1024,
+        .cwd = .{ .path = cwd },
+        .stdout_limit = .limited(25 * 1024 * 1024),
+        .stderr_limit = .limited(25 * 1024 * 1024),
     });
     defer {
         allocator.free(result.stderr);

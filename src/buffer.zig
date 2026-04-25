@@ -52,9 +52,9 @@ pub const Buffer = struct {
     /// and copies it in the Buffer instance.
     /// initFromFile calls `trackLineReturnPositions` to start tracking the line returns.
     // TODO(remy): some refactoring (see `App.peekLine`) would be nice here.
-    pub fn initFromFile(allocator: std.mem.Allocator, filepath: []const u8) !Buffer {
+    pub fn initFromFile(allocator: std.mem.Allocator, io: std.Io, filepath: []const u8) !Buffer {
         // make sure that the provided fullpath is absolute
-        const path = try std.fs.realpathAlloc(allocator, filepath);
+        const path = try std.Io.Dir.cwd().realPathFileAlloc(io, filepath, allocator);
         defer allocator.free(path);
         var fullpath = U8Slice.initEmpty(allocator);
         try fullpath.appendConst(path);
@@ -68,8 +68,8 @@ pub const Buffer = struct {
 
         rv.in_ram_only = false;
 
-        var file = try std.fs.cwd().openFile(filepath, .{});
-        defer file.close();
+        var file = try std.Io.Dir.cwd().openFile(io, filepath, .{});
+        defer file.close(io);
 
         // TODO(remy): move this file reading into a separate method.
         // NOTE(remy): should we consider using an ArenaAllocator to read the file?
@@ -79,7 +79,6 @@ pub const Buffer = struct {
 
         const block_size = 4096;
         var slice: [4096]u8 = undefined;
-        var buff = &slice;
         var read: usize = block_size;
 
         var u8slice = U8Slice.initEmpty(allocator);
@@ -92,12 +91,13 @@ pub const Buffer = struct {
             i = 0;
             last_append = 0;
 
-            read = try file.read(buff);
+            const buffers = [_][]u8{ slice[0..] };
+            read = try file.readStreaming(io, &buffers);
 
             while (i < read) : (i += 1) {
-                if (buff[i] == '\n') {
+                if (slice[i] == '\n') {
                     // append the data left until the \n with the \n included
-                    try u8slice.appendConst(buff[last_append .. i + 1]); // allocate the data in an u8slice
+                    try u8slice.appendConst(slice[last_append .. i + 1]); // allocate the data in an u8slice
                     // append the line in the lines list of the buffer
                     try rv.lines.append(rv.allocator, u8slice);
                     // move the cursor in this buffer
@@ -107,7 +107,7 @@ pub const Buffer = struct {
                 }
             }
             // append the rest of the read buffer
-            try u8slice.appendConst(buff[last_append..read]);
+            try u8slice.appendConst(slice[last_append..read]);
         }
 
         // we completely read the file, if the buffer isn't empty, it means we have
@@ -127,7 +127,7 @@ pub const Buffer = struct {
     }
 
     /// writeOnDisk stores the buffer data in the file (in `fullpath`).
-    pub fn writeOnDisk(self: *Buffer) !void {
+    pub fn writeOnDisk(self: *Buffer, io: std.Io) !void {
         if (self.in_ram_only) {
             return;
         }
@@ -137,20 +137,19 @@ pub const Buffer = struct {
 
         // check if the file exists, if not, try creating it
         // TODO(remy): use a tmp file and mv at the end instead
-        var file = try (std.fs.cwd().createFile(self.fullpath.bytes(), .{ .truncate = true }));
+        var file = try std.Io.Dir.cwd().createFile(io, self.fullpath.bytes(), .{ .truncate = true });
         // at this point, the file is opened, defer closing it.
-        defer file.close();
+        defer file.close(io);
 
-        var bytes_written: usize = 0;
         for (self.lines.items) |line| {
-            bytes_written += try file.write(line.bytes());
+            try file.writeStreamingAll(io, line.bytes());
         }
-        try file.sync();
+        try file.sync(io);
         self.in_ram_only = false;
     }
 
     /// reload reloads the buffer from disk, discarding any unsaved changes.
-    pub fn reload(self: *Buffer) !void {
+    pub fn reload(self: *Buffer, io: std.Io) !void {
         if (self.in_ram_only) {
             return;
         }
@@ -166,12 +165,11 @@ pub const Buffer = struct {
 
         // Read the file again
         const filepath = self.fullpath.bytes();
-        var file = try std.fs.cwd().openFile(filepath, .{});
-        defer file.close();
+        var file = try std.Io.Dir.cwd().openFile(io, filepath, .{});
+        defer file.close(io);
 
         const block_size = 4096;
         var slice: [4096]u8 = undefined;
-        var buff = &slice;
         var read: usize = block_size;
 
         var u8slice = U8Slice.initEmpty(self.allocator);
@@ -182,12 +180,13 @@ pub const Buffer = struct {
             i = 0;
             last_append = 0;
 
-            read = try file.read(buff);
+            const buffers = [_][]u8{ slice[0..] };
+            read = try file.readStreaming(io, &buffers);
 
             while (i < read) : (i += 1) {
-                if (buff[i] == '\n') {
+                if (slice[i] == '\n') {
                     // append the data left until the \n with the \n included
-                    try u8slice.appendConst(buff[last_append .. i + 1]);
+                    try u8slice.appendConst(slice[last_append .. i + 1]);
                     // append the line in the lines list of the buffer
                     try self.lines.append(self.allocator, u8slice);
                     // move the cursor in this buffer
@@ -197,7 +196,7 @@ pub const Buffer = struct {
                 }
             }
             // append the rest of the read buffer
-            try u8slice.appendConst(buff[last_append..read]);
+            try u8slice.appendConst(slice[last_append..read]);
         }
 
         // we completely read the file, if the buffer isn't empty, it means we have
@@ -287,11 +286,12 @@ test "buffer init_empty" {
 
 test "buffer init_from_file" {
     const allocator = std.testing.allocator;
+    const io = std.testing.io;
 
     var working_dir = U8Slice.initEmpty(allocator);
     defer working_dir.deinit();
     // read cwd
-    const working_path = try std.fs.realpathAlloc(allocator, ".");
+    const working_path = try std.Io.Dir.cwd().realPathFileAlloc(io, ".", allocator);
     defer allocator.free(working_path);
     try working_dir.appendConst(working_path);
 
@@ -304,7 +304,7 @@ test "buffer init_from_file" {
     defer copy.deinit();
 
     try fullpath.appendConst("tests/sample_1");
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
+    var buffer = try Buffer.initFromFile(allocator, io, "tests/sample_1");
     try expect(buffer.in_ram_only == false);
     try expect(buffer.lines.items.len == 1);
     try expect(std.mem.eql(u8, buffer.fullpath.bytes(), fullpath.bytes()));
@@ -312,7 +312,7 @@ test "buffer init_from_file" {
     buffer.deinit();
 
     try copy.appendConst("tests/sample_2");
-    buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    buffer = try Buffer.initFromFile(allocator, io, "tests/sample_2");
     try expect(buffer.in_ram_only == false);
     try expect(buffer.lines.items.len == 3);
     try expect(std.mem.eql(u8, buffer.fullpath.bytes(), copy.bytes()));
@@ -324,30 +324,32 @@ test "buffer init_from_file" {
 
 test "buffer longest_line" {
     const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
+    const io = std.testing.io;
+    var buffer = try Buffer.initFromFile(allocator, io, "tests/sample_1");
     try std.testing.expectEqual(buffer.longestLine(0, buffer.lines.items.len), 12);
     buffer.deinit();
-    buffer = try Buffer.initFromFile(allocator, "tests/sample_3");
+    buffer = try Buffer.initFromFile(allocator, io, "tests/sample_3");
     try std.testing.expectEqual(buffer.longestLine(0, buffer.lines.items.len), 9);
     buffer.deinit();
-    buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    buffer = try Buffer.initFromFile(allocator, io, "tests/sample_5");
     try std.testing.expectEqual(buffer.longestLine(3, 5), 71);
     buffer.deinit();
 }
 
 test "buffer write_file" {
     const allocator = std.testing.allocator;
-    var buffer_first = try Buffer.initFromFile(allocator, "tests/sample_5");
+    const io = std.testing.io;
+    var buffer_first = try Buffer.initFromFile(allocator, io, "tests/sample_5");
 
     // read it and write it in a different file
-    var buffer_second = try Buffer.initFromFile(allocator, "tests/sample_5");
+    var buffer_second = try Buffer.initFromFile(allocator, io, "tests/sample_5");
     buffer_second.fullpath.deinit();
     buffer_second.fullpath = try U8Slice.initFromSlice(allocator, "tests/sample_5_test");
-    try buffer_second.writeOnDisk();
+    try buffer_second.writeOnDisk(io);
 
     // close it, read the newly created file
     buffer_second.deinit();
-    buffer_second = try Buffer.initFromFile(allocator, "tests/sample_5_test");
+    buffer_second = try Buffer.initFromFile(allocator, io, "tests/sample_5_test");
 
     // validate that it contains the correct data
     try std.testing.expectEqual(buffer_first.lines.items.len, buffer_second.lines.items.len);
@@ -366,7 +368,7 @@ test "buffer write_file" {
     }
 
     // remove the temporary file
-    try std.fs.deleteFileAbsolute(buffer_second.fullpath.bytes());
+    try std.Io.Dir.deleteFileAbsolute(io, buffer_second.fullpath.bytes());
 
     buffer_first.deinit();
     buffer_second.deinit();
@@ -374,7 +376,8 @@ test "buffer write_file" {
 
 test "buffer getLine" {
     const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    const io = std.testing.io;
+    var buffer = try Buffer.initFromFile(allocator, io, "tests/sample_2");
     defer buffer.deinit();
 
     // two get should always return the same pointer

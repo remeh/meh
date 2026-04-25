@@ -18,18 +18,20 @@ const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
 
 pub const WidgetLookup = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     current_path: U8Slice,
     list: WidgetList,
 
     // Constructors
     // ------------
 
-    pub fn init(allocator: std.mem.Allocator) !WidgetLookup {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io) !WidgetLookup {
         var current_path = U8Slice.initEmpty(allocator);
         try current_path.appendConst(".");
 
         return WidgetLookup{
             .allocator = allocator,
+            .io = io,
             .current_path = current_path,
             .list = try WidgetList.init(allocator, WidgetListFilterType.Label),
         };
@@ -65,7 +67,7 @@ pub const WidgetLookup = struct {
                 try self.current_path.appendConst("/");
                 try self.current_path.appendSlice(entry.label);
                 // make sure it is absolute
-                const fullpath = try std.fs.realpathAlloc(self.allocator, self.current_path.bytes());
+                const fullpath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, self.current_path.bytes(), self.allocator);
                 defer self.allocator.free(fullpath);
                 self.current_path.deinit();
                 // store it as the fullpath
@@ -97,10 +99,10 @@ pub const WidgetLookup = struct {
             .type = .Directory,
         });
 
-        var dir = try std.fs.cwd().openDir(self.current_path.bytes(), std.fs.Dir.OpenOptions{ .access_sub_paths = false, .iterate = true });
-        defer dir.close();
+        var dir = try std.Io.Dir.cwd().openDir(self.io, self.current_path.bytes(), .{ .access_sub_paths = false, .iterate = true });
+        defer dir.close(self.io);
         var it = dir.iterate();
-        while (try it.next()) |entry| {
+        while (try it.next(self.io)) |entry| {
             switch (entry.kind) {
                 .file, .directory => {
                     var t: WidgetListEntryType = .File;
@@ -190,6 +192,6 @@ pub const WidgetLookup = struct {
 
 test "WidgetLookup init/deinit" {
     // track leaks
-    var rv = try WidgetLookup.init(std.testing.allocator);
+    var rv = try WidgetLookup.init(std.testing.allocator, std.testing.io);
     rv.deinit();
 }

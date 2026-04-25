@@ -90,6 +90,7 @@ pub const StoreBufferPositionBehavior = enum {
 ///                    for high resolutions (for the text to not look small).
 pub const App = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     widget_autocomplete: WidgetAutocomplete,
     widget_command: WidgetCommand,
     widget_lookup: WidgetLookup,
@@ -173,7 +174,7 @@ pub const App = struct {
     // Constructors
     // ------------
 
-    pub fn init(allocator: std.mem.Allocator) !App {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io) !App {
         // SDL init
 
         if (c.SDL_Init(c.SDL_INIT_VIDEO) < 0) {
@@ -228,18 +229,19 @@ pub const App = struct {
         // working directory
 
         var working_dir = U8Slice.initEmpty(allocator);
-        const fullpath = try std.fs.realpathAlloc(allocator, ".");
+        const fullpath = try std.Io.Dir.cwd().realPathFileAlloc(io, ".", allocator);
         defer allocator.free(fullpath);
         try working_dir.appendConst(fullpath);
 
         // return the created app
         return App{
             .allocator = allocator,
+            .io = io,
             .widget_text_edit_pos = Vec2u{ .a = 0, .b = 8 * 4 },
             .textedits = std.ArrayListUnmanaged(WidgetTextEdit).empty,
             .widget_autocomplete = try WidgetAutocomplete.init(allocator),
             .widget_command = try WidgetCommand.init(allocator),
-            .widget_lookup = try WidgetLookup.init(allocator),
+            .widget_lookup = try WidgetLookup.init(allocator, io),
             .widget_messagebox = try WidgetMessageBox.init(allocator),
             .widget_search_results = try WidgetSearchResults.init(allocator),
             .current_widget_text_edit = 0,
@@ -326,7 +328,7 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn openFile(self: *App, filepath: []const u8) !void {
         // make sure that the provided filepath is absolute
-        const path = std.fs.realpathAlloc(self.allocator, filepath) catch |err| {
+        const path = std.Io.Dir.cwd().realPathFileAlloc(self.io, filepath, self.allocator) catch |err| {
             std.log.err("App.openFile: can't open {s}: {}", .{ filepath, err });
             return AppError.CantOpenFile;
         };
@@ -345,7 +347,7 @@ pub const App = struct {
         }
 
         // open the buffer, create an editor
-        var buffer = try Buffer.initFromFile(self.allocator, path);
+        var buffer = try Buffer.initFromFile(self.allocator, self.io, path);
         var text_edit = try WidgetTextEdit.initWithBuffer(self.allocator, buffer);
 
         // starts an LSP client if that makes sense.
@@ -462,7 +464,7 @@ pub const App = struct {
             return;
         };
 
-        self.lsp = try LSP.init(self.allocator, lsp_server, extension[1..], self.working_dir.bytes());
+        self.lsp = try LSP.init(self.allocator, self.io, lsp_server, extension[1..], self.working_dir.bytes());
         if (self.lsp) |lsp| {
             try lsp.initialize();
             try lsp.initialized();
@@ -614,7 +616,7 @@ pub const App = struct {
     // TODO(remy): unit test
     pub fn peekLine(self: *App, filepath: []const u8, line: usize) !U8Slice {
         // make sure that the provided fullpath is absolute
-        const fullpath = try std.fs.realpathAlloc(self.allocator, filepath);
+        const fullpath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, filepath, self.allocator);
         defer self.allocator.free(fullpath);
 
         // check if we have this data in loaded buffers
@@ -630,8 +632,8 @@ pub const App = struct {
         // we don't have this data available, peek on the filesystem
         // -------------
 
-        var file = try std.fs.cwd().openFile(fullpath, .{});
-        defer file.close();
+        var file = try std.Io.Dir.cwd().openFile(self.io, fullpath, .{});
+        defer file.close(self.io);
 
         const block_size = 4096;
         var reader_slice: [block_size]u8 = undefined;
@@ -646,7 +648,7 @@ pub const App = struct {
         var current_line: usize = 0;
         var line_offset: usize = 0;
 
-        var reader = file.reader(&reader_slice);
+        var reader = file.reader(self.io, &reader_slice);
 
         while (read == block_size) {
             i = 0;
@@ -1139,7 +1141,7 @@ pub const App = struct {
 
         const frame_per_second = 60;
         const max_ms_skip = 1000 / frame_per_second;
-        var start = std.time.milliTimestamp();
+                var start = @divTrunc(std.Io.Timestamp.now(self.io, .boot).nanoseconds, std.time.ns_per_ms);
         var focused_widget = self.focused_widget;
 
         // immediately trigger a first render pass for responsiveness when the
@@ -1149,7 +1151,7 @@ pub const App = struct {
 
         // mainloop
         while (self.is_running) {
-            start = std.time.milliTimestamp();
+            start = @divTrunc(std.Io.Timestamp.now(self.io, .boot).nanoseconds, std.time.ns_per_ms);
 
             // events handling
             // ---------------
@@ -1221,11 +1223,11 @@ pub const App = struct {
                 to_render = false;
             }
 
-            var max_sleep_ms = max_ms_skip - (std.time.milliTimestamp() - start);
+            var max_sleep_ms = max_ms_skip - (@divTrunc(std.Io.Timestamp.now(self.io, .boot).nanoseconds, std.time.ns_per_ms) - start);
             if (max_sleep_ms < 0) {
                 max_sleep_ms = 0;
             }
-            std.Thread.sleep(itou(max_sleep_ms * std.time.ns_per_ms));
+            self.io.sleep(.fromMilliseconds(@as(i64, @intCast(max_sleep_ms))), .awake) catch {};
         }
 
         c.SDL_StopTextInput();

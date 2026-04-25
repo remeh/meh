@@ -2041,7 +2041,7 @@ pub const WidgetTextEdit = struct {
 
 test "widget_text_edit moveCursor" {
     const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    var buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_2");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
@@ -2088,7 +2088,7 @@ test "widget_text_edit moveCursor" {
 
 test "widget_text_edit moveCursorSpecial" {
     const allocator = std.testing.allocator;
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    var buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_2");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.cursor.pos = Vec2u{ .a = 0, .b = 0 };
 
@@ -2110,7 +2110,7 @@ test "widget_text_edit moveCursorSpecial" {
 
     widget.deinit();
 
-    buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5");
     widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     // AfterIndentation
@@ -2147,14 +2147,14 @@ test "widget_text_edit moveCursorSpecial" {
 
 test "widget_text_edit init deinit" {
     const allocator = std.testing.allocator;
-    const buffer = try Buffer.initFromFile(allocator, "tests/sample_1");
+    const buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_1");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     widget.deinit();
 }
 
 test "widget_text_edit isSelected" {
     const allocator = std.testing.allocator;
-    const buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    const buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_2");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.startSelection(Vec2u{ .a = 3, .b = 0 }, .KeyboardSelection);
@@ -2183,7 +2183,7 @@ test "widget_text_edit isSelected" {
 
 test "widget_text_edit stopSelection enters Input" {
     const allocator = std.testing.allocator;
-    const buffer = try Buffer.initFromFile(allocator, "tests/sample_2");
+    const buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_2");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.startSelection(Vec2u{ .a = 3, .b = 0 }, .MouseSelection);
@@ -2197,7 +2197,7 @@ test "widget_text_edit stopSelection enters Input" {
 
 test "widget_text_edit scrollToCursor" {
     const allocator = std.testing.allocator;
-    const buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    const buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.viewport.columns = Vec2u{ .a = 0, .b = 5 };
@@ -2263,7 +2263,7 @@ test "widget_text_edit scrollToCursor" {
 
 test "widget_text_edit validate_cursor_pos" {
     const allocator = std.testing.allocator;
-    const buffer = try Buffer.initFromFile(allocator, "tests/sample_5");
+    const buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_5");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
 
     widget.setCursorPos(Vec2u{ .a = 3, .b = 4 }, .Scroll);
@@ -2296,7 +2296,7 @@ test "widget_text_edit validate_cursor_pos" {
 
 test "widget_text_edit deleteLine" {
     const allocator = std.testing.allocator;
-    const buffer = try Buffer.initFromFile(allocator, "tests/sample_4");
+    const buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_4");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     defer widget.deinit();
 
@@ -2330,7 +2330,7 @@ test "widget_text_edit deleteLine" {
 
 test "widget_text_edit onTab" {
     const allocator = std.testing.allocator;
-    const buffer = try Buffer.initFromFile(allocator, "tests/sample_4");
+    const buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_4");
     var widget = try WidgetTextEdit.initWithBuffer(allocator, buffer);
     defer widget.deinit();
 

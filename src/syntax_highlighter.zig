@@ -378,7 +378,7 @@ pub const SyntaxHighlighter = struct {
 test "line_syntax_highlighter main test" {
     const allocator = std.testing.allocator;
 
-    var buffer = try Buffer.initFromFile(allocator, "tests/sample_6.zig");
+    var buffer = try Buffer.initFromFile(allocator, std.testing.io, "tests/sample_6.zig");
     defer buffer.deinit();
     try std.testing.expectEqual(buffer.lines.items.len, 5);
 
