@@ -22,7 +22,7 @@ pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []con
         "git", "diff", filepath,
     };
 
-    var threaded: std.Io.Threaded = .init_single_threaded;
+    var threaded = std.Io.Threaded.init(allocator, .{});
     const io = threaded.io();
     const result = try std.process.run(allocator, io, .{
         .argv = &args,

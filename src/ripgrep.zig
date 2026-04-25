@@ -145,7 +145,7 @@ pub const Ripgrep = struct {
         // properly tear down the process. Using a 25MB read buffer for now to
         // avoid this as much as possible but in the future, I would like to return
         // a `RipgrepError.TooManyResults` instead in order to display something nice.
-        var threaded: std.Io.Threaded = .init_single_threaded;
+        var threaded = std.Io.Threaded.init(allocator, .{});
         const io = threaded.io();
         const result = try std.process.run(allocator, io, .{
             .argv = &args,
