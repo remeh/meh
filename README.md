@@ -9,11 +9,13 @@ Uses SDL2 for accelerated rendering and SDL2_ttf to load TTF files.
 Executes `ripgrep` to search through files, `fd` to find files and
 `git` for file changes display.
 
-Use `zig 0.15.1` to compile.
+Use `zig 0.15.2` to compile.
 
 ## Demo Video
 
 [Link to YouTube](https://www.youtube.com/watch?v=ewE9DWePxZ4)
+
+![Screenshot](https://raw.githubusercontent.com/remeh/meh/refs/heads/main/screenshot-20260425.png)
 
 ## Features
 
@@ -29,6 +31,7 @@ Use `zig 0.15.1` to compile.
 * Highlight a word using the mouse.
 * Open files navigating through directories. No fuzzy search.
 * Vertical split. One. No horizontal split.
+* Minimap.
 * Undo & redo.
 
 ## Documentation
