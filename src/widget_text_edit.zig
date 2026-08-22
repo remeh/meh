@@ -309,7 +309,7 @@ pub const WidgetTextEdit = struct {
 
         // render the line numbers
         while (i < self.viewport.lines.b and i < self.editor.buffer.lines.items.len) : (i += 1) {
-            _ = std.fmt.bufPrintZ(cbuff, "{d}", .{i + 1}) catch |err| {
+            const line_str = std.fmt.bufPrint(cbuff, "{d}", .{i + 1}) catch |err| {
                 std.log.err("WidgetTextEdit.renderLineNumbers: can't render line number {}: {}", .{ i, err });
                 return 0;
             };
@@ -356,7 +356,7 @@ pub const WidgetTextEdit = struct {
                 );
             }
 
-            Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset + 1 }, 0, text_color, cbuff);
+            Draw.text(font, scaler, Vec2u{ .a = text_pos_x, .b = y_offset + 1 }, 0, text_color, line_str);
 
             y_offset += self.one_char_size.b;
         }

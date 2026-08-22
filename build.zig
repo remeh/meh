@@ -2,8 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
-    b.verbose = true;
-
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -15,6 +13,26 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    // Generate Zig bindings for SDL2 / SDL2_ttf from the C headers. `@cImport`
+    // was removed from recent Zig versions, so we translate the C headers up
+    // front with the `translate-c` build step instead.
+    const sdl_bindings = b.addTranslateC(.{
+        .root_source_file = b.path("src/sdl_bindings.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    if (builtin.os.tag == .macos) {
+        sdl_bindings.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        sdl_bindings.addAfterIncludePath(.{ .cwd_relative = "/opt/homebrew/include/SDL2" });
+    } else {
+        sdl_bindings.addIncludePath(b.path("src"));
+    }
+    const sdl_module = sdl_bindings.createModule();
+    // The translated SDL API is exposed to clib.zig via `@import("c")`.
+    // (`@import("std")` used by the generated bindings is resolved by the
+    // compiler automatically.)
+
     const meh = b.addExecutable(.{
         .name = "meh",
         .root_module = b.createModule(.{
@@ -23,6 +41,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    meh.root_module.addImport("c", sdl_module);
 
     prepare(meh);
 
@@ -31,13 +50,13 @@ pub fn build(b: *std.Build) void {
 
     // macOS application artifact
     if (builtin.os.tag == .macos) {
-//        // copy the macOS app def
-//        const install_dir = b.addInstallDirectory(.{
-//            .source_dir = b.path("src/macos"), // source of the files to copy
-//            .install_dir = .prefix, // install to zig-out/
-//            .install_subdir = "macos", // subdirectory in the install path
-//        });
-//        b.getInstallStep().dependOn(&install_dir.step);
+        //        // copy the macOS app def
+        //        const install_dir = b.addInstallDirectory(.{
+        //            .source_dir = b.path("src/macos"), // source of the files to copy
+        //            .install_dir = .prefix, // install to zig-out/
+        //            .install_subdir = "macos", // subdirectory in the install path
+        //        });
+        //        b.getInstallStep().dependOn(&install_dir.step);
         const install_macos_release = b.addInstallArtifact(meh, .{
             .dest_dir = .{ .override = .{ .custom = "macos/meh.app/contents/MacOS/" } },
         });
@@ -46,9 +65,7 @@ pub fn build(b: *std.Build) void {
 
     const run_cmd = b.addRunArtifact(meh);
     run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
@@ -62,6 +79,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    meh_tests.root_module.addImport("c", sdl_module);
     const run_tests = b.addRunArtifact(meh_tests);
     prepare(meh_tests);
     test_step.dependOn(&run_tests.step);
