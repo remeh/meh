@@ -90,7 +90,10 @@ fn prepare(step: *std.Build.Step.Compile) void {
 
     // linked libraries
     step.root_module.linkSystemLibrary("SDL2", .{});
-    step.root_module.linkSystemLibrary("SDL2_ttf", .{});
+    // SDL2_ttf depends on SDL2, and its pkg-config flags include `-lSDL2`.
+    // Since we link SDL2 explicitly above, disable pkg-config for SDL2_ttf
+    // to avoid linking SDL2 twice (macOS dyld rejects duplicate dylibs).
+    step.root_module.linkSystemLibrary("SDL2_ttf", .{ .use_pkg_config = .no });
     switch (builtin.os.tag) {
         .macos => {
             step.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
