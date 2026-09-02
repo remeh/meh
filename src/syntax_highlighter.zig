@@ -150,6 +150,19 @@ pub const SyntaxHighlighter = struct {
         }
     }
 
+    /// resize adjusts the number of tracked syntax lines to `new_line_count`,
+    /// dropping or appending empty (dirty) entries as needed. This is used when
+    /// a buffer is reloaded from disk and its line count differs from before.
+    pub fn resize(self: *SyntaxHighlighter, new_line_count: usize) !void {
+        while (self.lines.items.len > new_line_count) {
+            var line = self.lines.orderedRemove(self.lines.items.len - 1);
+            line.deinit();
+        }
+        while (self.lines.items.len < new_line_count) {
+            try self.lines.append(self.allocator, LineSyntaxHighlight.init(self.allocator, true));
+        }
+    }
+
     /// setHighlightWord sets what word to highlight with the syntax highlighter.
     /// Returns whether or not the highlighting has change.
     pub fn setHighlightWord(self: *SyntaxHighlighter, word: ?[]const u8) bool {
@@ -544,4 +557,23 @@ test "line_syntax_highlighter http URL" {
     try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(5));  // /
     try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(6));  // /
     try std.testing.expectEqual(Colors.syntax_url, highlighted.getForColumn(14)); // c (example.com)
+}
+
+test "syntax_highlighter resize" {
+    const allocator = std.testing.allocator;
+
+    // grow
+    var sh = try SyntaxHighlighter.init(allocator, 2);
+    defer sh.deinit();
+    try std.testing.expectEqual(@as(usize, 2), sh.lines.items.len);
+    try sh.resize(5);
+    try std.testing.expectEqual(@as(usize, 5), sh.lines.items.len);
+
+    // shrink
+    try sh.resize(1);
+    try std.testing.expectEqual(@as(usize, 1), sh.lines.items.len);
+
+    // no-op
+    try sh.resize(1);
+    try std.testing.expectEqual(@as(usize, 1), sh.lines.items.len);
 }

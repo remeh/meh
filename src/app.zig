@@ -135,6 +135,22 @@ pub const App = struct {
     /// mainloop is running flag.
     is_running: bool,
 
+    /// last_disk_check_ms is the last time (in milliseconds) the app checked
+    /// for external file changes, used to throttle the automatic reload.
+    last_disk_check_ms: i96,
+    /// force_disk_check is set to true when the app should check for external
+    /// file changes on the next loop iteration regardless of the throttle
+    /// (e.g. when the window regained focus, or a buffer was switched to
+    /// after a long idle period).
+    force_disk_check: bool,
+    /// is_window_focused indicates whether the application window currently has
+    /// focus. Automatic disk reload checks are only performed while focused.
+    is_window_focused: bool,
+    /// pending_reload stores the index of a buffer that changed on disk and is
+    /// awaiting the user's confirmation before being reloaded. null when no
+    /// confirmation is pending.
+    pending_reload: ?usize,
+
     /// working_dir stores the current path to use when opening new files, etc.
     working_dir: U8Slice,
 
@@ -249,6 +265,10 @@ pub const App = struct {
             .has_split_view = false,
             .sdl_renderer = sdl_renderer.?,
             .is_running = true,
+            .last_disk_check_ms = 0,
+            .force_disk_check = false,
+            .is_window_focused = true,
+            .pending_reload = null,
             .previous_positions = std.ArrayListUnmanaged(BufferPosition).empty,
             .next_positions = std.ArrayListUnmanaged(BufferPosition).empty,
             .lsp = null,
@@ -433,6 +453,7 @@ pub const App = struct {
         // update what the widget indices
         // -------------
 
+        const prev_active = self.currentWidgetTextEditIndex();
         if (change_both) {
             self.current_widget_text_edit = text_edit;
             self.current_widget_text_edit_alt = text_edit;
@@ -442,6 +463,9 @@ pub const App = struct {
             } else {
                 self.current_widget_text_edit = text_edit;
             }
+        }
+        if (prev_active != null and prev_active.? != text_edit) {
+            self.onBufferSwitched(prev_active, text_edit);
         }
 
         self.refreshWindowTitle() catch {};
@@ -487,6 +511,137 @@ pub const App = struct {
         return &self.textedits.items[self.current_widget_text_edit];
     }
 
+    /// currentWidgetTextEditIndex returns the index of the currently focused
+    /// WidgetTextEdit (the active buffer).
+    fn currentWidgetTextEditIndex(self: *App) ?usize {
+        if (self.textedits.items.len == 0) {
+            return null;
+        }
+        if (self.has_split_view and self.focused_editor == .Right) {
+            if (self.current_widget_text_edit_alt >= self.textedits.items.len) {
+                return null;
+            }
+            return self.current_widget_text_edit_alt;
+        }
+        return self.current_widget_text_edit;
+    }
+
+    /// checkReloadFromDisk checks the active buffer's file on disk and, if it
+    /// changed since it was last read, asks the user for confirmation before
+    /// reloading it.
+    /// To avoid clobbering user edits, buffers with unsaved changes
+    /// (`has_changes_compared_to_disk == true`) are left untouched.
+    /// Buffers with `auto_reload_ms == 0` are never reloaded automatically.
+    /// Returns true if a confirmation popup was shown.
+    fn checkReloadFromDisk(self: *App) bool {
+        // While a confirmation dialog is already pending, do nothing.
+        if (self.pending_reload != null) {
+            return false;
+        }
+
+        const idx = self.currentWidgetTextEditIndex() orelse return false;
+        const textedit = &self.textedits.items[idx];
+        const editor = &textedit.editor;
+        const buffer = &editor.buffer;
+
+        // only file-backed buffers with a path can be reloaded.
+        if (buffer.in_ram_only or buffer.fullpath.size() == 0) {
+            return false;
+        }
+
+        // never reload a buffer that has unsaved local changes, otherwise we
+        // would silently discard the user's edits.
+        if (editor.has_changes_compared_to_disk) {
+            return false;
+        }
+
+        // skip buffers for which automatic reload has been disabled by the
+        // user (auto_reload_ms == 0).
+        if (buffer.auto_reload_ms == 0) {
+            return false;
+        }
+
+        const filepath = buffer.fullpath.bytes();
+        const stat = std.Io.Dir.cwd().statFile(self.io, filepath, .{}) catch |err| {
+            std.log.debug("App.checkReloadFromDisk: can't stat {s}: {}", .{ filepath, err });
+            return false;
+        };
+
+        // file unchanged on disk, nothing to do.
+        if (stat.mtime.nanoseconds == buffer.last_modified.nanoseconds) {
+            return false;
+        }
+
+        // file changed on disk: ask the user whether they want to reload.
+        self.pending_reload = idx;
+        const msg = std.fmt.allocPrint(
+            self.allocator,
+            "Reload {s} from disk? [y/n]",
+            .{std.fs.path.basename(filepath)},
+        ) catch |err| {
+            std.log.err("App.checkReloadFromDisk: can't allocate message: {}", .{err});
+            self.pending_reload = null;
+            return false;
+        };
+        defer self.allocator.free(msg);
+
+        self.widget_messagebox.set(msg, .Confirm, .WithOverlay) catch |err| {
+            std.log.err("App.checkReloadFromDisk: can't show messagebox: {}", .{err});
+            self.pending_reload = null;
+            return false;
+        };
+
+        // by default, messages are not sticky
+        self.sticky_message_box = false;
+        self.focused_widget = .MessageBox;
+        return true;
+    }
+
+    /// applyReload reloads the given buffer from disk (the one that was pending
+    /// confirmation) and refreshes everything that depends on its content.
+    fn applyReload(self: *App, idx: usize) void {
+        // defensive: the index must still be valid.
+        if (idx >= self.textedits.items.len) {
+            std.log.err("App.applyReload: buffer index {d} out of range", .{idx});
+            return;
+        }
+        const textedit = &self.textedits.items[idx];
+        const editor = &textedit.editor;
+        const buffer = &editor.buffer;
+        const filepath = buffer.fullpath.bytes();
+
+        buffer.reload(self.io) catch |err| {
+            std.log.err("App.applyReload: can't reload {s}: {}", .{ filepath, err });
+            return;
+        };
+
+        // re-highlight the whole buffer after reloading: first resize the
+        // syntax highlighter to match the new number of lines, then mark
+        // every line dirty.
+        editor.syntax_highlighter.resize(editor.linesCount()) catch |err| {
+            std.log.err("App.applyReload: can't resize syntax highlighter: {}", .{err});
+            return;
+        };
+        editor.syntax_highlighter.setAllDirty();
+
+        // reset the cursor to a valid position at the top of the file.
+        textedit.setCursorPos(Vec2u{ .a = 0, .b = 0 }, .None);
+
+        // clear stale per-line statuses (git / lsp diagnostics) since line
+        // numbers may have changed.
+        textedit.clearLineStatus(&.{ .GitAdded, .GitRemoved, .Diagnostic });
+
+        // notify the LSP of the full-document change so its internal state
+        // (diagnostics, completions, etc.) reflects the new file content.
+        if (editor.lsp) |lsp| {
+            lsp.didChangeComplete(&editor.buffer) catch |err| {
+                std.log.err("App.applyReload: can't send didChange to the LSP: {}", .{err});
+            };
+        }
+
+        std.log.info("App.applyReload: reloaded {s} from disk", .{filepath});
+    }
+
     /// refreshWindowTitle refreshes the WM window title using the currently
     /// focused WidgetText editor information.
     fn refreshWindowTitle(self: *App) !void {
@@ -507,14 +662,32 @@ pub const App = struct {
         }
     }
 
+    /// onBufferSwitched is called whenever the active buffer changes. It forces
+    /// an immediate disk check so the newly-focused buffer is always up to
+    /// date right after switching (regardless of the throttle interval).
+    fn onBufferSwitched(self: *App, prev_idx: ?usize, new_idx: usize) void {
+        if (prev_idx == null or prev_idx.? == new_idx) {
+            return;
+        }
+        if (!self.is_window_focused) {
+            return;
+        }
+        self.force_disk_check = true;
+    }
+
     /// setCurrentFocusedWidgetTextEditIndex is used to set the active WidgetTextEdit index (the
     /// right of the left one).
     fn setCurrentFocusedWidgetTextEditIndex(self: *App, index: usize) void {
+        // capture the previous active buffer index before switching.
+        const prev_idx = self.currentWidgetTextEditIndex();
+
         if (self.has_split_view and self.focused_editor == .Right) {
             self.current_widget_text_edit_alt = index;
         } else {
             self.current_widget_text_edit = index;
         }
+
+        self.onBufferSwitched(prev_idx, index);
     }
 
     /// toggleSplit closes and opens the split view.
@@ -1059,6 +1232,7 @@ pub const App = struct {
             return;
         };
 
+        self.pending_reload = null;
         self.focused_widget = .MessageBox;
         // by default, messages are not sticky
         self.sticky_message_box = false;
@@ -1075,6 +1249,7 @@ pub const App = struct {
 
         // by default, messages are not sticky
         self.sticky_message_box = false;
+        self.pending_reload = null;
         self.focused_widget = .MessageBox;
         self.render();
     }
@@ -1122,6 +1297,7 @@ pub const App = struct {
 
         // by default, messages are not sticky
         self.sticky_message_box = false;
+        self.pending_reload = null;
         self.focused_widget = .MessageBox;
         self.render();
     }
@@ -1165,8 +1341,20 @@ pub const App = struct {
                 // events to handle independently of the currently focused widget
                 switch (event.type) {
                     c.SDL_WINDOWEVENT => {
-                        if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
-                            self.onWindowResized();
+                        switch (event.window.event) {
+                            c.SDL_WINDOWEVENT_SIZE_CHANGED => self.onWindowResized(),
+                            c.SDL_WINDOWEVENT_FOCUS_GAINED => {
+                                self.is_window_focused = true;
+                                // force a disk check on the next loop iteration so
+                                // changes made while the app was not focused are
+                                // picked up immediately, without waiting for the
+                                // throttle to elapse.
+                                self.force_disk_check = true;
+                            },
+                            c.SDL_WINDOWEVENT_FOCUS_LOST => {
+                                self.is_window_focused = false;
+                            },
+                            else => {},
                         }
                     },
                     else => {},
@@ -1212,6 +1400,25 @@ pub const App = struct {
                     }
                     node.data.deinit();
                     lsp.context.allocator.destroy(node);
+                }
+            }
+
+            // Automatic file reload
+            // ---------------------
+            // Disabled while the window is unfocused. When focused, only the
+            // active buffer is checked, throttled to every ~5000ms to avoid
+            // stat-ing files on every frame. `force_disk_check` is set when the
+            // window regains focus or when switching to another buffer after a
+            // long idle period, so that check happens immediately.
+            const now_ms = @divTrunc(std.Io.Timestamp.now(self.io, .boot).nanoseconds, std.time.ns_per_ms);
+            const disk_check_interval_ms: i96 = 5000;
+            if (self.is_window_focused and
+                (self.force_disk_check or (now_ms - self.last_disk_check_ms >= disk_check_interval_ms)))
+            {
+                self.force_disk_check = false;
+                self.last_disk_check_ms = now_ms;
+                if (self.checkReloadFromDisk()) {
+                    to_render = true;
                 }
             }
 
@@ -1546,10 +1753,56 @@ pub const App = struct {
         switch (event.type) {
             c.SDL_KEYDOWN => {
                 switch (event.key.keysym.sym) {
+                    // 'y' confirms a pending reload.
+                    c.SDLK_y => {
+                        if (self.widget_messagebox.message == .Confirm) {
+                            if (self.pending_reload) |idx| {
+                                self.applyReload(idx);
+                                self.pending_reload = null;
+                                self.focused_widget = .Editor;
+                                self.widget_messagebox.overlay = .WithoutOverlay;
+                                self.render();
+                            }
+                        }
+                    },
+                    // 'n' declines a pending reload and disables automatic
+                    // reload for this buffer from now on.
+                    c.SDLK_n => {
+                        if (self.widget_messagebox.message == .Confirm) {
+                            if (self.pending_reload) |idx| {
+                                // defensive: the stored index must still be valid.
+                                if (idx >= self.textedits.items.len) {
+                                    std.log.err("App.messageBoxEvents: buffer index {d} out of range", .{idx});
+                                    self.pending_reload = null;
+                                    self.focused_widget = .Editor;
+                                    self.widget_messagebox.overlay = .WithoutOverlay;
+                                    self.render();
+                                    return;
+                                }
+                                const buffer = &self.textedits.items[idx].editor.buffer;
+                                buffer.auto_reload_ms = 0;
+                                self.pending_reload = null;
+                                self.focused_widget = .Editor;
+                                self.widget_messagebox.overlay = .WithoutOverlay;
+                                std.log.info("App.messageBoxEvents: automatic reload disabled for {s}", .{buffer.fullpath.bytes()});
+                                self.render();
+                            }
+                        }
+                    },
                     c.SDLK_RETURN => {
+                        // if any, dismisses the pending reload dialog but keeps
+                        // automatic reload enabled (the change will be detected
+                        // again on the next poll).
+                        self.pending_reload = null;
+
                         self.focused_widget = .Editor;
                     },
                     c.SDLK_ESCAPE => {
+                        // if any, dismisses the pending reload dialog but keeps
+                        // automatic reload enabled (the change will be detected
+                        // again on the next poll).
+                        self.pending_reload = null;
+
                         self.focused_widget = .Editor;
                         self.widget_messagebox.overlay = .WithoutOverlay;
                     },
