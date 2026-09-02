@@ -20,6 +20,7 @@ pub const WidgetMessageBoxType = enum {
     LSPHover,
     LSPMessage,
     Error,
+    Confirm,
 };
 
 pub const WidgetMessageBoxOverlay = enum {

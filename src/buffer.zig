@@ -28,6 +28,13 @@ pub const Buffer = struct {
     in_ram_only: bool,
     /// fullpath is the fullpath to the file backing this buffer storage.
     fullpath: U8Slice,
+    /// last_modified is the mtime of the file on disk when it was last read.
+    /// Used to detect external changes and trigger automatic reloads.
+    last_modified: std.Io.Timestamp,
+    /// auto_reload_ms is the interval (in milliseconds) between disk checks
+    /// for this buffer. A value of 0 disables automatic reload for this buffer
+    /// entirely (the user declined a reload confirmation once).
+    auto_reload_ms: u32,
     /// lines is the content of this Buffer.
     lines: std.ArrayListUnmanaged(U8Slice),
 
@@ -42,6 +49,8 @@ pub const Buffer = struct {
             .allocator = allocator,
             .in_ram_only = true,
             .fullpath = U8Slice.initEmpty(allocator),
+            .last_modified = .zero,
+            .auto_reload_ms = 500,
             .lines = std.ArrayListUnmanaged(U8Slice).empty,
         };
         try buff.lines.append(allocator, empty_line);
@@ -63,6 +72,8 @@ pub const Buffer = struct {
             .allocator = allocator,
             .in_ram_only = false,
             .fullpath = fullpath,
+            .last_modified = .zero,
+            .auto_reload_ms = 500,
             .lines = std.ArrayListUnmanaged(U8Slice).empty,
         };
 
@@ -123,6 +134,14 @@ pub const Buffer = struct {
             length += line.data.items.len;
         }
 
+        // capture the modification time of the file on disk so that we can
+        // detect later changes and auto-reload if needed.
+        const stat = std.Io.Dir.cwd().statFile(io, filepath, .{}) catch |err| {
+            std.log.err("Buffer.initFromFile: can't stat {s}: {}", .{ filepath, err });
+            return err;
+        };
+        rv.last_modified = stat.mtime;
+
         return rv;
     }
 
@@ -146,6 +165,14 @@ pub const Buffer = struct {
         }
         try file.sync(io);
         self.in_ram_only = false;
+
+        // refresh the last_modified time to avoid a spurious auto-reload right
+        // after a save.
+        const stat = std.Io.Dir.cwd().statFile(io, self.fullpath.bytes(), .{}) catch |err| {
+            std.log.err("Buffer.writeOnDisk: can't stat {s}: {}", .{ self.fullpath.bytes(), err });
+            return err;
+        };
+        self.last_modified = stat.mtime;
     }
 
     /// reload reloads the buffer from disk, discarding any unsaved changes.
@@ -204,6 +231,13 @@ pub const Buffer = struct {
         if (!u8slice.isEmpty()) {
             try self.lines.append(self.allocator, u8slice);
         }
+
+        // update the modification time to reflect what we just read from disk.
+        const stat = std.Io.Dir.cwd().statFile(io, filepath, .{}) catch |err| {
+            std.log.err("Buffer.reload: can't stat {s}: {}", .{ filepath, err });
+            return err;
+        };
+        self.last_modified = stat.mtime;
     }
 
     pub fn deinit(self: *Buffer) void {
@@ -396,4 +430,49 @@ test "buffer getLine" {
     // can't get more than what's in the buffer
     try std.testing.expectError(BufferError.OutOfBuffer, buffer.getLine(3));
     try std.testing.expectError(BufferError.OutOfBuffer, buffer.getLine(100));
+}
+
+test "buffer reload updates content and last_modified" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    const filepath = "tests/sample_reload_test";
+
+    // write an initial version of the file
+    {
+        var file = try std.Io.Dir.cwd().createFile(io, filepath, .{ .truncate = true });
+        defer file.close(io);
+        try file.writeStreamingAll(io, "first version\n");
+    }
+
+    // open a buffer from the file, capturing its mtime
+    var buffer = try Buffer.initFromFile(allocator, io, filepath);
+    defer buffer.deinit();
+    const original_mtime = buffer.last_modified;
+    try expect(buffer.lines.items.len == 1);
+    try std.testing.expectEqualStrings("first version\n", buffer.lines.items[0].bytes());
+
+    // auto_reload_ms is enabled (non-zero) by default
+    try expect(buffer.auto_reload_ms != 0);
+
+    // modify the file on disk
+    {
+        var file = try std.Io.Dir.cwd().createFile(io, filepath, .{ .truncate = true });
+        defer file.close(io);
+        try file.writeStreamingAll(io, "second version\n");
+    }
+
+    // reload the buffer
+    try buffer.reload(io);
+    try expect(buffer.lines.items.len == 1);
+    try std.testing.expectEqualStrings("second version\n", buffer.lines.items[0].bytes());
+
+    // the mtime should have been refreshed after the reload
+    const new_mtime = buffer.last_modified;
+    try expect(new_mtime.nanoseconds != original_mtime.nanoseconds);
+
+    // remove the temporary file
+    const abs_path = try std.Io.Dir.cwd().realPathFileAlloc(io, filepath, allocator);
+    defer allocator.free(abs_path);
+    try std.Io.Dir.deleteFileAbsolute(io, abs_path);
 }
