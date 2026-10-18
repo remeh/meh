@@ -19,7 +19,6 @@ const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const Vec4u = @import("vec.zig").Vec4u;
 const WidgetInput = @import("widget_input.zig").WidgetInput;
-const Insert = @import("widget_text_edit.zig").Insert;
 
 pub const WidgetListEntryType = enum {
     Autocomplete,

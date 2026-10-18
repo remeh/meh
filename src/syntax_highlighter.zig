@@ -209,7 +209,7 @@ pub const SyntaxHighlighter = struct {
     }
 
     fn reset(self: *SyntaxHighlighter) void {
-        self.lines.reset();
+        self.lines.clearRetainingCapacity();
     }
 
     // syntax highlighting

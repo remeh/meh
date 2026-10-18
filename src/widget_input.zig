@@ -10,7 +10,6 @@ const U8Slice = @import("u8slice.zig").U8Slice;
 const Vec2i = @import("vec.zig").Vec2i;
 const Vec2u = @import("vec.zig").Vec2u;
 const WidgetTextEdit = @import("widget_text_edit.zig").WidgetTextEdit;
-const Insert = @import("widget_text_edit.zig").Insert;
 
 /// WidgetInput is a simple one line input field for user input.
 pub const WidgetInput = struct {

@@ -11,7 +11,14 @@ pub fn build(b: *std.Build) void {
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
     // set a preferred release mode, allowing the user to decide how to optimize.
+    // Since Zig 0.18 the returned mode is optional: `null` means "nothing was
+    // selected on the command line", which modules resolve to Debug.
     const optimize = b.standardOptimizeOption(.{});
+
+    // `translate-c` wants a non-optional mode: the generated bindings do not
+    // depend on it, but the module derived from them is compiled with it, so
+    // follow whatever the executable and the tests are built with.
+    const bindings_optimize = optimize orelse .debug;
 
     // Generate Zig bindings for SDL2 / SDL2_ttf from the C headers. `@cImport`
     // was removed from recent Zig versions, so we translate the C headers up
@@ -19,7 +26,7 @@ pub fn build(b: *std.Build) void {
     const sdl_bindings = b.addTranslateC(.{
         .root_source_file = b.path("src/sdl_bindings.h"),
         .target = target,
-        .optimize = optimize,
+        .optimize = bindings_optimize,
         .link_libc = true,
     });
     if (builtin.os.tag == .macos) {

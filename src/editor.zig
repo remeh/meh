@@ -6,7 +6,6 @@ const Buffer = @import("buffer.zig").Buffer;
 const BufferError = @import("buffer.zig").BufferError;
 const Change = @import("history.zig").Change;
 const ChangeType = @import("history.zig").ChangeType;
-const History = @import("history.zig").History;
 const GitChange = @import("git.zig").GitChange;
 const LSP = @import("lsp.zig").LSP;
 const SyntaxHighlighter = @import("syntax_highlighter.zig").SyntaxHighlighter;

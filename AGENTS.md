@@ -12,7 +12,7 @@ zig build test --summary all  # run all unit tests
 
 If you need to run the binary for testing, make sure to run it in the background.
 
-Requires **Zig 0.17-dev**. Dependencies: `SDL2`, `SDL2_ttf` (system libraries).
+Requires **Zig 0.18-dev**. Dependencies: `SDL2`, `SDL2_ttf` (system libraries).
 
 ## Testing
 

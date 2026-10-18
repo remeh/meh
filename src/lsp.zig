@@ -1,5 +1,4 @@
 const std = @import("std");
-const Queue = std.atomic.Queue;
 
 const AtomicQueue = @import("atomic_queue.zig").AtomicQueue;
 const Buffer = @import("buffer.zig").Buffer;

@@ -21,8 +21,6 @@ const WidgetListEntry = @import("widget_list.zig").WidgetListEntry;
 const WidgetListEntryType = @import("widget_list.zig").WidgetListEntryType;
 const WidgetListFilterType = @import("widget_list.zig").WidgetListFilterType;
 
-const peekLine = @import("buffer.zig").peekLine;
-
 pub const WidgetSearchResults = struct {
     allocator: std.mem.Allocator,
     displayed_search: U8Slice,
@@ -49,7 +47,6 @@ pub const WidgetSearchResults = struct {
 
     pub fn reset(self: *WidgetSearchResults) void {
         self.list.reset();
-        self.results.deinit();
     }
 
     /// setDisplayedSearch clones `search` and doesn't managed the given one.
