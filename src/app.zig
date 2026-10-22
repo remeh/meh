@@ -96,7 +96,7 @@ pub const App = struct {
     widget_lookup: WidgetLookup,
     widget_messagebox: WidgetMessageBox,
     widget_search_results: WidgetSearchResults,
-    textedits: std.ArrayListUnmanaged(WidgetTextEdit),
+    textedits: std.ArrayList(WidgetTextEdit),
     sdl_window: *c.SDL_Window,
     sdl_renderer: *c.SDL_Renderer,
 
@@ -121,7 +121,7 @@ pub const App = struct {
     /// lsp server
     lsp: ?*LSP,
     /// lsp_messages contains the information messages sent by the LSP server.
-    lsp_messages: std.ArrayListUnmanaged(U8Slice),
+    lsp_messages: std.ArrayList(U8Slice),
 
     // TODO(remy): comment
     // TODO(remy): tests
@@ -156,11 +156,11 @@ pub const App = struct {
 
     /// previous_positions is used to be able to get back to a previous positions
     /// when jumping around in source code. See `previous_positions`.
-    previous_positions: std.ArrayListUnmanaged(BufferPosition),
+    previous_positions: std.ArrayList(BufferPosition),
 
     /// next_positions is used to get back to a more recent positions (after having
     /// moved to a previous one with `previous_positions`.
-    next_positions: std.ArrayListUnmanaged(BufferPosition),
+    next_positions: std.ArrayList(BufferPosition),
 
     /// current_widget_text_edit is the currently selected widget text in the
     /// opened WidgetTextEdits/editors/buffers.
@@ -254,7 +254,7 @@ pub const App = struct {
             .allocator = allocator,
             .io = io,
             .widget_text_edit_pos = Vec2u{ .a = 0, .b = 8 * 4 },
-            .textedits = std.ArrayListUnmanaged(WidgetTextEdit).empty,
+            .textedits = std.ArrayList(WidgetTextEdit).empty,
             .widget_autocomplete = try WidgetAutocomplete.init(allocator),
             .widget_command = try WidgetCommand.init(allocator),
             .widget_lookup = try WidgetLookup.init(allocator, io),
@@ -269,10 +269,10 @@ pub const App = struct {
             .force_disk_check = false,
             .is_window_focused = true,
             .pending_reload = null,
-            .previous_positions = std.ArrayListUnmanaged(BufferPosition).empty,
-            .next_positions = std.ArrayListUnmanaged(BufferPosition).empty,
+            .previous_positions = std.ArrayList(BufferPosition).empty,
+            .next_positions = std.ArrayList(BufferPosition).empty,
             .lsp = null,
-            .lsp_messages = std.ArrayListUnmanaged(U8Slice).empty,
+            .lsp_messages = std.ArrayList(U8Slice).empty,
             .sdl_window = sdl_window.?,
             .font_custom = null,
             .font_lowdpi = font_lowdpi,
@@ -1241,7 +1241,7 @@ pub const App = struct {
 
     // TODO(remy): comment
     // labels are copied in the messagebox, the caller is responsible of original labels memory.
-    pub fn showMessageBoxMultiple(self: *App, lines: std.ArrayListUnmanaged(U8Slice), box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
+    pub fn showMessageBoxMultiple(self: *App, lines: std.ArrayList(U8Slice), box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
         self.widget_messagebox.setMultiple(lines, box_type, with_overlay) catch |err| {
             std.log.err("App.showMessageBoxMultiple: can't open messagebox: {}", .{err});
             return;
@@ -1256,7 +1256,7 @@ pub const App = struct {
 
     // TODO(remy): comment
     pub fn showMessageBoxMultipleFromSlice(self: *App, lines: []const u8, box_type: WidgetMessageBoxType, with_overlay: WidgetMessageBoxOverlay) void {
-        var list = std.ArrayListUnmanaged(U8Slice).empty;
+        var list = std.ArrayList(U8Slice).empty;
         defer {
             for (list.items) |line| {
                 line.deinit();

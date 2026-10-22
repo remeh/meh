@@ -30,7 +30,7 @@ pub const WidgetCommand = struct {
     allocator: std.mem.Allocator,
     input: WidgetInput,
     /// history contains the previously executed commands, oldest first.
-    history: std.ArrayListUnmanaged(U8Slice),
+    history: std.ArrayList(U8Slice),
     /// history_index is the current position while browsing history with Up/Down.
     /// null means we are not currently browsing history.
     history_index: ?usize,
@@ -45,7 +45,7 @@ pub const WidgetCommand = struct {
         const rv = WidgetCommand{
             .allocator = allocator,
             .input = try WidgetInput.init(allocator),
-            .history = std.ArrayListUnmanaged(U8Slice).empty,
+            .history = std.ArrayList(U8Slice).empty,
             .history_index = null,
             .current_input = U8Slice.initEmpty(allocator),
         };

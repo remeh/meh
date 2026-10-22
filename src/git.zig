@@ -50,7 +50,7 @@ pub fn cmdGitDiff(allocator: std.mem.Allocator, filepath: []const u8, cwd: []con
 }
 
 fn parseForFile(allocator: std.mem.Allocator, line_it: *std.mem.SplitIterator(u8, .scalar)) ![]GitChange {
-    var rv = std.ArrayListUnmanaged(GitChange).empty;
+    var rv = std.ArrayList(GitChange).empty;
     var line_pos: u32 = 0;
     while (line_it.*.next()) |line| {
         if (std.mem.startsWith(u8, line, "diff --git a/")) {

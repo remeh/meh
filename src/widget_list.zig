@@ -39,7 +39,7 @@ pub const WidgetListEntry = struct {
     label: U8Slice,
     data: U8Slice,
     /// use this one if you need to display extra information in a message box
-    extra_info: ?std.ArrayListUnmanaged(U8Slice),
+    extra_info: ?std.ArrayList(U8Slice),
     extra_info_allocator: ?std.mem.Allocator,
     data_pos: Vec2i,
     data_range: ?Vec4u = null,
@@ -63,10 +63,10 @@ const page_jump: usize = 15;
 
 pub const WidgetList = struct {
     allocator: std.mem.Allocator,
-    entries: std.ArrayListUnmanaged(WidgetListEntry),
+    entries: std.ArrayList(WidgetListEntry),
     /// Slices in `filtered_entries` are pointing to values in `entries`, they
     /// should not be freed.
-    filtered_entries: std.ArrayListUnmanaged(WidgetListEntry),
+    filtered_entries: std.ArrayList(WidgetListEntry),
     filter_type: WidgetListFilterType,
     input: WidgetInput,
     label: U8Slice,
@@ -86,8 +86,8 @@ pub const WidgetList = struct {
 
         return WidgetList{
             .allocator = allocator,
-            .entries = std.ArrayListUnmanaged(WidgetListEntry).empty,
-            .filtered_entries = std.ArrayListUnmanaged(WidgetListEntry).empty,
+            .entries = std.ArrayList(WidgetListEntry).empty,
+            .filtered_entries = std.ArrayList(WidgetListEntry).empty,
             .filter_type = filter_type,
             .input = try WidgetInput.init(allocator),
             .label = U8Slice.initEmpty(allocator),

@@ -121,7 +121,7 @@ pub const WidgetTextEdit = struct {
 
     allocator: std.mem.Allocator,
     cursor: Cursor,
-    cursors_extra: std.ArrayListUnmanaged(Cursor),
+    cursors_extra: std.ArrayList(Cursor),
     editor: Editor,
     input_mode: InputMode,
     /// render_line_numbers is set to true when the line numbers have to be rendered
@@ -793,7 +793,7 @@ pub const WidgetTextEdit = struct {
     /// clearLineStatus empties the diagnostics map.
     pub fn clearLineStatus(self: *WidgetTextEdit, kinds: []const LineStatusType) void {
         // collect keys to remove first to avoid mutating the map during iteration
-        var to_remove = std.ArrayListUnmanaged(usize).empty;
+        var to_remove = std.ArrayList(usize).empty;
         defer to_remove.deinit(self.allocator);
 
         var it = self.lines_status.keyIterator();
@@ -1554,7 +1554,7 @@ pub const WidgetTextEdit = struct {
             .Command => {
                 // jump to next diagnostic
                 var it = self.lines_status.keyIterator();
-                var keys = std.ArrayListUnmanaged(usize).empty;
+                var keys = std.ArrayList(usize).empty;
                 defer keys.deinit(self.allocator);
 
                 while (it.next()) |key| {

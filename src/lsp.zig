@@ -53,11 +53,11 @@ pub const LSPResponse = struct {
     allocator: std.mem.Allocator,
     message_type: LSPMessageType,
     log_message: ?U8Slice, // TODO(remy): shouldn't this be a list of U8Slice instead?
-    completions: ?std.ArrayListUnmanaged(LSPCompletion),
-    diagnostics: ?std.ArrayListUnmanaged(LSPDiagnostic),
-    definitions: ?std.ArrayListUnmanaged(LSPPosition),
-    hover: ?std.ArrayListUnmanaged(U8Slice),
-    references: ?std.ArrayListUnmanaged(LSPPosition),
+    completions: ?std.ArrayList(LSPCompletion),
+    diagnostics: ?std.ArrayList(LSPDiagnostic),
+    definitions: ?std.ArrayList(LSPPosition),
+    hover: ?std.ArrayList(U8Slice),
+    references: ?std.ArrayList(LSPPosition),
     request_id: i64,
 
     pub fn init(allocator: std.mem.Allocator, request_id: i64, message_type: LSPMessageType) LSPResponse {

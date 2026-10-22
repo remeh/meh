@@ -36,7 +36,7 @@ pub const Buffer = struct {
     /// entirely (the user declined a reload confirmation once).
     auto_reload_ms: u32,
     /// lines is the content of this Buffer.
-    lines: std.ArrayListUnmanaged(U8Slice),
+    lines: std.ArrayList(U8Slice),
 
     // Constructors
     // ------------
@@ -51,7 +51,7 @@ pub const Buffer = struct {
             .fullpath = U8Slice.initEmpty(allocator),
             .last_modified = .zero,
             .auto_reload_ms = 500,
-            .lines = std.ArrayListUnmanaged(U8Slice).empty,
+            .lines = std.ArrayList(U8Slice).empty,
         };
         try buff.lines.append(allocator, empty_line);
         return buff;
@@ -74,7 +74,7 @@ pub const Buffer = struct {
             .fullpath = fullpath,
             .last_modified = .zero,
             .auto_reload_ms = 500,
-            .lines = std.ArrayListUnmanaged(U8Slice).empty,
+            .lines = std.ArrayList(U8Slice).empty,
         };
 
         rv.in_ram_only = false;

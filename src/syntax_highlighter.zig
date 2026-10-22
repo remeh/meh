@@ -41,17 +41,17 @@ pub const keywords = [_][]const u8{
 
 pub const LineSyntaxHighlight = struct {
     allocator: std.mem.Allocator,
-    columns: std.ArrayListUnmanaged(Vec4u),
+    columns: std.ArrayList(Vec4u),
     // highlight_rects is the glyph position (start, end) to highlight
     // using a rect.
-    highlight_rects: std.ArrayListUnmanaged(Vec2u),
+    highlight_rects: std.ArrayList(Vec2u),
     dirty: bool,
 
     pub fn init(allocator: std.mem.Allocator, dirty: bool) LineSyntaxHighlight {
         return LineSyntaxHighlight{
             .allocator = allocator,
-            .columns = std.ArrayListUnmanaged(Vec4u).empty,
-            .highlight_rects = std.ArrayListUnmanaged(Vec2u).empty,
+            .columns = std.ArrayList(Vec4u).empty,
+            .highlight_rects = std.ArrayList(Vec2u).empty,
             .dirty = dirty,
         };
     }
@@ -69,9 +69,9 @@ pub const LineSyntaxHighlight = struct {
     }
 
     pub fn copy(self: *LineSyntaxHighlight, allocator: std.mem.Allocator) !LineSyntaxHighlight {
-        var columns = std.ArrayListUnmanaged(Vec4u).empty;
+        var columns = std.ArrayList(Vec4u).empty;
         try columns.appendSlice(allocator, self.columns.items);
-        var rects = std.ArrayListUnmanaged(Vec2u).empty;
+        var rects = std.ArrayList(Vec2u).empty;
         try rects.appendSlice(allocator, self.highlight_rects.items);
         return LineSyntaxHighlight{
             .allocator = allocator,
@@ -85,12 +85,12 @@ pub const LineSyntaxHighlight = struct {
 /// SyntaxHighlighter is a token-based line syntax highlighter.
 pub const SyntaxHighlighter = struct {
     allocator: std.mem.Allocator,
-    lines: std.ArrayListUnmanaged(LineSyntaxHighlight),
+    lines: std.ArrayList(LineSyntaxHighlight),
     keyword_matcher: std.StringHashMap(void),
     word_under_cursor: ?[]const u8,
 
     pub fn init(allocator: std.mem.Allocator, line_count: usize) !SyntaxHighlighter {
-        var lines = std.ArrayListUnmanaged(LineSyntaxHighlight).empty;
+        var lines = std.ArrayList(LineSyntaxHighlight).empty;
 
         var i: usize = 0;
         while (i < line_count) : (i += 1) {
@@ -221,9 +221,9 @@ pub const SyntaxHighlighter = struct {
         word_under_cursor: ?[]const u8,
         keyword_matcher: std.StringHashMap(void),
     ) !LineSyntaxHighlight {
-        var columns = std.ArrayListUnmanaged(Vec4u).empty;
+        var columns = std.ArrayList(Vec4u).empty;
         errdefer columns.deinit(allocator);
-        var highlight_rects = std.ArrayListUnmanaged(Vec2u).empty;
+        var highlight_rects = std.ArrayList(Vec2u).empty;
         errdefer highlight_rects.deinit(allocator);
 
         if (line_content.size() == 0) {
@@ -380,7 +380,7 @@ pub const SyntaxHighlighter = struct {
         };
     }
 
-    fn color_with(columns: *std.ArrayListUnmanaged(Vec4u), start: usize, end: usize, color: Vec4u) void {
+    fn color_with(columns: *std.ArrayList(Vec4u), start: usize, end: usize, color: Vec4u) void {
         var idx = start;
         while (idx < end) : (idx += 1) {
             columns.items[idx] = color;

@@ -67,10 +67,10 @@ pub const WidgetAutocomplete = struct {
         return null;
     }
 
-    pub fn setCompletionItems(self: *WidgetAutocomplete, completions: std.ArrayListUnmanaged(LSPCompletion)) !void {
+    pub fn setCompletionItems(self: *WidgetAutocomplete, completions: std.ArrayList(LSPCompletion)) !void {
         self.list.reset();
         for (completions.items) |completion| {
-            var extra_info = std.ArrayListUnmanaged(U8Slice).empty;
+            var extra_info = std.ArrayList(U8Slice).empty;
             try extra_info.append(self.allocator, try completion.detail.copy(self.allocator));
 
             if (completion.documentation.size() > 0) {

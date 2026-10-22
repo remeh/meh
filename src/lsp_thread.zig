@@ -30,7 +30,7 @@ pub const LSPThread = struct {
 
         // spawn the LSP server process
 
-        var cmd = std.ArrayListUnmanaged([]const u8).empty;
+        var cmd = std.ArrayList([]const u8).empty;
         defer cmd.deinit(ctx.allocator);
         var it = std.mem.tokenizeScalar(u8, ctx.server_exec, ' ');
         while (it.next()) |arg| {
@@ -374,7 +374,7 @@ pub const LSPThread = struct {
         const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
-        rv.*.diagnostics = std.ArrayListUnmanaged(LSPDiagnostic).empty;
+        rv.*.diagnostics = std.ArrayList(LSPDiagnostic).empty;
         errdefer rv.*.diagnostics.?.deinit(allocator);
 
         const notification = try std.json.parseFromSlice(LSPMessages.publishDiagnosticsNotification, allocator, response[json_start_idx..], json_params);
@@ -423,7 +423,7 @@ pub const LSPThread = struct {
         const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
-        rv.*.completions = std.ArrayListUnmanaged(LSPCompletion).empty;
+        rv.*.completions = std.ArrayList(LSPCompletion).empty;
         errdefer rv.*.completions.?.deinit(allocator);
         const completions = try std.json.parseFromSlice(LSPMessages.completionsResponse, allocator, response[json_start_idx..], json_params);
         defer completions.deinit();
@@ -457,7 +457,7 @@ pub const LSPThread = struct {
         // Some LSP servers return only one result (an object), some returns
         // an array, through trial and error we have to test both.
 
-        rv.*.definitions = std.ArrayListUnmanaged(LSPPosition).empty;
+        rv.*.definitions = std.ArrayList(LSPPosition).empty;
 
         // single value JSON
         if (std.json.parseFromSlice(LSPMessages.definitionResponse, allocator, response[json_start_idx..], json_params)) |definition| {
@@ -504,7 +504,7 @@ pub const LSPThread = struct {
         const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
 
-        rv.*.hover = std.ArrayListUnmanaged(U8Slice).empty;
+        rv.*.hover = std.ArrayList(U8Slice).empty;
         errdefer rv.*.hover.?.deinit(allocator);
 
         const hoverResp = try std.json.parseFromSlice(LSPMessages.hoverResponse, allocator, response[json_start_idx..], json_params);
@@ -536,7 +536,7 @@ pub const LSPThread = struct {
     fn interpretReferences(rv: *LSPResponse, response: []const u8, json_start_idx: usize) !void {
         const allocator = rv.*.allocator;
         const json_params = std.json.ParseOptions{ .ignore_unknown_fields = true };
-        rv.references = std.ArrayListUnmanaged(LSPPosition).empty;
+        rv.references = std.ArrayList(LSPPosition).empty;
 
         const references = try std.json.parseFromSlice(LSPMessages.referencesResponse, allocator, response[json_start_idx..], json_params);
         defer references.deinit();

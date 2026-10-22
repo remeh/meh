@@ -127,10 +127,10 @@ pub const UTF8Iterator = struct {
 };
 
 /// U8Slice is a type helper to move []const u8 around in
-/// an `std.ArrayListUnmanaged(u8)` instance.
+/// an `std.ArrayList(u8)` instance.
 pub const U8Slice = struct {
     allocator: std.mem.Allocator,
-    data: std.ArrayListUnmanaged(u8),
+    data: std.ArrayList(u8),
 
     // Constructors
     // ------------
@@ -139,7 +139,7 @@ pub const U8Slice = struct {
     pub fn initEmpty(allocator: std.mem.Allocator) U8Slice {
         return U8Slice{
             .allocator = allocator,
-            .data = std.ArrayListUnmanaged(u8).empty,
+            .data = std.ArrayList(u8).empty,
         };
     }
 
@@ -258,7 +258,7 @@ pub const U8Slice = struct {
     /// reset resets the content of the U8Slice to not contain anything.
     pub fn reset(self: *U8Slice) void {
         self.data.deinit(self.allocator);
-        self.data = std.ArrayListUnmanaged(u8).empty;
+        self.data = std.ArrayList(u8).empty;
     }
 
     /// deinit releases memory used by the U8Slice.

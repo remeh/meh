@@ -30,7 +30,7 @@ pub const WidgetMessageBoxOverlay = enum {
 
 pub const WidgetMessageBox = struct {
     allocator: std.mem.Allocator,
-    lines: std.ArrayListUnmanaged(U8Slice),
+    lines: std.ArrayList(U8Slice),
     message: WidgetMessageBoxType,
     overlay: WidgetMessageBoxOverlay,
     x_offset: usize,
@@ -48,7 +48,7 @@ pub const WidgetMessageBox = struct {
 
         return WidgetMessageBox{
             .allocator = allocator,
-            .lines = std.ArrayListUnmanaged(U8Slice).empty,
+            .lines = std.ArrayList(U8Slice).empty,
             .message = undefined,
             .overlay = .WithOverlay,
             .x_offset = 0,
@@ -91,7 +91,7 @@ pub const WidgetMessageBox = struct {
     }
 
     /// setMultiple prepares the messagebox to display multiple lines.
-    pub fn setMultiple(self: *WidgetMessageBox, lines: std.ArrayListUnmanaged(U8Slice), message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
+    pub fn setMultiple(self: *WidgetMessageBox, lines: std.ArrayList(U8Slice), message: WidgetMessageBoxType, overlay: WidgetMessageBoxOverlay) !void {
         self.resetLines();
         for (lines.items) |line| {
             const copy = try line.copy(self.allocator);
@@ -254,7 +254,7 @@ test "widget_message_box main tests" {
     try std.testing.expectEqual(1, msgbox.lines.items.len);
     try std.testing.expectEqualStrings("an lsp diagnostic", msgbox.lines.items[0].bytes());
 
-    var lines = std.ArrayListUnmanaged(U8Slice).empty;
+    var lines = std.ArrayList(U8Slice).empty;
     try lines.append(allocator, try U8Slice.initFromSlice(allocator, "hello"));
     try lines.append(allocator, try U8Slice.initFromSlice(allocator, "world"));
     try msgbox.setMultiple(lines, .LSPDiagnostic, .WithOverlay);

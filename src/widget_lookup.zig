@@ -141,7 +141,7 @@ pub const WidgetLookup = struct {
     }
 
     /// setTextEdits sets the opened WidgetTextEdit for the WidgetLookup to list opened buffers.
-    pub fn setTextEdits(self: *WidgetLookup, textedits: std.ArrayListUnmanaged(WidgetTextEdit)) !void {
+    pub fn setTextEdits(self: *WidgetLookup, textedits: std.ArrayList(WidgetTextEdit)) !void {
         self.list.reset();
 
         for (textedits.items) |textedit| {

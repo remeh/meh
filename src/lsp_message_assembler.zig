@@ -33,8 +33,8 @@ pub const MessageAssembler = struct {
         self.buffer_planned_length = 0;
     }
 
-    pub fn next(self: *MessageAssembler, response: []const u8) std.ArrayListUnmanaged(U8Slice) {
-        var rv = std.ArrayListUnmanaged(U8Slice).empty;
+    pub fn next(self: *MessageAssembler, response: []const u8) std.ArrayList(U8Slice) {
+        var rv = std.ArrayList(U8Slice).empty;
         var done = false;
         var offset: u64 = 0;
 

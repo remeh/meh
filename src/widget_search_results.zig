@@ -120,7 +120,7 @@ pub const WidgetSearchResults = struct {
 
     /// setLspReferences creates all entries in the widget list using LSPPositions data.
     /// The given `references` are _NOT_ owned by the WidgetSearchResults (copies are created).
-    pub fn setLspReferences(self: *WidgetSearchResults, app: *App, references: std.ArrayListUnmanaged(LSPPosition)) !void {
+    pub fn setLspReferences(self: *WidgetSearchResults, app: *App, references: std.ArrayList(LSPPosition)) !void {
         self.list.reset();
 
         for (references.items) |reference| {
@@ -142,7 +142,7 @@ pub const WidgetSearchResults = struct {
 
     /// setLspImplementations creates all entries in the widget list using LSPPositions data.
     /// The given `implementations` are _NOT_ owned by the WidgetSearchResults (copies are created).
-    pub fn setLspImplementations(self: *WidgetSearchResults, app: *App, implementations: std.ArrayListUnmanaged(LSPPosition)) !void {
+    pub fn setLspImplementations(self: *WidgetSearchResults, app: *App, implementations: std.ArrayList(LSPPosition)) !void {
         self.list.reset();
 
         for (implementations.items) |impl| {
