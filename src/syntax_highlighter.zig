@@ -11,6 +11,8 @@ pub const keywords = [_][]const u8{
     "type",
     "interface",
     "struct",
+    "enum",
+    "union",
     "const",
 
     "defer",
@@ -29,6 +31,11 @@ pub const keywords = [_][]const u8{
     "if",
     "catch",
     "range",
+    "switch",
+    "comptime",
+    "await",
+    "async",
+    "match",
 
     "var",
     "let",
@@ -36,7 +43,14 @@ pub const keywords = [_][]const u8{
 
     "true",
     "false",
+    "null",
+    "undefined",
+    "error",
     "import",
+
+    "class",
+    "extends",
+    "namespace",
 };
 
 pub const LineSyntaxHighlight = struct {
@@ -63,7 +77,7 @@ pub const LineSyntaxHighlight = struct {
 
     pub fn getForColumn(self: LineSyntaxHighlight, column: usize) Vec4u {
         if (column >= self.columns.items.len) {
-            return Colors.light_gray;
+            return Colors.text;
         }
         return self.columns.items[column];
     }
@@ -341,6 +355,12 @@ pub const SyntaxHighlighter = struct {
                     if (!is_in_comment and str.len > 0 and keyword_matcher.contains(str)) {
                         color_with(&columns, word_start, current_pos, Colors.syntax_keyword);
                     }
+
+                    // numbers get their own color: they stand out from identifiers
+                    // without looking like keywords.
+                    if (!is_in_comment and str.len > 0 and std.ascii.isDigit(str[0])) {
+                        color_with(&columns, word_start, current_pos, Colors.syntax_number);
+                    }
                 }
 
                 // maybe it is the highlighted word?
@@ -495,6 +515,28 @@ test "line_syntax_highlighter URL in comment" {
     // Check that comment start is syntax_comment
     try std.testing.expectEqual(Colors.syntax_comment, highlighted.getForColumn(0)); // /
     try std.testing.expectEqual(Colors.syntax_comment, highlighted.getForColumn(1)); // /
+}
+
+test "line_syntax_highlighter numbers" {
+    const allocator = std.testing.allocator;
+
+    var sh = try SyntaxHighlighter.init(allocator, 1);
+    defer sh.deinit();
+
+    const test_line = "var i: usize = 42; // 7";
+    var line = try U8Slice.initFromSlice(allocator, test_line);
+    defer line.deinit();
+
+    _ = try sh.refresh(0, &line);
+
+    const highlighted = sh.getLine(0);
+
+    try std.testing.expectEqual(Colors.syntax_keyword, highlighted.getForColumn(0)); // v
+    try std.testing.expectEqual(Colors.ui_text_primary, highlighted.getForColumn(13)); // =
+    try std.testing.expectEqual(Colors.syntax_number, highlighted.getForColumn(15)); // 4
+    try std.testing.expectEqual(Colors.syntax_number, highlighted.getForColumn(16)); // 2
+    try std.testing.expectEqual(Colors.syntax_comment, highlighted.getForColumn(19)); // /
+    try std.testing.expectEqual(Colors.syntax_comment, highlighted.getForColumn(22)); // 7
 }
 
 test "line_syntax_highlighter URL in regular text" {

@@ -323,7 +323,11 @@ pub const WidgetList = struct {
         selected: bool,
     ) void {
         if (selected) {
-            Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = position.a + 2, .b = position.b + 5}, Vec2u{ .a = size.a - 4, .b = size.b - 4 }, Colors.ui_selection_focused);
+            Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = position.a + 2, .b = position.b + 5 }, Vec2u{ .a = size.a - 4, .b = size.b - 4 }, Colors.ui_selection_focused);
+
+            // an accent on the left of the selected entry, so it stays obvious
+            // even when the background is barely visible.
+            Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = position.a + 2, .b = position.b + 5 }, Vec2u{ .a = 2, .b = size.b - 4 }, Colors.blue);
         }
 
         // maximum amount if visible glyph
@@ -338,7 +342,7 @@ pub const WidgetList = struct {
                 };
                 const filename_size = font.textPixelSize(scaler, filename);
 
-                Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 6 }, size.a, Colors.white, filename);
+                Draw.text(font, scaler, Vec2u{ .a = position.a + 5, .b = position.b + 6 }, size.a, Colors.blue, filename);
 
                 const content = entry.label.bytes();
 
@@ -410,7 +414,7 @@ pub const WidgetList = struct {
                     scaler,
                     Vec2u{ .a = position.a + 5, .b = position.b + 6 },
                     size.a,
-                    Colors.white,
+                    Colors.ui_text_primary,
                     content[it.current_byte..],
                 );
             },

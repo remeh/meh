@@ -41,6 +41,7 @@ pub const Cursor = struct {
     /// `render` renders the cursor in the `WidgetTextEdit`.
     pub fn render(_: Cursor, sdl_renderer: *c.SDL_Renderer, input_mode: InputMode, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u, focused: bool) void {
         if (!focused) {
+            // a hollow cursor: the widget is not the one being edited
             Draw.rect(
                 sdl_renderer,
                 scaler,
@@ -48,8 +49,8 @@ pub const Cursor = struct {
                     .a = draw_pos.a,
                     .b = draw_pos.b,
                 },
-                Vec2u{ .a = one_char_size.a, .b = one_char_size.b },
-                Colors.medium_gray,
+                Vec2u{ .a = one_char_size.a, .b = one_char_size.b - 1 },
+                Colors.ui_cursor_unfocused,
             );
             return;
         }

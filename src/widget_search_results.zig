@@ -216,8 +216,8 @@ pub const WidgetSearchResults = struct {
     ) void {
         // overlay, shadow, background, border
 
-        Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Vec4u{ .a = 0, .b = 0, .c = 0, .d = 120 });
-        Draw.fillRect(sdl_renderer, scaler, .{ .a = position.a + 6, .b = position.b + 6 }, widget_size, Colors.shadow_medium);
+        Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Colors.ui_overlay);
+        Draw.fillRect(sdl_renderer, scaler, .{ .a = position.a + 6, .b = position.b + 6 }, widget_size, Colors.ui_panel_shadow);
         Draw.fillRect(sdl_renderer, scaler, position, widget_size, Colors.ui_surface);
         Draw.rect(sdl_renderer, scaler, position, widget_size, Colors.ui_border_light);
 

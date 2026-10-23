@@ -1,5 +1,6 @@
 test "all_tests" {
     _ = @import("buffer.zig");
+    _ = @import("colors.zig");
     _ = @import("editor.zig");
     _ = @import("lsp.zig");
     _ = @import("lsp_message_assembler.zig");

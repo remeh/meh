@@ -146,7 +146,8 @@ pub const WidgetAutocomplete = struct {
             .TopRight => Vec2u{ .a = cursor_pixel_pos.a - size.a, .b = cursor_pixel_pos.b + one_char_size.b },
             .BottomRight => Vec2u{ .a = cursor_pixel_pos.a - size.a, .b = cursor_pixel_pos.b + one_char_size.b - size.b },
         };
-        Draw.fillRect(sdl_renderer, scaler, top_left, size, Colors.dark_gray);
+        Draw.fillRect(sdl_renderer, scaler, top_left, size, Colors.ui_surface);
+        Draw.rect(sdl_renderer, scaler, top_left, size, Colors.ui_border_light);
 
         if (self.loading or self.no_results) {
             const text_start = Vec2u{
@@ -155,9 +156,9 @@ pub const WidgetAutocomplete = struct {
             };
 
             if (self.loading) {
-                Draw.text(font, scaler, text_start, 0, Colors.white, "Loading...");
+                Draw.text(font, scaler, text_start, 0, Colors.ui_text_secondary, "Loading...");
             } else {
-                Draw.text(font, scaler, text_start, 0, Colors.white, "No results.");
+                Draw.text(font, scaler, text_start, 0, Colors.ui_text_secondary, "No results.");
             }
             return;
         }

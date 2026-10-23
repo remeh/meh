@@ -148,7 +148,7 @@ pub const WidgetMessageBox = struct {
 
         // overlay
         if (self.overlay == .WithOverlay) {
-            Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Colors.withAlpha(Colors.darkest_gray, 150));
+            Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = 0, .b = 0 }, window_scaled_size, Colors.ui_overlay);
         }
 
         const lines_to_draw = @min(10, self.lines.items.len);
@@ -171,7 +171,7 @@ pub const WidgetMessageBox = struct {
                 };
 
                 // Draw shadow
-                Draw.fillRect(sdl_renderer, scaler, .{ .a = position.a + 6, .b = position.b + 6 }, size, Colors.shadow_medium);
+                Draw.fillRect(sdl_renderer, scaler, .{ .a = position.a + 6, .b = position.b + 6 }, size, Colors.ui_panel_shadow);
 
                 // background and border
                 Draw.fillRect(sdl_renderer, scaler, position, size, Colors.ui_surface);
@@ -215,8 +215,9 @@ pub const WidgetMessageBox = struct {
                     .b = 50,
                 };
 
-                // dark background
-                Draw.fillRect(sdl_renderer, scaler, position, size, Vec4u{ .a = 20, .b = 20, .c = 20, .d = 240 });
+                // panel, floating above the editor
+                Draw.fillRect(sdl_renderer, scaler, position, size, Colors.ui_surface);
+                Draw.rect(sdl_renderer, scaler, position, size, Colors.ui_border_light);
 
                 const line = self.lines.items[0];
                 var text: []const u8 = ""; // TODO(remy): doesn't support utf8
@@ -225,7 +226,7 @@ pub const WidgetMessageBox = struct {
                 }
 
                 // content
-                Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = position.b + 15 }, size.a - 30, Colors.white, text);
+                Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = position.b + 15 }, size.a - 30, Colors.ui_text_primary, text);
             },
         }
     }

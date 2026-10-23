@@ -10,6 +10,7 @@ const FdResults = @import("fd.zig").FdResults;
 const Fd = @import("fd.zig").Fd;
 const Font = @import("font.zig").Font;
 const GitError = @import("git.zig").GitError;
+const InputMode = @import("widget_text_edit.zig").InputMode;
 const LineStatus = @import("widget_text_edit.zig").LineStatus;
 const LSP = @import("lsp.zig").LSP;
 const LSPError = @import("lsp.zig").LSPError;
@@ -54,6 +55,31 @@ pub const FocusedEditor = enum {
     Left,
     Right,
 };
+
+/// inputModeLabel returns the label displayed in the status bar for the given
+/// editing mode.
+fn inputModeLabel(input_mode: InputMode) []const u8 {
+    return switch (input_mode) {
+        .Insert => "INSERT",
+        .Replace => "REPLACE",
+        .Command => "NORMAL",
+        // an operator is waiting for its motion
+        .d => "DELETE",
+        .f, .F => "FIND",
+        .r => "REPLACE 1 CHAR",
+    };
+}
+
+/// inputModeColor returns the color used by the status bar badge of the given
+/// editing mode.
+fn inputModeColor(input_mode: InputMode) Vec4u {
+    return switch (input_mode) {
+        .Insert => Colors.green,
+        .Replace => Colors.yellow,
+        .Command => Colors.blue,
+        .d, .f, .F, .r => Colors.orange,
+    };
+}
 
 pub const FontMode = enum {
     LowDPI,
@@ -955,6 +981,177 @@ pub const App = struct {
         self.current_font = font;
     }
 
+    /// titleBarHeight returns the height of the title bar drawn on top of an editor
+    /// pane (in window points, i.e. not scaled).
+    fn titleBarHeight(self: App) usize {
+        return self.oneCharSize().b + 8;
+    }
+
+    /// statusBarHeight returns the height of the status bar drawn at the bottom of
+    /// the window (in window points, i.e. not scaled).
+    fn statusBarHeight(self: App) usize {
+        return self.oneCharSize().b + 6;
+    }
+
+    /// renderTitleBar renders the bar drawn on top of an editor pane: the path of the
+    /// file it displays — the directory muted, the file name brighter — and the LSP
+    /// status on the right. `pos` is the top-left corner of the pane, and `width` its
+    /// width.
+    fn renderTitleBar(
+        self: *App,
+        scaler: Scaler,
+        pos: Vec2u,
+        width: usize,
+        height: usize,
+        widget_text_edit: *WidgetTextEdit,
+        focused: bool,
+    ) void {
+        const pad: usize = 8;
+        const one_char_size = self.oneCharSize();
+        const text_y = pos.b + (height - one_char_size.b) / 2;
+
+        // background and separator, only "lit" for the focused pane
+        if (focused) {
+            Draw.fillRect(
+                self.sdl_renderer,
+                scaler,
+                pos,
+                Vec2u{ .a = width, .b = height },
+                Colors.ui_background_alt,
+            );
+        }
+        Draw.line(
+            self.sdl_renderer,
+            scaler,
+            Vec2u{ .a = pos.a, .b = pos.b + height },
+            Vec2u{ .a = pos.a + width, .b = pos.b + height },
+            Colors.ui_border,
+        );
+
+        // path: the directory recedes, the file name stands out
+        const fullpath = widget_text_edit.editor.buffer.fullpath.bytes();
+        const dir, const name = if (std.mem.lastIndexOfScalar(u8, fullpath, '/')) |sep|
+            .{ fullpath[0 .. sep + 1], fullpath[sep + 1 ..] }
+        else
+            .{ "", fullpath };
+
+        var x = pos.a + pad;
+        if (dir.len > 0) {
+            Draw.text(
+                self.current_font,
+                scaler,
+                Vec2u{ .a = x, .b = text_y },
+                pos.a + width - x,
+                Colors.ui_text_muted,
+                dir,
+            );
+            x += self.current_font.textPixelSize(scaler, dir);
+        }
+
+        const name_color = if (focused) Colors.ui_text_primary else Colors.ui_text_secondary;
+        Draw.text(
+            self.current_font,
+            scaler,
+            Vec2u{ .a = x, .b = text_y },
+            pos.a + width - x,
+            name_color,
+            name,
+        );
+
+        // LSP has something to tell us: a dot and a label, right aligned.
+        if (self.lsp_messages.items.len > 0) {
+            const label = "LSP";
+            const dot_size: usize = 4;
+            const dot_gap: usize = 5;
+            const label_width = self.current_font.textPixelSize(scaler, label);
+            const dot_x = pos.a + width -| pad - dot_size - dot_gap - label_width;
+
+            Draw.fillRect(
+                self.sdl_renderer,
+                scaler,
+                Vec2u{ .a = dot_x, .b = pos.b + (height - dot_size) / 2 },
+                Vec2u{ .a = dot_size, .b = dot_size },
+                Colors.blue,
+            );
+            Draw.text(
+                self.current_font,
+                scaler,
+                Vec2u{ .a = dot_x + dot_size + dot_gap, .b = text_y },
+                0,
+                Colors.blue,
+                label,
+            );
+        }
+    }
+
+    /// renderStatusBar renders the bar at the bottom of the window: the current editing
+    /// mode, the path of the file being edited and the cursor position.
+    fn renderStatusBar(
+        self: *App,
+        scaler: Scaler,
+        height: usize,
+        widget_text_edit: *WidgetTextEdit,
+        focused: bool,
+    ) void {
+        const pad: usize = 8;
+        const one_char_size = self.oneCharSize();
+        const y = self.window_scaled_size.b -| height;
+        const text_y = y + (height - one_char_size.b) / 2;
+
+        Draw.fillRect(
+            self.sdl_renderer,
+            scaler,
+            Vec2u{ .a = 0, .b = y },
+            Vec2u{ .a = self.window_scaled_size.a, .b = height },
+            Colors.ui_background_alt,
+        );
+        Draw.line(
+            self.sdl_renderer,
+            scaler,
+            Vec2u{ .a = 0, .b = y },
+            Vec2u{ .a = self.window_scaled_size.a, .b = y },
+            Colors.ui_border,
+        );
+
+        // editing mode, shown as a badge whose color depends on the mode
+        const mode = inputModeLabel(widget_text_edit.input_mode);
+        const mode_color = inputModeColor(widget_text_edit.input_mode);
+        const badge_pad: usize = one_char_size.a;
+        const mode_width = self.current_font.textPixelSize(scaler, mode) + badge_pad * 2;
+
+        Draw.fillRect(
+            self.sdl_renderer,
+            scaler,
+            Vec2u{ .a = 0, .b = y },
+            Vec2u{ .a = mode_width, .b = height },
+            if (focused) mode_color else Colors.surface1,
+        );
+        Draw.text(
+            self.current_font,
+            scaler,
+            Vec2u{ .a = badge_pad, .b = text_y },
+            0,
+            if (focused) Colors.ui_text_on_accent else Colors.ui_text_secondary,
+            mode,
+        );
+
+        // cursor position, right aligned
+        var carray: [64]u8 = undefined;
+        const position = std.fmt.bufPrint(&carray, "L{d} C{d}", .{
+            widget_text_edit.cursor.pos.b + 1,
+            widget_text_edit.cursor.pos.a + 1,
+        }) catch return;
+
+        Draw.text(
+            self.current_font,
+            scaler,
+            Vec2u{ .a = self.window_scaled_size.a - pad - self.current_font.textPixelSize(scaler, position), .b = text_y },
+            0,
+            Colors.ui_text_secondary,
+            position,
+        );
+    }
+
     fn render(self: *App) void {
         // grab screen information every render pass
         // -----------------------------------------
@@ -970,48 +1167,43 @@ pub const App = struct {
 
         // clean up between passes
 
-        _ = c.SDL_SetRenderDrawColor(self.sdl_renderer, 30, 30, 30, 255);
+        _ = c.SDL_SetRenderDrawColor(
+            self.sdl_renderer,
+            Colors.ui_background.a,
+            Colors.ui_background.b,
+            Colors.ui_background.c,
+            255,
+        );
         _ = c.SDL_RenderClear(self.sdl_renderer);
 
         // editor window
 
         if (self.current_widget_text_edit < self.textedits.items.len) {
-            var widget_size = Vec2u{ .a = self.window_scaled_size.a, .b = self.window_scaled_size.b - one_char_size.b };
+            const title_bar_height = self.titleBarHeight();
+            const status_bar_height = self.statusBarHeight();
+
+            var widget_size = Vec2u{
+                .a = self.window_scaled_size.a,
+                .b = if (self.window_scaled_size.b > title_bar_height + status_bar_height)
+                    self.window_scaled_size.b - title_bar_height - status_bar_height
+                else
+                    self.window_scaled_size.b,
+            };
             if (self.has_split_view) {
                 widget_size.a /= 2;
             }
 
             var widget_text_edit = &self.textedits.items[self.current_widget_text_edit];
 
-            // File fullpath - draw background bar only for focused editor
-            const title_bar_height = one_char_size.b + 4;
-            if (self.focused_editor == .Left or !self.has_split_view) {
-                Draw.fillRect(
-                    self.sdl_renderer,
-                    scaler,
-                    Vec2u{ .a = 0, .b = 0 },
-                    Vec2u{ .a = widget_size.a, .b = title_bar_height },
-                    Colors.ui_background_alt,
-                );
-            }
-
-            Draw.text(self.current_font, scaler, Vec2u{ .a = 2, .b = 2 }, widget_size.a, Colors.ui_text_primary, widget_text_edit.editor.buffer.fullpath.bytes());
-
-            // Draw horizontal line below the title bar (full width) only for focused editor
-            if (self.focused_editor == .Left or !self.has_split_view) {
-                Draw.line(
-                    self.sdl_renderer,
-                    scaler,
-                    Vec2u{ .a = 0, .b = title_bar_height },
-                    Vec2u{ .a = widget_size.a, .b = title_bar_height },
-                    Colors.ui_border,
-                );
-            }
-
-            // LSP message buffer
-            if (self.lsp_messages.items.len > 0) {
-                Draw.text(self.current_font, scaler, Vec2u{ .a = widget_size.a - 10, .b = 2 }, one_char_size.a, Colors.white, "L");
-            }
+            // File fullpath
+            self.renderTitleBar(
+                scaler,
+                Vec2u{ .a = 0, .b = 0 },
+                widget_size.a,
+                title_bar_height,
+                widget_text_edit,
+                self.focused_editor == .Left or !self.has_split_view,
+            );
 
             widget_text_edit.render(
                 self.sdl_renderer,
@@ -1030,37 +1222,21 @@ pub const App = struct {
                 Draw.line(
                     self.sdl_renderer,
                     scaler,
-                    Vec2u{ .a = split_pos.a - 1, .b = split_pos.b },
-                    Vec2u{ .a = split_pos.a - 1, .b = widget_size.b },
+                    Vec2u{ .a = split_pos.a - 1, .b = 0 },
+                    Vec2u{ .a = split_pos.a - 1, .b = self.window_scaled_size.b },
                     Colors.ui_border,
                 );
 
                 var widget_text_edit_alt = &self.textedits.items[self.current_widget_text_edit_alt];
 
-                // Draw background bar for right editor title only if focused
-                if (self.focused_editor == .Right) {
-                    Draw.fillRect(
-                        self.sdl_renderer,
-                        scaler,
-                        Vec2u{ .a = split_pos.a, .b = 0 },
-                        Vec2u{ .a = widget_size.a, .b = title_bar_height },
-                        Colors.ui_background_alt,
-                    );
-
-                    Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a + 2, .b = 2 }, widget_size.a, Colors.ui_text_primary, widget_text_edit_alt.editor.buffer.fullpath.bytes());
-
-                    // Draw horizontal line below the title bar (full width)
-                    Draw.line(
-                        self.sdl_renderer,
-                        scaler,
-                        Vec2u{ .a = split_pos.a, .b = title_bar_height },
-                        Vec2u{ .a = split_pos.a + widget_size.a, .b = title_bar_height },
-                        Colors.ui_border,
-                    );
-                } else {
-                    // Draw text without background for unfocused editor
-                    Draw.text(self.current_font, scaler, Vec2u{ .a = split_pos.a + 2, .b = 2 }, widget_size.a, Colors.white, widget_text_edit_alt.editor.buffer.fullpath.bytes());
-                }
+                self.renderTitleBar(
+                    scaler,
+                    Vec2u{ .a = split_pos.a, .b = 0 },
+                    widget_size.a,
+                    title_bar_height,
+                    widget_text_edit_alt,
+                    self.focused_editor == .Right,
+                );
 
                 widget_text_edit_alt.render(
                     self.sdl_renderer,
@@ -1072,6 +1248,14 @@ pub const App = struct {
                     self.focused_editor == .Right,
                 );
             }
+
+            // status bar, at the very bottom of the window
+            self.renderStatusBar(
+                scaler,
+                status_bar_height,
+                widget_text_edit,
+                self.focused_widget == .Editor,
+            );
         }
 
         // widgets
@@ -1159,7 +1343,7 @@ pub const App = struct {
             },
         }
         self.font_mode = font_mode;
-        self.widget_text_edit_pos.b = self.oneCharSize().b + 4;
+        self.widget_text_edit_pos.b = self.titleBarHeight();
     }
 
     /// refreshWindowPixelSize refreshes the window pixel size.
@@ -1200,15 +1384,22 @@ pub const App = struct {
                 self.setFontMode(FontMode.LowDPIBigFont);
             }
         }
+        // the editor always starts right below the title bar
+        self.widget_text_edit_pos.b = self.titleBarHeight();
+
         // the viewport may have to be resized
         self.onWindowResized();
     }
 
     /// oneCharSize returns the bounding box of one text char.
+    /// The height is a little bigger than the font itself: a text line needs some
+    /// leading, otherwise lines of code look cramped.
     fn oneCharSize(self: App) Vec2u {
+        const leading = self.current_font.font_size / 10;
+
         return Vec2u{
             .a = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.current_font.font_size / 2)) / self.window_scaling)),
-            .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.current_font.font_size)) / self.window_scaling)),
+            .b = @as(usize, @intFromFloat(@as(f32, @floatFromInt(self.current_font.font_size + leading)) / self.window_scaling)),
         };
     }
 
