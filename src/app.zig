@@ -1119,7 +1119,7 @@ pub const App = struct {
         const badge_pad: usize = one_char_size.a;
         const mode_width = self.current_font.textPixelSize(scaler, mode) + badge_pad * 2;
 
-        Draw.fillRect(
+        Draw.rect(
             self.sdl_renderer,
             scaler,
             Vec2u{ .a = 0, .b = y },
@@ -1131,7 +1131,7 @@ pub const App = struct {
             scaler,
             Vec2u{ .a = badge_pad, .b = text_y },
             0,
-            if (focused) Colors.ui_text_on_accent else Colors.ui_text_secondary,
+            if (focused) mode_color else Colors.ui_text_secondary,
             mode,
         );
 
