@@ -1029,8 +1029,10 @@ pub const App = struct {
         else
             .{ "", fullpath };
 
+        // path: the directory muted, the file name stands out.
+        // Skipped when the pane is too narrow: a 0 max_width would draw unclipped.
         var x = pos.a + pad;
-        if (dir.len > 0) {
+        if (dir.len > 0 and x < pos.a + width) {
             Draw.text(
                 self.current_font,
                 scaler,
@@ -1043,14 +1045,16 @@ pub const App = struct {
         }
 
         const name_color = if (focused) Colors.ui_text_primary else Colors.ui_text_secondary;
-        Draw.text(
-            self.current_font,
-            scaler,
-            Vec2u{ .a = x, .b = text_y },
-            pos.a + width - x,
-            name_color,
-            name,
-        );
+        if (x < pos.a + width) {
+            Draw.text(
+                self.current_font,
+                scaler,
+                Vec2u{ .a = x, .b = text_y },
+                pos.a + width - x,
+                name_color,
+                name,
+            );
+        }
 
         // LSP has something to tell us: a dot and a label, right aligned.
         if (self.lsp_messages.items.len > 0) {
