@@ -123,13 +123,13 @@ const MiniMapGeometry = struct {
     indent: usize,
 };
 
-/// minimapGeometry returns how a line is drawn on the minimap, its indentation being
-/// made visible by where the bar starts. Widths and indentation are in "columns",
+/// minimapGeometry returns how a line is drawn on the minimap: its indentation is
+/// made visible by where the bar starts. Width and indentation are in "columns",
 /// a tab counting as `tab_spaces` of them.
 fn minimapGeometry(bytes: []const u8) MiniMapGeometry {
     var line = bytes;
 
-    // the line return is not part of the line as shown on the minimap
+    // the line return is not part of the line
     if (line.len > 0 and line[line.len - 1] == '\n') line = line[0 .. line.len - 1];
     if (line.len > 0 and line[line.len - 1] == '\r') line = line[0 .. line.len - 1];
 
@@ -268,13 +268,12 @@ pub const WidgetTextEdit = struct {
 
         var pos = draw_pos;
 
-        // highlight the line the cursor is on, all across the pane (but the minimap),
-        // so it stays readable wherever the cursor is.
+        // the line the cursor is on, across the whole pane but the minimap
         self.renderCurrentLine(
             sdl_renderer,
             scaler,
             draw_pos,
-            Vec2u{ .a = widget_size.a - minimap_width_px, .b = widget_size.b },
+            widget_size.a - minimap_width_px,
             one_char_size,
             focused,
         );
@@ -314,10 +313,10 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    /// renderCurrentLine highlights the line the cursor is on.
+    /// renderCurrentLine highlights the line the cursor is on, `width` wide.
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
     /// using the given `scaler`. `draw_pos` and `one_char_size` should be in pixel.
-    fn renderCurrentLine(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u, area_size: Vec2u, one_char_size: Vec2u, focused: bool) void {
+    fn renderCurrentLine(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u, width: usize, one_char_size: Vec2u, focused: bool) void {
         if (self.cursor.pos.b < self.viewport.lines.a or self.cursor.pos.b >= self.viewport.lines.b) {
             return;
         }
@@ -328,14 +327,13 @@ pub const WidgetTextEdit = struct {
             sdl_renderer,
             scaler,
             Vec2u{ .a = draw_pos.a, .b = y },
-            Vec2u{ .a = area_size.a, .b = one_char_size.b },
+            Vec2u{ .a = width, .b = one_char_size.b },
             if (focused) Colors.ui_current_line else Colors.withAlpha(Colors.ui_current_line, 22),
         );
     }
 
-    /// renderLineNumbers renders the lines number at the left of the widget, and the
-    /// vertical line separating them from the code.
-    /// The numbers are right aligned so that the digits of every line line up.
+    /// renderLineNumbers renders the lines number at the left of the widget, right
+    /// aligned, and the vertical line separating them from the code.
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
     /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
     /// Returns x offset introduced by drawing the lines numbers
@@ -346,8 +344,7 @@ pub const WidgetTextEdit = struct {
         var i: usize = self.viewport.lines.a;
         var y_offset: usize = draw_pos.b;
 
-        // measure how wide we need this block to be: the widest number, right
-        // aligned, with some room on both sides.
+        // measure how wide we need this block to be
 
         var max_digits: usize = 1;
         var line_count = self.editor.linesCount();
@@ -361,7 +358,7 @@ pub const WidgetTextEdit = struct {
         const numbers_right = draw_pos.a + width - right_pad;
         const separator_x = draw_pos.a + width + separator_vert_lines_and_text;
 
-        // the separator is drawn first, so a status marker can replace it on its own line
+        // drawn before the numbers, so a git/diagnostic marker can sit on top of it
         Draw.line(
             sdl_renderer,
             scaler,
@@ -380,7 +377,7 @@ pub const WidgetTextEdit = struct {
             const is_cursor_line = i == self.cursor.pos.b;
             const text_color = if (is_cursor_line) Colors.ui_line_number_current else Colors.ui_line_number;
 
-            // git/diagnostic marker: the segment of the separator of that line
+            // git/diagnostic marker, drawn over the separator
             if (self.lines_status.get(i)) |status| {
                 const marker_width: usize = if (is_cursor_line) 3 else 2;
                 Draw.fillRect(
@@ -437,7 +434,7 @@ pub const WidgetTextEdit = struct {
         const minimap_y = draw_pos.b;
         const minimap_height = widget_size.b;
 
-        // Draw background, separated from the text by a very light line
+        // background, and a light line separating it from the text
         Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = minimap_x, .b = minimap_y }, Vec2u{ .a = minimap_width_px, .b = minimap_height }, Colors.ui_minimap_background);
         Draw.line(
             sdl_renderer,
@@ -452,8 +449,7 @@ pub const WidgetTextEdit = struct {
 
         const capped_lines = @min(total_lines, max_minimap_lines);
         const line_height = @min(max_line_height, @as(f32, @floatFromInt(minimap_height)) / @as(f32, @floatFromInt(capped_lines)));
-        // leave a gap between two bars when there is room for it, this is what makes
-        // the minimap readable.
+        // leave a gap between two bars whenever there is room for it
         const bar_height = if (line_height >= 2)
             @as(usize, @intFromFloat(line_height)) - 1
         else
@@ -479,9 +475,8 @@ pub const WidgetTextEdit = struct {
 
         const scale_factor = @as(f32, @floatFromInt(max_visible_width)) / @as(f32, @floatFromInt(max_line_width));
 
-        // When the whole buffer doesn't fit the available height, several lines share
-        // the same row of the minimap. Drawing them all on top of each other makes it a
-        // smear, so one bar is drawn per row, using the widest line of the group.
+        // When the buffer doesn't fit the available height, several lines share the
+        // same row: draw one bar per row (the group's widest line) instead of a smear.
         const lines_per_row: usize = if (line_height >= 1)
             1
         else
@@ -499,7 +494,7 @@ pub const WidgetTextEdit = struct {
                 const line = self.editor.buffer.getLine(idx) catch continue;
                 const geo = minimapGeometry(line.bytes());
 
-                // blank lines carry no information, they leave the row empty
+                // a blank line leaves the row empty
                 if (geo.width == 0) {
                     continue;
                 }
@@ -518,7 +513,7 @@ pub const WidgetTextEdit = struct {
             const y = @as(usize, @intFromFloat(@as(f32, @floatFromInt(line_idx)) * line_height));
 
             const bar_width = @max(2, @min(max_visible_width, @as(usize, @intFromFloat(@as(f32, @floatFromInt(width)) * scale_factor))));
-            // the bar starts at the line's indentation, so the shape of the code shows up
+            // the bar starts where the line is indented
             const indent_width = @min(bar_width - 1, @as(usize, @intFromFloat(@as(f32, @floatFromInt(indent)) * scale_factor)));
 
             Draw.fillRect(
@@ -531,9 +526,9 @@ pub const WidgetTextEdit = struct {
         }
     }
 
-    /// minimapBarColor returns the color of the bar representing the given line on the
-    /// minimap: git and diagnostics first, then the occurrences of the word under the
-    /// cursor, then whether the line is currently visible.
+    /// minimapBarColor returns the color of the bar representing a line: git and
+    /// diagnostics first, then the matches of the word under the cursor, then whether
+    /// the line is visible.
     fn minimapBarColor(self: *WidgetTextEdit, line_idx: usize) Vec4u {
         if (self.lines_status.get(line_idx)) |status| {
             return Colors.withAlpha(status.type.color(), 200);
@@ -548,8 +543,7 @@ pub const WidgetTextEdit = struct {
     }
 
     /// renderIndentGuides draws one light vertical line per indentation level of the
-    /// given line, one column before the code that follows it. Tabs count as a level,
-    /// as do groups of `tab_spaces` spaces.
+    /// given line. Tabs count as a level, as do groups of `tab_spaces` spaces.
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
     /// using the given `scaler`. `draw_pos` and `one_char_size` should be in pixel.
     fn renderIndentGuides(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, line: []const u8, draw_pos: Vec2u, y: usize, one_char_size: Vec2u, left_blank_offset: usize) void {
@@ -560,7 +554,7 @@ pub const WidgetTextEdit = struct {
                 col += tab_spaces;
             } else if (ch == char_space) {
                 col += 1;
-                // only one guide every `tab_spaces` spaces
+                // one guide every `tab_spaces` spaces
                 if (col % tab_spaces != 0) {
                     continue;
                 }
@@ -568,8 +562,7 @@ pub const WidgetTextEdit = struct {
                 break;
             }
 
-            // the guide is drawn one column before what it introduces, and only if
-            // that column is still on screen (the viewport may have been scrolled).
+            // one column before the code it introduces, if still on screen
             const guide_col = col - 1;
             if (guide_col < self.viewport.columns.a) {
                 continue;
@@ -652,7 +645,6 @@ pub const WidgetTextEdit = struct {
                 var bytes = line.bytes();
                 var line_syntax_highlight = self.editor.syntax_highlighter.getLine(i);
 
-                // the indentation of the line, so the code structure shows up
                 self.renderIndentGuides(font.sdl_renderer, scaler, bytes, draw_pos, draw_pos.b + y_offset, one_char_size, left_blank_offset);
 
                 for (line_syntax_highlight.highlight_rects.items) |rect| {
@@ -665,8 +657,7 @@ pub const WidgetTextEdit = struct {
                             continue;
                         }
 
-                        // the occurrences of the word under the cursor: a soft background
-                        // and a light border, so they don't compete with the text itself.
+                        // the matches of the word under the cursor: soft background + border
                         Draw.fillRect(
                             font.sdl_renderer,
                             scaler,

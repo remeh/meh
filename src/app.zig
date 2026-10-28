@@ -56,22 +56,20 @@ pub const FocusedEditor = enum {
     Right,
 };
 
-/// inputModeLabel returns the label displayed in the status bar for the given
-/// editing mode.
+/// inputModeLabel returns the label shown in the status bar for a mode.
 fn inputModeLabel(input_mode: InputMode) []const u8 {
     return switch (input_mode) {
         .Insert => "INSERT",
         .Replace => "REPLACE",
         .Command => "NORMAL",
-        // an operator is waiting for its motion
+        // an operator waiting for its motion
         .d => "DELETE",
         .f, .F => "FIND",
         .r => "REPLACE 1 CHAR",
     };
 }
 
-/// inputModeColor returns the color used by the status bar badge of the given
-/// editing mode.
+/// inputModeColor returns the color of the status bar badge of a mode.
 fn inputModeColor(input_mode: InputMode) Vec4u {
     return switch (input_mode) {
         .Insert => Colors.green,
@@ -981,21 +979,18 @@ pub const App = struct {
         self.current_font = font;
     }
 
-    /// titleBarHeight returns the height of the title bar drawn on top of an editor
-    /// pane (in window points, i.e. not scaled).
+    /// titleBarHeight returns the height of the bar on top of an editor pane.
     fn titleBarHeight(self: App) usize {
         return self.oneCharSize().b + 8;
     }
 
-    /// statusBarHeight returns the height of the status bar drawn at the bottom of
-    /// the window (in window points, i.e. not scaled).
+    /// statusBarHeight returns the height of the bar at the bottom of the window.
     fn statusBarHeight(self: App) usize {
         return self.oneCharSize().b + 6;
     }
 
-    /// renderTitleBar renders the bar drawn on top of an editor pane: the path of the
-    /// file it displays and the LSP status on the right.
-    /// `pos` is the top-left corner of the pane, and `width` its width.
+    /// renderTitleBar renders the bar on top of an editor pane: the path of the file
+    /// it displays, and the LSP status on the right. `pos` is the pane's top-left corner.
     fn renderTitleBar(
         self: *App,
         scaler: Scaler,
@@ -1027,7 +1022,7 @@ pub const App = struct {
             Colors.ui_border,
         );
 
-        // path: the directory recedes, the file name stands out
+        // path: the directory muted, the file name stands out
         const fullpath = widget_text_edit.editor.buffer.fullpath.bytes();
         const dir, const name = if (std.mem.lastIndexOfScalar(u8, fullpath, '/')) |sep|
             .{ fullpath[0 .. sep + 1], fullpath[sep + 1 ..] }
@@ -1083,8 +1078,8 @@ pub const App = struct {
         }
     }
 
-    /// renderStatusBar renders the bar at the bottom of the window: the current editing
-    /// mode, the path of the file being edited and the cursor position.
+    /// renderStatusBar renders the bar at the bottom of the window: the editing mode on
+    /// the left, the cursor position on the right.
     fn renderStatusBar(
         self: *App,
         scaler: Scaler,
@@ -1112,7 +1107,7 @@ pub const App = struct {
             Colors.ui_border,
         );
 
-        // editing mode, shown as a badge whose color depends on the mode
+        // editing mode badge
         const mode = inputModeLabel(widget_text_edit.input_mode);
         const mode_color = inputModeColor(widget_text_edit.input_mode);
         const badge_pad: usize = one_char_size.a;
@@ -1194,7 +1189,6 @@ pub const App = struct {
 
             var widget_text_edit = &self.textedits.items[self.current_widget_text_edit];
 
-            // File fullpath
             self.renderTitleBar(
                 scaler,
                 Vec2u{ .a = 0, .b = 0 },
@@ -1248,7 +1242,7 @@ pub const App = struct {
                 );
             }
 
-            // status bar, at the very bottom of the window
+            // status bar
             self.renderStatusBar(
                 scaler,
                 status_bar_height,
@@ -1390,9 +1384,8 @@ pub const App = struct {
         self.onWindowResized();
     }
 
-    /// oneCharSize returns the bounding box of one text char.
-    /// The height is a little bigger than the font itself: a text line needs some
-    /// leading, otherwise lines of code look cramped.
+    /// oneCharSize returns the bounding box of one text char. The height is a little
+    /// bigger than the font: lines of code need some leading.
     fn oneCharSize(self: App) Vec2u {
         const leading = self.current_font.font_size / 10;
 

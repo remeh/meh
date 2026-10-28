@@ -356,8 +356,7 @@ pub const SyntaxHighlighter = struct {
                         color_with(&columns, word_start, current_pos, Colors.syntax_keyword);
                     }
 
-                    // numbers get their own color: they stand out from identifiers
-                    // without looking like keywords.
+                    // numbers have their own color, so they don't look like keywords
                     if (!is_in_comment and str.len > 0 and std.ascii.isDigit(str[0])) {
                         color_with(&columns, word_start, current_pos, Colors.syntax_number);
                     }

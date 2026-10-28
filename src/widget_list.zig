@@ -325,8 +325,7 @@ pub const WidgetList = struct {
         if (selected) {
             Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = position.a + 2, .b = position.b + 5 }, Vec2u{ .a = size.a - 4, .b = size.b - 4 }, Colors.ui_selection_focused);
 
-            // an accent on the left of the selected entry, so it stays obvious
-            // even when the background is barely visible.
+            // an accent on the left of the selected entry
             Draw.fillRect(sdl_renderer, scaler, Vec2u{ .a = position.a + 2, .b = position.b + 5 }, Vec2u{ .a = 2, .b = size.b - 4 }, Colors.blue);
         }
 

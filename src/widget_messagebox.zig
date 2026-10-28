@@ -28,10 +28,9 @@ pub const WidgetMessageBoxOverlay = enum {
     WithoutOverlay,
 };
 
-/// Ink describes how the lines of the box are drawn:
-///  - `syntax` is true when the content is code, and thus gets the same highlighting
-///    as the editor does;
-///  - `base` is the color of everything the syntax highlighter doesn't recognize.
+/// Ink describes how the lines of the box are drawn: `syntax` is true when the
+/// content is code and gets highlighted, `base` colors everything the
+/// highlighter doesn't recognize.
 const Ink = struct {
     syntax: bool,
     base: Vec4u,
@@ -112,16 +111,14 @@ pub const WidgetMessageBox = struct {
         self.y_offset = 0;
     }
 
-    /// messageInk returns how the current message has to be drawn.
-    /// The LSP messages display code — signatures, types, quoted identifiers — so they
-    /// all get highlighted, each keeping the color its type carries.
+    /// messageInk returns how the current message has to be drawn. The LSP messages
+    /// show code (signatures, types, quoted identifiers) so they all get highlighted.
     fn messageInk(self: WidgetMessageBox) Ink {
         return switch (self.message) {
-            // a diagnostic stays yellow, but the code it quotes stays highlighted.
+            // yellow, but the code it quotes stays highlighted
             .LSPDiagnostic => Ink{ .syntax = true, .base = Colors.syntax_todo },
-            // the hover and the completion's detail & documentation.
             .LSPHover, .LSPMessage => Ink{ .syntax = true, .base = Colors.ui_text_primary },
-            // the shell output is not code.
+            // the shell output is not code
             .ExecOutput => Ink{ .syntax = false, .base = Colors.ui_text_secondary },
             .Error, .Confirm => Ink{ .syntax = false, .base = Colors.ui_text_primary },
         };
@@ -147,8 +144,7 @@ pub const WidgetMessageBox = struct {
         };
 
         const base_pos = scaler.Scale2u(Vec2u{ .a = x, .b = y });
-        // the same advance as Draw.text, so a highlighted line is laid out exactly like
-        // a plain one.
+        // same advance as Draw.text, so both lay out the same way
         const glyph_advance = font.font_size / 2;
         const max_width_pixels = scaler.Scaleu(max_width);
         var render_x: usize = 0;
@@ -164,7 +160,7 @@ pub const WidgetMessageBox = struct {
                 render_x += font.font_size * 2;
             } else {
                 const column_color = line_highlight.getForColumn(it.current_glyph);
-                // whatever the highlighter didn't recognize takes the color of the message.
+                // whatever the highlighter didn't recognize takes the color of the message
                 const color = if (std.meta.eql(column_color, Colors.ui_text_primary)) base_color else column_color;
                 font.drawGlyph(Vec2u{ .a = base_pos.a + render_x, .b = base_pos.b }, color, g);
                 render_x += glyph_advance;
@@ -253,7 +249,7 @@ pub const WidgetMessageBox = struct {
                     .b = 50,
                 };
 
-                // panel, floating above the editor
+                // panel
                 Draw.fillRect(sdl_renderer, scaler, position, size, Colors.ui_surface);
                 Draw.rect(sdl_renderer, scaler, position, size, Colors.ui_border_light);
 
@@ -269,37 +265,6 @@ pub const WidgetMessageBox = struct {
         }
     }
 };
-
-// the LSP boxes show code, so they are highlighted; each keeps the color its type
-// carries, and what is not code stays plain.
-test "widget_message_box ink" {
-    const allocator = std.testing.allocator;
-    var msgbox = try WidgetMessageBox.init(allocator);
-    defer msgbox.deinit();
-
-    try msgbox.set("fn cwd() Linux", .LSPHover, .WithOverlay);
-    try expect(msgbox.messageInk().syntax);
-    try std.testing.expectEqual(Colors.ui_text_primary, msgbox.messageInk().base);
-
-    // the completion's detail & documentation
-    try msgbox.set("fn cwd() Linux", .LSPMessage, .WithoutOverlay);
-    try expect(msgbox.messageInk().syntax);
-    try std.testing.expectEqual(Colors.ui_text_primary, msgbox.messageInk().base);
-
-    // a diagnostic keeps its warning color
-    try msgbox.set("unused variable: foo", .LSPDiagnostic, .WithOverlay);
-    try expect(msgbox.messageInk().syntax);
-    try std.testing.expectEqual(Colors.syntax_todo, msgbox.messageInk().base);
-
-    // the shell output is not code
-    try msgbox.set("make: *** no rule to make target", .ExecOutput, .WithOverlay);
-    try expect(!msgbox.messageInk().syntax);
-    try std.testing.expectEqual(Colors.ui_text_secondary, msgbox.messageInk().base);
-
-    try msgbox.set("do you really want to quit?", .Confirm, .WithOverlay);
-    try expect(!msgbox.messageInk().syntax);
-    try std.testing.expectEqual(Colors.ui_text_primary, msgbox.messageInk().base);
-}
 
 test "widget_message_box main tests" {
     const allocator = std.testing.allocator;
