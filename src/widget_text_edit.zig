@@ -36,7 +36,7 @@ const glyph_offset_before_move = 5;
 
 const separator_vert_lines_and_text: usize = 5;
 // TODO(remy): comment
-const tab_spaces = 4;
+pub const tab_spaces = 4;
 
 pub const InputMode = enum {
     Command,

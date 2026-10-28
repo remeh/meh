@@ -4,6 +4,7 @@ const c = @import("clib.zig").c;
 const Colors = @import("colors.zig");
 const Draw = @import("draw.zig").Draw;
 const InputMode = @import("widget_text_edit.zig").InputMode;
+const tab_spaces = @import("widget_text_edit.zig").tab_spaces;
 const Scaler = @import("scaler.zig").Scaler;
 const U8Slice = @import("u8slice.zig").U8Slice;
 const char_tab = @import("u8slice.zig").char_tab;
@@ -93,12 +94,22 @@ pub const Cursor = struct {
     }
 
     pub fn posInPixel(cursor: Cursor, text_edit: *WidgetTextEdit, one_char_size: Vec2u) Vec2u {
-        const rv = Vec2u{
-            .a = text_edit.line_numbers_offset + (cursor.pos.a * one_char_size.a) - (text_edit.viewport.columns.a * one_char_size.a),
-            .b = cursor.pos.b * one_char_size.b - (text_edit.viewport.lines.a * one_char_size.b),
-        };
+        // x follows the tabs before the cursor, unlike a plain glyph count
+        var cols: usize = 0;
+        if (text_edit.editor.buffer.getLine(cursor.pos.b)) |line| {
+            if (UTF8Iterator.init(line.bytes(), 0)) |it_const| {
+                var it = it_const;
+                while (it.current_glyph < cursor.pos.a) {
+                    cols += if (it.glyph()[0] == char_tab) tab_spaces else 1;
+                    if (!it.next()) break;
+                }
+            } else |_| {}
+        } else |_| {}
 
-        return rv;
+        return Vec2u{
+            .a = text_edit.line_numbers_offset +| (cols * one_char_size.a) -| (text_edit.viewport.columns.a * one_char_size.a),
+            .b = (cursor.pos.b -| text_edit.viewport.lines.a) * one_char_size.b,
+        };
     }
 
     pub fn posFromWindowPos(_: Cursor, text_edit: *WidgetTextEdit, click_window_pos: Vec2u, draw_pos: Vec2u) Vec2u {
