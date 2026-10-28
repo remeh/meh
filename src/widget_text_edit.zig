@@ -32,9 +32,11 @@ const string_tab = @import("u8slice.zig").string_tab;
 
 // TODO(remy): where should we define this?
 // TODO(remy): comment
-pub const glyph_offset_before_move = 5;
+const glyph_offset_before_move = 5;
+
+const separator_vert_lines_and_text: usize = 5;
 // TODO(remy): comment
-pub const tab_spaces = 4;
+const tab_spaces = 4;
 
 pub const InputMode = enum {
     Command,
@@ -283,7 +285,7 @@ pub const WidgetTextEdit = struct {
         var left_offset: usize = 0;
 
         if (self.render_line_numbers) {
-            left_offset = self.renderLineNumbers(sdl_renderer, font, scaler, pos, one_char_size);
+            left_offset = self.renderLineNumbers(sdl_renderer, font, scaler, pos, widget_size, one_char_size);
             pos.a += left_offset;
         }
 
@@ -331,12 +333,13 @@ pub const WidgetTextEdit = struct {
         );
     }
 
-    /// renderLineNumbers renders the lines number at the left of the widget.
+    /// renderLineNumbers renders the lines number at the left of the widget, and the
+    /// vertical line separating them from the code.
     /// The numbers are right aligned so that the digits of every line line up.
     /// All positions must be given like if scaling (retina/highdpi) doesn't exist. The scale will be applied internally
-    /// using the given `scaler`. `draw_pos` and `one_char_size` should be in pixel.
+    /// using the given `scaler`. `draw_pos`, `widget_size` and `one_char_size` should be in pixel.
     /// Returns x offset introduced by drawing the lines numbers
-    fn renderLineNumbers(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, one_char_size: Vec2u) usize {
+    fn renderLineNumbers(self: WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, font: Font, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u, one_char_size: Vec2u) usize {
         var carray: [128]u8 = std.mem.zeroes([128]u8);
         const cbuff = &carray;
 
@@ -344,8 +347,7 @@ pub const WidgetTextEdit = struct {
         var y_offset: usize = draw_pos.b;
 
         // measure how wide we need this block to be: the widest number, right
-        // aligned, with some room on both sides (the git/diagnostic marker on the
-        // left, and a gap before the text on the right).
+        // aligned, with some room on both sides.
 
         var max_digits: usize = 1;
         var line_count = self.editor.linesCount();
@@ -357,6 +359,16 @@ pub const WidgetTextEdit = struct {
         const right_pad = one_char_size.a + 3;
         const width = max_digits * one_char_size.a + left_pad + right_pad;
         const numbers_right = draw_pos.a + width - right_pad;
+        const separator_x = draw_pos.a + width + separator_vert_lines_and_text;
+
+        // the separator is drawn first, so a status marker can replace it on its own line
+        Draw.line(
+            sdl_renderer,
+            scaler,
+            Vec2u{ .a = separator_x, .b = draw_pos.b },
+            Vec2u{ .a = separator_x, .b = draw_pos.b + widget_size.b },
+            Colors.ui_gutter_separator,
+        );
 
         // render the line numbers
         while (i < self.viewport.lines.b and i < self.editor.buffer.lines.items.len) : (i += 1) {
@@ -368,13 +380,14 @@ pub const WidgetTextEdit = struct {
             const is_cursor_line = i == self.cursor.pos.b;
             const text_color = if (is_cursor_line) Colors.ui_line_number_current else Colors.ui_line_number;
 
-            // git/diagnostic marker, drawn on the very left edge of the pane
+            // git/diagnostic marker: the segment of the separator of that line
             if (self.lines_status.get(i)) |status| {
+                const marker_width: usize = if (is_cursor_line) 3 else 2;
                 Draw.fillRect(
                     sdl_renderer,
                     scaler,
-                    Vec2u{ .a = draw_pos.a, .b = y_offset },
-                    Vec2u{ .a = if (is_cursor_line) 3 else 2, .b = one_char_size.b },
+                    Vec2u{ .a = separator_x - (marker_width / 2), .b = y_offset },
+                    Vec2u{ .a = marker_width, .b = one_char_size.b },
                     status.type.color(),
                 );
             }
@@ -412,8 +425,8 @@ pub const WidgetTextEdit = struct {
     }
 
     /// renderMiniMap renders a minimap of the entire buffer on the right side.
-    /// It shows a scaled-down version of the code — every line being a bar starting at
-    /// its indentation — with a rectangle indicating the currently visible area.
+    /// It shows a scaled-down version of the code, every line being a bar starting at
+    /// its indentation, with a rectangle indicating the currently visible area.
     fn renderMiniMap(self: *WidgetTextEdit, sdl_renderer: *c.SDL_Renderer, scaler: Scaler, draw_pos: Vec2u, widget_size: Vec2u) void {
         const x_margin: usize = 4;
         const width_margin: usize = 6;
@@ -562,7 +575,7 @@ pub const WidgetTextEdit = struct {
                 continue;
             }
 
-            const x = draw_pos.a + ((guide_col - self.viewport.columns.a) * one_char_size.a) + left_blank_offset;
+            const x = draw_pos.a + separator_vert_lines_and_text + ((guide_col - self.viewport.columns.a) * one_char_size.a) + left_blank_offset;
 
             Draw.line(
                 sdl_renderer,

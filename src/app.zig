@@ -994,9 +994,8 @@ pub const App = struct {
     }
 
     /// renderTitleBar renders the bar drawn on top of an editor pane: the path of the
-    /// file it displays — the directory muted, the file name brighter — and the LSP
-    /// status on the right. `pos` is the top-left corner of the pane, and `width` its
-    /// width.
+    /// file it displays and the LSP status on the right.
+    /// `pos` is the top-left corner of the pane, and `width` its width.
     fn renderTitleBar(
         self: *App,
         scaler: Scaler,

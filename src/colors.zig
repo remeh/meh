@@ -81,6 +81,9 @@ pub const ui_text_on_accent = crust;
 
 pub const ui_border = surface1;
 pub const ui_border_light = surface2;
+/// the hairline between the line numbers and the code: it separates two zones
+/// without framing them, so it stays on the dimmest step of the border ramp.
+pub const ui_gutter_separator = surface0;
 /// the 80 and 120 columns limits.
 pub const ui_column_limit = Vec4u{ .a = 255, .b = 255, .c = 255, .d = 14 };
 
@@ -209,6 +212,13 @@ test "colors: what is drawn on the editor stays readable" {
 
     if (worst < 2.5) std.debug.print("worst ink: {s} ({d:.2})\n", .{ worst_ink, worst });
     try std.testing.expect(worst > 2.5);
+}
+
+// a separator is a hint, not a frame: it stays visible on the editor background,
+// but never as strong as a real border.
+test "colors: the gutter separator stays a hint" {
+    try std.testing.expect(luminance(ui_gutter_separator) > luminance(base));
+    try std.testing.expect(contrastRatio(ui_gutter_separator, base) < contrastRatio(ui_border, base));
 }
 
 // the backgrounds are dark grays, not tinted blues or purples, and they stay

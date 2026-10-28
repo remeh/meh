@@ -28,6 +28,15 @@ pub const WidgetMessageBoxOverlay = enum {
     WithoutOverlay,
 };
 
+/// Ink describes how the lines of the box are drawn:
+///  - `syntax` is true when the content is code, and thus gets the same highlighting
+///    as the editor does;
+///  - `base` is the color of everything the syntax highlighter doesn't recognize.
+const Ink = struct {
+    syntax: bool,
+    base: Vec4u,
+};
+
 pub const WidgetMessageBox = struct {
     allocator: std.mem.Allocator,
     lines: std.ArrayList(U8Slice),
@@ -103,35 +112,68 @@ pub const WidgetMessageBox = struct {
         self.y_offset = 0;
     }
 
-    fn renderSyntaxHighlighted(self: WidgetMessageBox, font: Font, scaler: Scaler, x: usize, y: usize, max_width: usize, text: []const u8) void {
-        _ = max_width;
+    /// messageInk returns how the current message has to be drawn.
+    /// The LSP messages display code — signatures, types, quoted identifiers — so they
+    /// all get highlighted, each keeping the color its type carries.
+    fn messageInk(self: WidgetMessageBox) Ink {
+        return switch (self.message) {
+            // a diagnostic stays yellow, but the code it quotes stays highlighted.
+            .LSPDiagnostic => Ink{ .syntax = true, .base = Colors.syntax_todo },
+            // the hover and the completion's detail & documentation.
+            .LSPHover, .LSPMessage => Ink{ .syntax = true, .base = Colors.ui_text_primary },
+            // the shell output is not code.
+            .ExecOutput => Ink{ .syntax = false, .base = Colors.ui_text_secondary },
+            .Error, .Confirm => Ink{ .syntax = false, .base = Colors.ui_text_primary },
+        };
+    }
 
+    fn renderSyntaxHighlighted(self: WidgetMessageBox, font: Font, scaler: Scaler, x: usize, y: usize, max_width: usize, base_color: Vec4u, text: []const u8) void {
         var content_slice = U8Slice.initEmpty(self.allocator);
         defer content_slice.deinit();
         content_slice.appendConst(text) catch {
-            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, 0, Colors.ui_text_secondary, text);
+            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, max_width, base_color, text);
             return;
         };
 
         var line_highlight = SyntaxHighlighter.compute(self.allocator, &content_slice, null, self.keyword_matcher) catch {
-            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, 0, Colors.ui_text_secondary, text);
+            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, max_width, base_color, text);
             return;
         };
         defer line_highlight.deinit();
 
         var it = UTF8Iterator.init(text, 0) catch {
-            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, 0, Colors.ui_text_secondary, text);
+            Draw.text(font, scaler, Vec2u{ .a = x, .b = y }, max_width, base_color, text);
             return;
         };
 
         const base_pos = scaler.Scale2u(Vec2u{ .a = x, .b = y });
+        // the same advance as Draw.text, so a highlighted line is laid out exactly like
+        // a plain one.
+        const glyph_advance = font.font_size / 2;
+        const max_width_pixels = scaler.Scaleu(max_width);
         var render_x: usize = 0;
         var has_more = true;
 
         while (has_more) {
-            const color = line_highlight.getForColumn(it.current_glyph);
-            font.drawGlyph(Vec2u{ .a = base_pos.a + render_x, .b = base_pos.b }, color, it.glyph());
-            render_x += font.font_size / 2;
+            const g = it.glyph();
+            if (g[0] == 0 or g[0] == '\n' or g[0] == '\r') {
+                break;
+            }
+
+            if (g[0] == '\t') {
+                render_x += font.font_size * 2;
+            } else {
+                const column_color = line_highlight.getForColumn(it.current_glyph);
+                // whatever the highlighter didn't recognize takes the color of the message.
+                const color = if (std.meta.eql(column_color, Colors.ui_text_primary)) base_color else column_color;
+                font.drawGlyph(Vec2u{ .a = base_pos.a + render_x, .b = base_pos.b }, color, g);
+                render_x += glyph_advance;
+            }
+
+            if (max_width > 0 and render_x >= max_width_pixels) {
+                break;
+            }
+
             has_more = it.next();
         }
     }
@@ -155,10 +197,7 @@ pub const WidgetMessageBox = struct {
 
         switch (self.message) {
             .ExecOutput, .LSPDiagnostic, .LSPHover, .LSPMessage => {
-                var color = Colors.ui_text_secondary;
-                if (self.message == .LSPDiagnostic) {
-                    color = Colors.syntax_todo;
-                }
+                const ink = self.messageInk();
 
                 const lines_pixel_height: usize = lines_to_draw * (one_char_size.b + 1);
                 const position = Vec2u{
@@ -181,7 +220,6 @@ pub const WidgetMessageBox = struct {
 
                 var y = position.b + 15;
                 var i: usize = 0;
-                const use_syntax = self.message == .LSPHover;
                 for (self.lines.items) |line| {
                     if (self.y_offset > i) {
                         i += 1;
@@ -192,10 +230,10 @@ pub const WidgetMessageBox = struct {
                         text = line.bytes()[self.x_offset..];
                     }
 
-                    if (use_syntax and text.len > 0) {
-                        self.renderSyntaxHighlighted(font, scaler, position.a + 15, y, size.a - 30, text);
+                    if (ink.syntax and text.len > 0) {
+                        self.renderSyntaxHighlighted(font, scaler, position.a + 15, y, size.a - 30, ink.base, text);
                     } else {
-                        Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = y }, size.a - 30, color, text);
+                        Draw.text(font, scaler, Vec2u{ .a = position.a + 15, .b = y }, size.a - 30, ink.base, text);
                     }
 
                     y += one_char_size.b + 1;
@@ -231,6 +269,37 @@ pub const WidgetMessageBox = struct {
         }
     }
 };
+
+// the LSP boxes show code, so they are highlighted; each keeps the color its type
+// carries, and what is not code stays plain.
+test "widget_message_box ink" {
+    const allocator = std.testing.allocator;
+    var msgbox = try WidgetMessageBox.init(allocator);
+    defer msgbox.deinit();
+
+    try msgbox.set("fn cwd() Linux", .LSPHover, .WithOverlay);
+    try expect(msgbox.messageInk().syntax);
+    try std.testing.expectEqual(Colors.ui_text_primary, msgbox.messageInk().base);
+
+    // the completion's detail & documentation
+    try msgbox.set("fn cwd() Linux", .LSPMessage, .WithoutOverlay);
+    try expect(msgbox.messageInk().syntax);
+    try std.testing.expectEqual(Colors.ui_text_primary, msgbox.messageInk().base);
+
+    // a diagnostic keeps its warning color
+    try msgbox.set("unused variable: foo", .LSPDiagnostic, .WithOverlay);
+    try expect(msgbox.messageInk().syntax);
+    try std.testing.expectEqual(Colors.syntax_todo, msgbox.messageInk().base);
+
+    // the shell output is not code
+    try msgbox.set("make: *** no rule to make target", .ExecOutput, .WithOverlay);
+    try expect(!msgbox.messageInk().syntax);
+    try std.testing.expectEqual(Colors.ui_text_secondary, msgbox.messageInk().base);
+
+    try msgbox.set("do you really want to quit?", .Confirm, .WithOverlay);
+    try expect(!msgbox.messageInk().syntax);
+    try std.testing.expectEqual(Colors.ui_text_primary, msgbox.messageInk().base);
+}
 
 test "widget_message_box main tests" {
     const allocator = std.testing.allocator;
